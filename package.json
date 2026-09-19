@@ -10,9 +10,9 @@
     "mock": "node mocks/server.mjs",
     "contract-test": "node tests/contract/contract-smoke.mjs",
     "infra:test": "node --test tests/infra/infra-files.test.mjs",
-    "typecheck": "npm --prefix apps/api run typecheck",
-    "lint": "npm --prefix apps/api run lint",
+    "typecheck": "npm --prefix apps/api run typecheck && npm --prefix apps/web run typecheck",
+    "lint": "npm --prefix apps/api run lint && npm --prefix apps/web run lint",
     "test": "npm --prefix apps/api test && npm run infra:test",
-    "build": "npm --prefix apps/api run build"
+    "build": "npm --prefix apps/api run build && npm --prefix apps/web run build"
   }
 }
