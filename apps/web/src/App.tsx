@@ -8,7 +8,7 @@ import type { LyricLine, UnifiedSong } from '@shared/types';
 import { LyricsPanel } from './components/LyricsPanel';
 import { PlayerPanel } from './components/PlayerPanel';
 import { SongCard } from './components/SongCard';
-import { Artwork, EmptyState, IconButton, OfflineToast, SkeletonCard, TactileButton } from './components/ui';
+import { Artwork, EmptyState, GlowTile, IconButton, OfflineToast, SkeletonCard, TactileButton } from './components/ui';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { ApiError, createAnonymousSession, fallbackLyrics, fetchLyrics, searchSongs } from './lib/api';
 import { formatTime, titleAccent } from './lib/utils';
@@ -16,6 +16,14 @@ import { itemVariants, motionTokens, pageVariants } from './motion';
 
 const DEFAULT_QUERY = 'top songs';
 const MOOD_PROMPTS = ['late night', 'soft focus', 'Hindi essentials', 'golden hour'];
+const GLOW_TILES = [
+  { label: 'Discover', caption: 'Find the next feeling', variant: 'coral', icon: Search, target: 'search' },
+  { label: 'Playback', caption: 'The room follows the song', variant: 'blue', icon: Play, target: 'player' },
+  { label: 'Mood', caption: 'Choose a thread to follow', variant: 'sun', icon: Sparkles, target: 'mood' },
+  { label: 'Queue', caption: 'Keep one song ahead', variant: 'green', icon: Headphones, target: 'queue' },
+  { label: 'Lyrics', caption: 'Let the words come closer', variant: 'violet', icon: Waves, target: 'lyrics' },
+  { label: 'Artwork', caption: 'Change the temperature', variant: 'orange', icon: Disc3, target: 'artwork' }
+] as const;
 
 export default function App() {
   const reduced = useReducedMotion();
@@ -192,6 +200,20 @@ export default function App() {
       .finally(() => setLyricsLoading(false));
   };
 
+  const handleGlowTile = (target: (typeof GLOW_TILES)[number]['target']): void => {
+    if (target === 'search') {
+      searchRef.current?.focus();
+      return;
+    }
+    if (target === 'player') {
+      if (activeSong) setPanelOpen(true);
+      else searchRef.current?.focus();
+      return;
+    }
+    const targetId = target === 'mood' ? 'thread-heading' : target === 'queue' ? 'queue' : target === 'lyrics' ? 'words' : 'daylight';
+    document.getElementById(targetId)?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  };
+
   const pageTransition = reduced ? { duration: motionTokens.duration.instant } : undefined;
   const shellStyle = { '--ambient-accent': ambientColor } as CSSProperties;
 
@@ -217,19 +239,24 @@ export default function App() {
           </motion.div>
 
           <motion.article className="hero-feature" variants={itemVariants} aria-label="Featured track">
-            {activeSong ? <><div className="feature-topline"><span>Now in rotation</span><span>01 / {String(displaySongs.length).padStart(2, '0')}</span></div><button className="feature-art-button" onClick={() => playSong(activeSong)} aria-label={`Play ${activeSong.title}`}><Artwork song={activeSong} size="large" /><span className="feature-play"><Play size={17} fill="currentColor" aria-hidden="true" /></span></button><div className="feature-info"><div><span className="eyebrow">Featured today</span><h2>{activeSong.title}</h2><p>{activeSong.artist}</p></div><span className="feature-duration">{formatTime(activeSong.duration)}</span></div><div className="feature-progress"><span style={{ transform: `scaleX(${audio.duration ? audio.currentTime / audio.duration : 0})` }} /></div><div className="feature-foot"><span>{audio.isPlaying ? 'Playing now' : 'Ready when you are'}</span><span>{activeSong.language ?? 'Mixed'}</span></div></> : <div className="feature-loading"><Disc3 size={25} /><span>Finding your first song…</span></div>}
+            {activeSong ? <><div className="feature-topline"><span>Now in rotation</span><span>01 / {String(displaySongs.length).padStart(2, '0')}</span></div><button className="feature-art-button" onClick={() => playSong(activeSong)} aria-label={`Play ${activeSong.title}`}><Artwork song={activeSong} size="large" /><span className="feature-dotfield" aria-hidden="true" /><span className="feature-play"><Play size={17} fill="currentColor" aria-hidden="true" /></span></button><div className="feature-info"><div><span className="eyebrow">Featured today</span><h2>{activeSong.title}</h2><p>{activeSong.artist}</p></div><span className="feature-duration">{formatTime(activeSong.duration)}</span></div><div className="feature-progress"><span style={{ transform: `scaleX(${audio.duration ? audio.currentTime / audio.duration : 0})` }} /></div><div className="feature-foot"><span>{audio.isPlaying ? 'Playing now' : 'Ready when you are'}</span><span>{activeSong.language ?? 'Mixed'}</span></div></> : <div className="feature-loading"><Disc3 size={25} /><span>Finding your first song…</span></div>}
           </motion.article>
         </motion.section>
 
         <section className="curiosity-strip" aria-labelledby="thread-heading"><div><span className="eyebrow">Follow a thread</span><h2 id="thread-heading">What are you in the mood for?</h2></div><div className="mood-pills">{MOOD_PROMPTS.map((prompt) => <button key={prompt} className="mood-pill" onClick={() => { setQuery(prompt); searchRef.current?.focus(); }}>{prompt}</button>)}</div></section>
 
+        <section className="glow-section" aria-labelledby="glow-heading">
+          <div className="glow-section-heading"><div><span className="eyebrow">Allegra / a listening system</span><h2 id="glow-heading">Choose your way in.</h2></div><p>Every surface has a temperature. Tap one and keep moving through the room.</p></div>
+          <div className="glow-grid">{GLOW_TILES.map((tile, index) => <GlowTile key={tile.label} {...tile} index={index} onClick={() => handleGlowTile(tile.target)} />)}</div>
+        </section>
+
         <div className="workspace-grid">
           <section className="catalog-section" aria-labelledby="catalog-heading"><div className="section-heading"><div><span className="eyebrow">{query.trim() ? 'The searchlight' : 'A handpicked start'}</span><h2 id="catalog-heading">{sectionLabel}</h2></div><span className="result-count">{searching ? 'Listening…' : `${displaySongs.length} tracks · ${formatTime(queueDuration)}`}</span></div>{searching && displaySongs.length === 0 ? <div className="track-list" aria-label="Loading songs"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div> : searchError && displaySongs.length === 0 ? <EmptyState title="The signal wandered" copy={searchError} action={<TactileButton variant="primary" onClick={retryCurrentSearch}>Try the search again</TactileButton>} /> : displaySongs.length === 0 ? <EmptyState title="Nothing came back" copy="Try an artist, a lyric, or a mood. Start with “Arijit Singh” or “late night.”" action={<TactileButton variant="accent" onClick={() => setQuery('Arijit Singh')}>Try a suggestion</TactileButton>} /> : <><div className="track-head" aria-hidden="true"><span>Track</span><span>Album</span><span>Length</span></div><motion.div className="track-list" variants={pageVariants} initial="hidden" animate="visible">{displaySongs.map((song, index) => <SongCard key={song.id} song={song} index={index} isCurrent={song.id === audio.currentSong?.id} isPlaying={song.id === audio.currentSong?.id && audio.isPlaying} onPlay={() => playSong(song)} onLike={() => toggleLike(song)} liked={likedIds.has(song.id)} />)}</motion.div></>}</section>
 
-          <aside className="queue-column" aria-label="Listening queue"><div className="queue-card"><div className="queue-heading"><div><span className="eyebrow">A little ahead</span><h2>Next up</h2></div><span className="queue-mark"><Headphones size={14} aria-hidden="true" /></span></div><p className="queue-intro">Keep the room moving, one song at a time.</p><div className="queue-items">{nextSongs.length > 0 ? nextSongs.map((song, index) => <button className="queue-item" key={song.id} onClick={() => playSong(song)}><span className="queue-item-number">{String(index + 1).padStart(2, '0')}</span><Artwork song={song} size="small" /><span className="queue-item-copy"><strong>{song.title}</strong><small>{song.artist}</small></span><span className="queue-item-time">{formatTime(song.duration)}</span></button>) : <div className="queue-empty"><Disc3 size={19} /><span>Choose a song to build your queue.</span></div>}</div><div className="queue-footer"><span>{queueSongs.length} tracks</span><span>{formatTime(queueDuration)} of atmosphere</span></div></div><div className="quote-card"><span className="quote-mark">“</span><p>The right song doesn’t fill the silence. It gives it a shape.</p><span className="quote-caption">— the Allegra principle</span></div></aside>
+          <aside id="queue" className="queue-column" aria-label="Listening queue"><div className="queue-card"><div className="queue-heading"><div><span className="eyebrow">A little ahead</span><h2>Next up</h2></div><span className="queue-mark"><Headphones size={14} aria-hidden="true" /></span></div><p className="queue-intro">Keep the room moving, one song at a time.</p><div className="queue-items">{nextSongs.length > 0 ? nextSongs.map((song, index) => <button className="queue-item" key={song.id} onClick={() => playSong(song)}><span className="queue-item-number">{String(index + 1).padStart(2, '0')}</span><Artwork song={song} size="small" /><span className="queue-item-copy"><strong>{song.title}</strong><small>{song.artist}</small></span><span className="queue-item-time">{formatTime(song.duration)}</span></button>) : <div className="queue-empty"><Disc3 size={19} /><span>Choose a song to build your queue.</span></div>}</div><div className="queue-footer"><span>{queueSongs.length} tracks</span><span>{formatTime(queueDuration)} of atmosphere</span></div></div><div className="quote-card"><span className="quote-mark">“</span><p>The right song doesn’t fill the silence. It gives it a shape.</p><span className="quote-caption">— the Allegra principle</span></div></aside>
         </div>
 
-        <section className="light-scene" aria-labelledby="light-scene-heading">
+        <section id="daylight" className="light-scene" aria-labelledby="light-scene-heading">
           <div className="light-scene-topline"><span>SCENE / 02 — DAYLIGHT MIX</span><span>TURN THE ROOM OVER</span></div>
           {lightSong ? <div className="light-scene-grid"><div className="light-scene-copy"><span className="eyebrow">A different light</span><h2 id="light-scene-heading">Some songs arrive<br /><em>like daylight.</em></h2><p>Leave the dark room for a minute. Keep the thread — just let it open up.</p><TactileButton variant="primary" icon={Play} onClick={() => playSong(lightSong)}>Play {lightSong.title}</TactileButton></div><div className="light-scene-art"><div className="light-scene-art-label"><span>UP NEXT</span><span>{lightSong.language ?? 'MIXED'}</span></div><button onClick={() => playSong(lightSong)} aria-label={`Play ${lightSong.title}`}><Artwork song={lightSong} size="large" /></button><div className="light-scene-track"><strong>{lightSong.title}</strong><span>{lightSong.artist}</span></div></div></div> : <div className="light-scene-empty"><Disc3 size={24} /><p>Choose a track and the room will find its daylight.</p></div>}
           <div className="light-scene-footer"><span>ALLEGRA / 02</span><span>THE SAME QUEUE, A NEW TEMPERATURE</span></div>

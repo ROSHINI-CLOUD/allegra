@@ -42,6 +42,27 @@ export function IconButton({ icon: Icon, label, active = false, className = '', 
   );
 }
 
+export type GlowTileVariant = 'coral' | 'blue' | 'sun' | 'green' | 'violet' | 'orange';
+
+export function GlowTile({ label, caption, variant, icon: Icon, onClick, index = 0 }: { readonly label: string; readonly caption: string; readonly variant: GlowTileVariant; readonly icon: LucideIcon; readonly onClick: () => void; readonly index?: number }) {
+  return (
+    <motion.button
+      className={`glow-tile glow-tile-${variant}`}
+      onClick={onClick}
+      variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { duration: motionTokens.duration.base, ease: motionTokens.ease.decelerate, delay: Math.min(index, 5) * motionTokens.stagger } } }}
+      initial="hidden"
+      animate="visible"
+      whileTap={{ y: 2 }}
+      aria-label={`${label}: ${caption}`}
+    >
+      <span className="glow-tile-sheen" aria-hidden="true" />
+      <span className="glow-tile-icon"><Icon size={20} strokeWidth={1.6} aria-hidden="true" /></span>
+      <span className="glow-tile-copy"><strong>{label}</strong><small>{caption}</small></span>
+      <span className="glow-tile-arrow" aria-hidden="true">↗</span>
+    </motion.button>
+  );
+}
+
 export function Artwork({ song, size = 'medium', layoutId }: { readonly song: UnifiedSong; readonly size?: 'small' | 'medium' | 'large'; readonly layoutId?: string }) {
   return (
     <div className={`artwork artwork-${size}`} style={{ background: titleGradient(song.title) }}>
