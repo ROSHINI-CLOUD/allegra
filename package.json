@@ -1,0 +1,18 @@
+{
+  "name": "allegra",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "mock": "node mocks/server.mjs",
+    "contract-test": "node tests/contract/contract-smoke.mjs",
+    "infra:test": "node --test tests/infra/infra-files.test.mjs",
+    "typecheck": "npm --prefix apps/api run typecheck",
+    "lint": "npm --prefix apps/api run lint",
+    "test": "npm --prefix apps/api test && npm run infra:test",
+    "build": "npm --prefix apps/api run build"
+  }
+}
