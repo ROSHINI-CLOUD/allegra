@@ -12,14 +12,21 @@ export function clamp(value: number, min: number, max: number): number {
 export function titleGradient(title: string): string {
   let hash = 0;
   for (const character of title) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  const hue = hash % 360;
-  return `linear-gradient(145deg, hsl(${hue} 44% 32%), hsl(${(hue + 52) % 360} 50% 13%))`;
+  const gradients = [
+    'linear-gradient(145deg, #a9d85e, #174d4a)',
+    'linear-gradient(145deg, #ff8a55, #592b50)',
+    'linear-gradient(145deg, #6cb9f5, #24336f)',
+    'linear-gradient(145deg, #d892ff, #3b2674)',
+    'linear-gradient(145deg, #f7d477, #a44f3f)'
+  ];
+  return gradients[hash % gradients.length] ?? gradients[0];
 }
 
 export function titleAccent(title: string): string {
   let hash = 0;
   for (const character of title) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  return `hsl(${hash % 360} 56% 58%)`;
+  const accents = ['#c4f45c', '#ff684f', '#68bcff', '#db8bff', '#f5ce6b'];
+  return accents[hash % accents.length] ?? accents[0];
 }
 
 export function readableCount(value: number): string {
