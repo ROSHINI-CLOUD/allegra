@@ -1,20 +1,24 @@
-import { ArrowUpRight, Compass, Disc3, Headphones, Pause, Play, Search, Sparkles, Waves } from 'lucide-react';
+import { ArrowUpRight, Compass, Disc3, Headphones, Heart as HeartIcon, Pause, Play, Search, Sparkles, Waves } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
-import type { LyricLine, UnifiedSong } from '@shared/types';
+import type { HomePayload, LyricLine, UnifiedSong } from '@shared/types';
 
 import { LyricsPanel } from './components/LyricsPanel';
+import { LibraryPage } from './components/LibraryPage';
+import { DynamicAura } from './components/DynamicAura';
 import { PlayerPanel } from './components/PlayerPanel';
 import { SongCard } from './components/SongCard';
+import { WordsPage } from './components/WordsPage';
 import { Artwork, EmptyState, GlowTile, IconButton, OfflineToast, SkeletonCard, TactileButton } from './components/ui';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
-import { ApiError, createAnonymousSession, fallbackLyrics, fetchLyrics, searchSongs } from './lib/api';
+import { ApiError, createAnonymousSession, fallbackLyrics, fetchHome, fetchLikedSongs, fetchLyrics, fetchRecentlyPlayed, fetchSuggestions, recordRecentlyPlayed, searchSongs, setLikedSong } from './lib/api';
 import { formatTime, titleAccent } from './lib/utils';
 import { itemVariants, motionTokens, pageVariants } from './motion';
 
 const DEFAULT_QUERY = 'top songs';
+type AppView = 'discover' | 'library' | 'words';
 const MOOD_PROMPTS = ['late night', 'soft focus', 'Hindi essentials', 'golden hour'];
 const GLOW_TILES = [
   { label: 'Discover', caption: 'Find the next feeling', variant: 'coral', icon: Search, target: 'search' },
@@ -22,15 +26,17 @@ const GLOW_TILES = [
   { label: 'Mood', caption: 'Choose a thread to follow', variant: 'sun', icon: Sparkles, target: 'mood' },
   { label: 'Queue', caption: 'Keep one song ahead', variant: 'green', icon: Headphones, target: 'queue' },
   { label: 'Lyrics', caption: 'Let the words come closer', variant: 'violet', icon: Waves, target: 'lyrics' },
-  { label: 'Artwork', caption: 'Change the temperature', variant: 'orange', icon: Disc3, target: 'artwork' }
+  { label: 'Artwork', caption: 'Change the temperature', variant: 'ice', icon: Disc3, target: 'artwork' }
 ] as const;
 
 export default function App() {
   const reduced = useReducedMotion();
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
   const [query, setQuery] = useState('');
   const [songs, setSongs] = useState<UnifiedSong[]>([]);
   const [featured, setFeatured] = useState<UnifiedSong[]>([]);
+  const [home, setHome] = useState<HomePayload | null>(null);
   const [searching, setSearching] = useState(true);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
@@ -39,7 +45,16 @@ export default function App() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [offline, setOffline] = useState(!navigator.onLine);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
-  const [ambientColor, setAmbientColor] = useState('#a35f4a');
+  const [likedSongs, setLikedSongs] = useState<UnifiedSong[]>([]);
+  const [recentlyPlayed, setRecentlyPlayed] = useState<UnifiedSong[]>([]);
+  const [personalLoading, setPersonalLoading] = useState(true);
+  const [personalError, setPersonalError] = useState<string | null>(null);
+  const [personalActionError, setPersonalActionError] = useState<string | null>(null);
+  const [view, setView] = useState<AppView>(() => viewFromHash(window.location.hash));
+  const [suggestions, setSuggestions] = useState<UnifiedSong[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [ambientColor, setAmbientColor] = useState('#2d7fe4');
   const lyricsGeneration = useRef(0);
   const audio = useAudioPlayer();
 
@@ -58,11 +73,71 @@ export default function App() {
     }
   }, []);
 
+  const loadHome = useCallback(async (signal?: AbortSignal): Promise<void> => {
+    setSearching(true);
+    setSearchError(null);
+    try {
+      const payload = await fetchHome(signal);
+      setHome(payload);
+      setFeatured(payload.trending);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      try {
+        const response = await searchSongs(DEFAULT_QUERY, signal);
+        setHome(null);
+        setFeatured(response.results);
+        setSearchError(null);
+      } catch (fallbackError) {
+        if (fallbackError instanceof DOMException && fallbackError.name === 'AbortError') return;
+        setSearchError(fallbackError instanceof Error ? fallbackError.message : error instanceof Error ? error.message : 'Something went wrong. Try again.');
+      }
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
-    void loadSearch(DEFAULT_QUERY, controller.signal);
+    void loadHome(controller.signal);
     return () => controller.abort();
-  }, [loadSearch]);
+  }, [loadHome]);
+
+  const loadPersonalSpace = useCallback(async (): Promise<void> => {
+    setPersonalLoading(true);
+    setPersonalError(null);
+    try {
+      let token = window.localStorage.getItem('allegra-session-token');
+      if (!token) {
+        const session = await createAnonymousSession();
+        token = session.token;
+        window.localStorage.setItem('allegra-session-token', token);
+      }
+      const [liked, recent] = await Promise.all([fetchLikedSongs(), fetchRecentlyPlayed()]);
+      setLikedSongs(liked);
+      setLikedIds(new Set(liked.map((song) => song.id)));
+      setRecentlyPlayed(recent);
+    } catch (error) {
+      setPersonalError(error instanceof Error ? error.message : 'Your listening room could not be loaded.');
+    } finally {
+      setPersonalLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPersonalSpace();
+  }, [loadPersonalSpace]);
+
+  useEffect(() => {
+    const syncView = (): void => setView(viewFromHash(window.location.hash));
+    window.addEventListener('hashchange', syncView);
+    syncView();
+    return () => window.removeEventListener('hashchange', syncView);
+  }, []);
+
+  useEffect(() => {
+    if (view !== 'discover') window.scrollTo({ top: 0, behavior: 'auto' });
+    window.requestAnimationFrame(() => mainRef.current?.focus());
+  }, [view]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -88,14 +163,6 @@ export default function App() {
       window.removeEventListener('offline', onOffline);
       window.removeEventListener('online', onOnline);
     };
-  }, []);
-
-  useEffect(() => {
-    const token = window.localStorage.getItem('allegra-session-token');
-    if (token) return;
-    void createAnonymousSession()
-      .then(({ token: nextToken }) => window.localStorage.setItem('allegra-session-token', nextToken))
-      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -140,11 +207,32 @@ export default function App() {
     return () => controller.abort();
   }, [audio.currentSong]);
 
+  useEffect(() => {
+    const song = audio.currentSong;
+    if (view !== 'words' || !song) {
+      setSuggestions([]);
+      setSuggestionsError(null);
+      setSuggestionsLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSuggestionsLoading(true);
+    setSuggestionsError(null);
+    void fetchSuggestions(song.id, controller.signal)
+      .then(setSuggestions)
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setSuggestionsError(error instanceof Error ? error.message : 'Suggestions could not be loaded.');
+      })
+      .finally(() => setSuggestionsLoading(false));
+    return () => controller.abort();
+  }, [audio.currentSong, view]);
+
   const displaySongs = query.trim() ? songs : featured;
   const activeSong = audio.currentSong ?? displaySongs[0] ?? null;
   const queueSongs = audio.queue.length > 0 ? audio.queue : displaySongs;
   const nextSongs = queueSongs.filter((song) => song.id !== activeSong?.id).slice(0, 3);
-  const lightSong = nextSongs[0] ?? activeSong;
+  const lightSong = nextSongs[0] ?? activeSong ?? home?.madeForYou[0] ?? home?.recommended[0] ?? null;
   const queueDuration = useMemo(() => queueSongs.reduce((total, song) => total + song.duration, 0), [queueSongs]);
   const sectionLabel = query.trim() ? `Results for “${query.trim()}”` : 'A queue, not a feed.';
 
@@ -173,19 +261,35 @@ export default function App() {
 
   const playSong = (song: UnifiedSong): void => {
     audio.selectSong(song, displaySongs);
+    setRecentlyPlayed((current) => [song, ...current.filter((item) => item.id !== song.id)].slice(0, 50));
+    void recordRecentlyPlayed(song.id, 0).catch(() => undefined);
     setPanelOpen(true);
   };
 
   const toggleLike = (song: UnifiedSong): void => {
+    const wasLiked = likedIds.has(song.id);
+    const nextLiked = !wasLiked;
+    setPersonalActionError(null);
     setLikedIds((current) => {
       const next = new Set(current);
       if (next.has(song.id)) next.delete(song.id);
       else next.add(song.id);
       return next;
     });
+    setLikedSongs((current) => nextLiked ? [song, ...current.filter((item) => item.id !== song.id)] : current.filter((item) => item.id !== song.id));
+    void setLikedSong(song.id, nextLiked).catch((error: unknown) => {
+      setLikedIds((current) => {
+        const rollback = new Set(current);
+        if (wasLiked) rollback.add(song.id);
+        else rollback.delete(song.id);
+        return rollback;
+      });
+      setLikedSongs((current) => wasLiked ? [song, ...current.filter((item) => item.id !== song.id)] : current.filter((item) => item.id !== song.id));
+      setPersonalActionError(error instanceof Error ? error.message : 'That change could not be saved.');
+    });
   };
 
-  const retryCurrentSearch = (): void => void loadSearch(query.trim() || DEFAULT_QUERY);
+  const retryCurrentSearch = (): void => query.trim() ? void loadSearch(query.trim()) : void loadHome();
   const retryLyrics = (): void => {
     const song = audio.currentSong;
     if (!song) return;
@@ -198,6 +302,17 @@ export default function App() {
         else setLyricsError(error instanceof Error ? error.message : 'Lyrics could not be loaded.');
       })
       .finally(() => setLyricsLoading(false));
+  };
+
+  const retrySuggestions = (): void => {
+    const song = audio.currentSong;
+    if (!song) return;
+    setSuggestionsLoading(true);
+    setSuggestionsError(null);
+    void fetchSuggestions(song.id)
+      .then(setSuggestions)
+      .catch((error: unknown) => setSuggestionsError(error instanceof Error ? error.message : 'Suggestions could not be loaded.'))
+      .finally(() => setSuggestionsLoading(false));
   };
 
   const handleGlowTile = (target: (typeof GLOW_TILES)[number]['target']): void => {
@@ -219,15 +334,18 @@ export default function App() {
 
   return (
     <div className="app-shell" style={shellStyle}>
+      <DynamicAura />
       <div className="ambient ambient-left" aria-hidden="true" />
       <div className="ambient ambient-right" aria-hidden="true" />
+      <a className="skip-link" href="#main-content">Skip to content</a>
       <header className="site-header">
         <a className="brand" href="#discover" aria-label="Allegra home"><span className="brand-orbit" aria-hidden="true"><span /></span><span>allegra</span></a>
-        <nav className="desktop-nav" aria-label="Primary navigation"><a className="nav-link is-active" href="#discover"><Compass size={15} aria-hidden="true" /> Discover</a><a className="nav-link" href="#words"><Waves size={15} aria-hidden="true" /> Words</a></nav>
+        <nav className="desktop-nav" aria-label="Primary navigation"><a className={`nav-link ${view === 'discover' ? 'is-active' : ''}`} aria-current={view === 'discover' ? 'page' : undefined} href="#discover"><Compass size={15} aria-hidden="true" /> Discover</a><a className={`nav-link ${view === 'library' ? 'is-active' : ''}`} aria-current={view === 'library' ? 'page' : undefined} href="#library"><HeartIcon size={15} aria-hidden="true" /> Library</a><a className={`nav-link ${view === 'words' ? 'is-active' : ''}`} aria-current={view === 'words' ? 'page' : undefined} href="#words"><Waves size={15} aria-hidden="true" /> Words</a></nav>
         <div className="header-actions"><span className="session-label"><i /> Guest session</span><span className="header-rule" aria-hidden="true" /><span className="header-date">SEP / 26</span></div>
       </header>
 
-      <main id="discover" className="content-wrap">
+      <main id="main-content" ref={mainRef} tabIndex={-1} aria-label={view === 'library' ? 'Your listening library' : view === 'words' ? 'Song words' : 'Discover music'} className={`content-wrap ${view !== 'discover' ? 'inner-page-wrap' : ''}`}>
+        {view === 'library' ? <LibraryPage likedSongs={likedSongs} recentlyPlayed={recentlyPlayed} likedIds={likedIds} loading={personalLoading} error={personalError} actionError={personalActionError} currentSongId={audio.currentSong?.id} isPlaying={audio.isPlaying} onPlay={playSong} onLike={toggleLike} onRetry={() => void loadPersonalSpace()} onDiscover={() => { window.location.hash = '#discover'; window.setTimeout(() => searchRef.current?.focus(), 0); }} /> : view === 'words' ? <WordsPage song={audio.currentSong} lines={lyrics} currentTime={audio.currentTime} lyricsLoading={lyricsLoading} lyricsError={lyricsError} suggestions={suggestions} suggestionsLoading={suggestionsLoading} suggestionsError={suggestionsError} likedIds={likedIds} isPlaying={audio.isPlaying} onRetryLyrics={retryLyrics} onRetrySuggestions={retrySuggestions} onSeek={(time) => void audio.seek(time)} onPlay={playSong} onLike={toggleLike} onDiscover={() => { window.location.hash = '#discover'; window.setTimeout(() => searchRef.current?.focus(), 0); }} /> : <>
         <motion.section className="hero-section" variants={pageVariants} initial="hidden" animate="visible" transition={pageTransition}>
           <motion.div className="hero-copy" variants={itemVariants}>
             <span className="eyebrow eyebrow-accent"><Sparkles size={13} aria-hidden="true" /> A live listening room</span>
@@ -251,7 +369,7 @@ export default function App() {
         </section>
 
         <div className="workspace-grid">
-          <section className="catalog-section" aria-labelledby="catalog-heading"><div className="section-heading"><div><span className="eyebrow">{query.trim() ? 'The searchlight' : 'A handpicked start'}</span><h2 id="catalog-heading">{sectionLabel}</h2></div><span className="result-count">{searching ? 'Listening…' : `${displaySongs.length} tracks · ${formatTime(queueDuration)}`}</span></div>{searching && displaySongs.length === 0 ? <div className="track-list" aria-label="Loading songs"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div> : searchError && displaySongs.length === 0 ? <EmptyState title="The signal wandered" copy={searchError} action={<TactileButton variant="primary" onClick={retryCurrentSearch}>Try the search again</TactileButton>} /> : displaySongs.length === 0 ? <EmptyState title="Nothing came back" copy="Try an artist, a lyric, or a mood. Start with “Arijit Singh” or “late night.”" action={<TactileButton variant="accent" onClick={() => setQuery('Arijit Singh')}>Try a suggestion</TactileButton>} /> : <><div className="track-head" aria-hidden="true"><span>Track</span><span>Album</span><span>Length</span></div><motion.div className="track-list" variants={pageVariants} initial="hidden" animate="visible">{displaySongs.map((song, index) => <SongCard key={song.id} song={song} index={index} isCurrent={song.id === audio.currentSong?.id} isPlaying={song.id === audio.currentSong?.id && audio.isPlaying} onPlay={() => playSong(song)} onLike={() => toggleLike(song)} liked={likedIds.has(song.id)} />)}</motion.div></>}</section>
+          <section className="catalog-section" aria-labelledby="catalog-heading" aria-busy={searching}><div className="section-heading"><div><span className="eyebrow">{query.trim() ? 'The searchlight' : 'A handpicked start'}</span><h2 id="catalog-heading">{sectionLabel}</h2></div><span className="result-count" aria-live="polite">{searching ? 'Listening…' : `${displaySongs.length} tracks · ${formatTime(queueDuration)}`}</span></div>{searching && displaySongs.length === 0 ? <div className="track-list" aria-label="Loading songs"><SkeletonCard /><SkeletonCard /><SkeletonCard /></div> : searchError && displaySongs.length === 0 ? <EmptyState title="The signal wandered" copy={searchError} action={<TactileButton variant="primary" onClick={retryCurrentSearch}>Try the search again</TactileButton>} /> : displaySongs.length === 0 ? <EmptyState title="Nothing came back" copy="Try an artist, a lyric, or a mood. Start with “Arijit Singh” or “late night.”" action={<TactileButton variant="accent" onClick={() => setQuery('Arijit Singh')}>Try a suggestion</TactileButton>} /> : <><div className="track-head" aria-hidden="true"><span>Track</span><span>Album</span><span>Length</span></div><motion.div className="track-list" variants={pageVariants} initial="hidden" animate="visible">{displaySongs.map((song, index) => <SongCard key={song.id} song={song} index={index} isCurrent={song.id === audio.currentSong?.id} isPlaying={song.id === audio.currentSong?.id && audio.isPlaying} onPlay={() => playSong(song)} onLike={() => toggleLike(song)} liked={likedIds.has(song.id)} />)}</motion.div></>}</section>
 
           <aside id="queue" className="queue-column" aria-label="Listening queue"><div className="queue-card"><div className="queue-heading"><div><span className="eyebrow">A little ahead</span><h2>Next up</h2></div><span className="queue-mark"><Headphones size={14} aria-hidden="true" /></span></div><p className="queue-intro">Keep the room moving, one song at a time.</p><div className="queue-items">{nextSongs.length > 0 ? nextSongs.map((song, index) => <button className="queue-item" key={song.id} onClick={() => playSong(song)}><span className="queue-item-number">{String(index + 1).padStart(2, '0')}</span><Artwork song={song} size="small" /><span className="queue-item-copy"><strong>{song.title}</strong><small>{song.artist}</small></span><span className="queue-item-time">{formatTime(song.duration)}</span></button>) : <div className="queue-empty"><Disc3 size={19} /><span>Choose a song to build your queue.</span></div>}</div><div className="queue-footer"><span>{queueSongs.length} tracks</span><span>{formatTime(queueDuration)} of atmosphere</span></div></div><div className="quote-card"><span className="quote-mark">“</span><p>The right song doesn’t fill the silence. It gives it a shape.</p><span className="quote-caption">— the Allegra principle</span></div></aside>
         </div>
@@ -263,13 +381,21 @@ export default function App() {
         </section>
 
         <section id="words" className="lyrics-teaser"><div className="teaser-intro"><span className="eyebrow">Words in the air</span><h2>Let the song<br /><em>say it for you.</em></h2><p>Time-synced when we can find it. Gently interpolated when we cannot.</p><TactileButton variant="secondary" icon={Waves} onClick={() => activeSong && setPanelOpen(true)}>Open lyrics</TactileButton></div><LyricsPanel lines={lyrics} currentTime={audio.currentTime} loading={lyricsLoading} error={lyricsError} onRetry={retryLyrics} onSeek={(time) => void audio.seek(time)} /></section>
+        </>}
       </main>
 
       {audio.currentSong ? <div className="mobile-now-bar"><Artwork song={audio.currentSong} size="small" /><button className="mobile-track-button" onClick={() => setPanelOpen(true)}><strong>{audio.currentSong.title}</strong><span>{audio.currentSong.artist}</span></button><IconButton icon={audio.isPlaying ? Pause : Play} label={audio.isPlaying ? 'Pause' : 'Play'} onClick={audio.togglePlayback} /></div> : null}
+      <p className="sr-only" aria-live="polite">{audio.currentSong ? `${audio.isPlaying ? 'Playing' : 'Paused'} ${audio.currentSong.title} by ${audio.currentSong.artist}` : ''}</p>
       <audio ref={audio.audioRef} className="audio-element" crossOrigin="anonymous" preload="metadata" aria-hidden="true" />
       <PlayerPanel song={panelOpen ? audio.currentSong : null} queue={audio.queue} currentTime={audio.currentTime} duration={audio.duration} isPlaying={audio.isPlaying} playbackError={audio.error} liked={audio.currentSong ? likedIds.has(audio.currentSong.id) : false} lyrics={{ lines: lyrics, currentTime: audio.currentTime, loading: lyricsLoading, error: lyricsError, onRetry: retryLyrics, onSeek: (time) => void audio.seek(time) }} accentColor={ambientColor} muted={audio.isMuted} onMute={audio.toggleMute} onClose={() => setPanelOpen(false)} onToggle={audio.togglePlayback} onNext={audio.skipNext} onPrevious={audio.skipPrevious} onSeek={(time) => void audio.seek(time)} onLike={() => { if (audio.currentSong) toggleLike(audio.currentSong); }} />
       <OfflineToast visible={offline} />
       <span className="build-label">ALLEGRA / LISTENING ROOM 01</span>
     </div>
   );
+}
+
+function viewFromHash(hash: string): AppView {
+  if (hash === '#library') return 'library';
+  if (hash === '#words') return 'words';
+  return 'discover';
 }

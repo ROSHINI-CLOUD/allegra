@@ -1,25 +1,46 @@
 :root {
-  --bg: #080a09;
-  --bg-deep: #050606;
-  --surface: #101411;
-  --surface-raised: #171c17;
-  --surface-soft: #1d241d;
-  --surface-hover: #273127;
-  --ink: #f4f0e7;
-  --ink-soft: #c8c9bc;
-  --ink-muted: #92988d;
-  --ink-faint: #626a61;
-  --border: rgba(244, 240, 231, 0.14);
-  --border-strong: rgba(244, 240, 231, 0.3);
-  --accent: #c4f45c;
-  --accent-hot: #ff684f;
-  --accent-soft: rgba(196, 244, 92, 0.13);
-  --accent-border: rgba(196, 244, 92, 0.46);
-  --cream: #f3eee4;
-  --ink-on-cream: #141715;
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 22px;
+  color-scheme: dark;
+
+  /* Cool blue studio: deep ocean canvas, soft-black panels, one clear signal. */
+  --bg: #06101a;
+  --bg-deep: #030812;
+  --surface: #0d1b2b;
+  --surface-soft: #12263a;
+  --surface-inverse: #050b13;
+  --surface-raised: #11243a;
+  --surface-hover: #173252;
+  --ink: #eef7ff;
+  --ink-soft: #cfe4f4;
+  --ink-muted: #8fa9be;
+  --ink-faint: #587287;
+  --ink-inverse: #f7fbff;
+  --border: rgba(214, 236, 255, 0.13);
+  --border-strong: rgba(214, 236, 255, 0.27);
+  --border-inverse: rgba(214, 236, 255, 0.15);
+  --border-inverse-strong: rgba(98, 180, 255, 0.34);
+
+  --accent: #62b4ff;
+  --accent-blue: #8cd2ff;
+  --accent-violet: #7e8cff;
+  --accent-coral: #6ed6ff;
+  --accent-cobalt: #2d7fe4;
+  --accent-green: #8dd7cf;
+  --accent-teal: #9bb5ff;
+  --accent-soft: rgba(74, 159, 247, 0.16);
+  --accent-border: rgba(98, 180, 255, 0.64);
+  --cream: #eef7ff;
+  --ink-on-cream: #06101a;
+
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 30px;
+  --radius-xl: 38px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 25px 70px rgba(0, 0, 0, 0.26);
+  --shadow-panel: 0 18px 48px rgba(0, 0, 0, 0.38);
+  --shadow-button: 0 4px 0 rgba(3, 21, 43, 0.9), 0 0 22px rgba(67, 155, 255, 0.24);
+
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
   --ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
@@ -27,13 +48,14 @@
   --d-instant: 100ms;
   --d-fast: 160ms;
   --d-base: 240ms;
-  --d-panel: 240ms;
-  --d-slow: 400ms;
+  --d-panel: 300ms;
+  --d-slow: 420ms;
   --d-cine: 700ms;
   --d-spin: 900ms;
   --d-shimmer: 1200ms;
   --stagger: 40ms;
+
   --font-body: 'DM Sans', sans-serif;
-  --font-display: 'Playfair Display', Georgia, serif;
+  --font-display: 'DM Sans', sans-serif;
   --font-mono: 'DM Mono', monospace;
 }

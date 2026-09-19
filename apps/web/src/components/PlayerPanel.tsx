@@ -1,7 +1,7 @@
 import { ChevronDown, Heart, ListMusic, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import type { CSSProperties } from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { UnifiedSong } from '@shared/types';
 
@@ -35,6 +35,15 @@ export function PlayerPanel({ song, queue, currentTime, duration, isPlaying, pla
   const audioProgress = duration > 0 ? currentTime / duration : 0;
   const transition = reduced ? { duration: motionTokens.duration.instant } : spring.sheet;
 
+  useEffect(() => {
+    if (!song) return undefined;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose, song]);
+
   return (
     <AnimatePresence>
       {song ? (
@@ -46,10 +55,13 @@ export function PlayerPanel({ song, queue, currentTime, duration, isPlaying, pla
             animate={{ opacity: 1, y: 0 }}
             exit={reduced ? { opacity: 0 } : { opacity: 0, y: 28 }}
             transition={transition}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="player-title"
             aria-label="Now playing"
           >
             <div className="player-topbar">
-              <IconButton icon={ChevronDown} label="Close player" onClick={onClose} />
+              <IconButton icon={ChevronDown} label="Close player" autoFocus onClick={onClose} />
               <span className="player-context">Now playing</span>
               <span className="queue-count"><ListMusic size={14} aria-hidden="true" /> {queue.length} in queue</span>
             </div>
@@ -61,7 +73,7 @@ export function PlayerPanel({ song, queue, currentTime, duration, isPlaying, pla
               </div>
               <div className="player-copy">
                 <span className="eyebrow">{song.album ?? 'Allegra session'}</span>
-                <h1>{song.title}</h1>
+                <h1 id="player-title">{song.title}</h1>
                 <p>{song.artist}</p>
                 <div className="player-actions">
                   <IconButton icon={Heart} label={liked ? 'Remove from likes' : 'Add to likes'} active={liked} onClick={onLike} />
@@ -87,16 +99,7 @@ export function PlayerPanel({ song, queue, currentTime, duration, isPlaying, pla
 }
 
 function PlayPauseGlyph({ isPlaying }: { readonly isPlaying: boolean }) {
-  return (
-    <motion.svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
-      <motion.path
-        fill="currentColor"
-        initial={{ d: 'M8 5l11 7-11 7z' }}
-        animate={{ d: isPlaying ? 'M7 5h4v14H7zM13 5h4v14h-4z' : 'M8 5l11 7-11 7z' }}
-        transition={{ duration: motionTokens.duration.fast, ease: motionTokens.ease.standard }}
-      />
-    </motion.svg>
-  );
+  return <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d={isPlaying ? 'M7 5h4v14H7zM13 5h4v14h-4z' : 'M8 5l11 7-11 7z'} /></svg>;
 }
 
 function Scrubber({ currentTime, duration, progress, onSeek }: { readonly currentTime: number; readonly duration: number; readonly progress: number; readonly onSeek: (seconds: number) => void }) {

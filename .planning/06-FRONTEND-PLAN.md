@@ -5,6 +5,31 @@
 ## Stack
 React 19 · TypeScript · Vite · Tailwind v4 · **Framer Motion** (`motion/react`) · `lucide-react` · `react-router-dom` v7.
 
+## Visual direction — cool blue studio system
+
+The landing page and player surfaces share one visual language, based on the approved reference direction: a deep ocean canvas with soft-black rounded panels, electric blue light fields, dotted/noise textures, thin blue borders, and compact sans-serif UI typography. The product should read as one designed system from the first viewport through search, queue, lyrics, and playback.
+
+- **Canvas:** `#06101a` deep blue with a restrained cool-blue dot texture; do not alternate into the old light or cream/editorial theme.
+- **Surfaces:** `#050b13` / `#0d1b2b` soft-black panels for the hero feature, queue, catalog, lyrics, and player. Use a 20–30 px radius family and thin blue borders.
+- **Signals:** `#62b4ff` is the playback/selected accent; deeper cobalt and blue-violet identify depth and artwork temperature. Glows belong inside panels, while the fixed aura provides a restrained sense of space.
+- **Type:** DM Sans for all product and display text; DM Mono for tiny metadata. Strong, tight, sans-serif headings replace the previous serif-led hierarchy.
+- **Composition:** long-form studio landing rhythm: one rounded hero window, deliberate bento panels, glow-led feature cards, and repeated section headers. Avoid mixing a standalone editorial “slide” into a dashboard-like section.
+- **Interaction:** keep the shared-element artwork transition, real audio controls, keyboard support, loading/error/empty states, and reduced-motion behavior. Motion remains limited to `transform` and `opacity`.
+
+The source of truth for these values is `apps/web/src/styles/tokens.css`; all sections consume the same tokens instead of inventing local palettes.
+
+### Current slice — cool-blue fidelity and accessibility hardening
+
+`DynamicAura` supplies the shared shader-inspired atmosphere with blue light fields, perspective grid, scanline, grain, and pointer parallax. Movement is limited to `transform` and `opacity`, and the aura becomes static under `prefers-reduced-motion`. The Discover, Library, and Words routes use the same tokens and surface treatment.
+
+The keyboard/screen-reader pass now includes a skip link, focusable route landmarks with focus-on-route-change, active navigation semantics, live search/now-playing updates, an Escape-closeable player dialog, and touch targets at least 44 px. Loading, empty, error, offline, missing-artwork, long-title, and lyrics states remain first-class UI states.
+
+### Current slice — personal listening room
+
+The first inner page uses the frozen API contract rather than local sample state. `#library` is a native hash route so the SPA does not need a new router dependency: it loads `/api/me/liked` and `/api/me/recently-played` after the anonymous session is ready, renders loading/error/empty states in the cool-blue system, and optimistically updates likes with rollback when persistence fails. Choosing a track records a recently-played event and keeps the existing player surface open, preserving the same focal object across the route boundary.
+
+The Words route follows the same contract: `#words` keeps the selected song/player alive, renders the pre-parsed `/api/lyrics` response in the shared synchronized lyric component, and hydrates a “Next words” continuation from `/api/songs/:id/suggestions`. Suggestion loading, failure/retry, no-song, and empty-result states are part of the page rather than deferred to a spinner or a broken panel.
+
 All already in Allegra's `package.json`. Two things to remove:
 - **`@google/genai`** — unused, and a Google AI dependency in an AWS hackathon works against us. Delete it; if we ship the AI feature it's Bedrock, called server-side.
 - **`express`** — unused in the SPA. It moves to `apps/api`.
@@ -12,7 +37,7 @@ All already in Allegra's `package.json`. Two things to remove:
 ## Ticket list, in build order
 
 ### F1 · Tokens & motion primitives — 1.5 h
-Before any component. `src/styles/tokens.css` + `src/motion/index.ts`. Durations, easings, springs, stagger, `prefers-reduced-motion` wrapper. **Every later ticket imports from here — no ad-hoc `duration: 0.3` anywhere in the codebase.**
+Before any component. `src/styles/tokens.css` + `src/motion/index.ts`. Signal-grid palette, surface/radius/shadow tokens, durations, easings, springs, stagger, `prefers-reduced-motion` wrapper. **Every later ticket imports from here — no ad-hoc `duration: 0.3` anywhere in the codebase.**
 
 ### F2 · API client + mock — 45 min
 `src/lib/api.ts`, typed against `packages/shared`. `VITE_API_BASE_URL` points at the mock server until the real API is live, then flips. **One env var is the entire integration.**

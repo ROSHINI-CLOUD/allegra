@@ -42,7 +42,7 @@ export function IconButton({ icon: Icon, label, active = false, className = '', 
   );
 }
 
-export type GlowTileVariant = 'coral' | 'blue' | 'sun' | 'green' | 'violet' | 'orange';
+export type GlowTileVariant = 'coral' | 'blue' | 'sun' | 'green' | 'violet' | 'ice';
 
 export function GlowTile({ label, caption, variant, icon: Icon, onClick, index = 0 }: { readonly label: string; readonly caption: string; readonly variant: GlowTileVariant; readonly icon: LucideIcon; readonly onClick: () => void; readonly index?: number }) {
   return (

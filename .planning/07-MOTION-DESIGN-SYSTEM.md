@@ -27,6 +27,17 @@ Allegra is a music player. Music is time, rhythm and anticipation — so the int
 2. **Tactility.** Controls respond to *pressure*, not just clicks — scale down on press, spring back on release.
 3. **Depth is earned.** Blur, shadow and parallax indicate layer, never mood.
 
+### Visual continuity rule — cool blue studio
+
+The current visual direction is a deep ocean canvas carrying a family of soft-black, rounded panels with electric-blue light fields and dotted/noise texture. The same surface language must carry through the hero feature, mood tiles, catalog, queue, lyrics, and player sheet. A section should feel like another panel in the same instrument, not a new editorial “slide.”
+
+- Keep the canvas `#06101a`; use `#050b13` / `#0d1b2b` for product panels.
+- Keep panel radii in the shared 20–30 px family and borders thin blue/translucent.
+- Use cool blue for active playback and cobalt/blue-violet light fields for signal depth.
+- Prefer sans-serif display text and compact mono metadata; avoid mixing in a separate serif-led hierarchy.
+- Let only `transform` and `opacity` animate. Gradient, border, and color changes can be state changes, but never animated properties.
+- The shared blue atmosphere is implemented as composited shader-inspired layers: a perspective grid, light orbs, scanline, and grain. Pointer response updates CSS variables for parallax; reduced motion freezes the layers.
+
 ---
 
 ## 2 · Tokens — the only numbers allowed
