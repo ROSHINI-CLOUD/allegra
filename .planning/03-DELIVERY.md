@@ -90,10 +90,14 @@ On the **deployed Amplify URL**, not localhost:
 ## PHASE 2 · Depth & Delight — T+12 → T+22
 
 ### P1
+- `catalog/catalog.ts` — keep provider cascade, normalization, ranking, and cache coordination behind one deep module
+- `lib/streamResolver.ts` — keep URL refresh, Range forwarding, and `206` preservation out of the route
+- DynamoDB caching with TTL, including the **negative cache**, behind the `CacheStore` seam (memory locally, DynamoDB in production)
 - `GET /api/artwork` — iTunes two-pass, `100x100bb` → `1000x1000bb`
 - `GET /api/lyrics` — LRCLIB `/get` → `/search` → interpolated-plain. Return **pre-parsed `LyricLine[]`**
-- DynamoDB caching with TTL, including the **negative cache**
 - `GET /api/home`, `GET /api/songs/:id/suggestions`
+
+P1's architecture-aware order is `B6 → B9 → B7 → B8` after the Phase 1 search spine. See `.planning/12-BACKEND-ARCHITECTURE-PLAN.md` for the seam-level verification plan.
 
 ### P2 ⭐ — the Best UI window. Protect these hours.
 - **The hero transition**: card → full-screen player via shared-element `layoutId`

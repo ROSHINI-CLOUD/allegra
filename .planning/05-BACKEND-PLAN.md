@@ -5,6 +5,12 @@
 ## Stack
 Node 20 · Express · TypeScript (strict) · AWS SDK v3 (DynamoDB) · `zod` for request validation · Docker → App Runner.
 
+## Implementation status
+
+The core backend implementation is now present locally through B11: provider adapters, normalization, catalog/search, stream proxy, cache/Dynamo seam, artwork, lyrics, home/suggestions, anonymous JWT, and library persistence. Local typecheck, lint, 12 tests, production build, and built-server health smoke test pass.
+
+Remaining release work is environment-specific: configure real SSM/Dynamo/App Runner resources, run Docker/CI/deployed smoke tests, and optionally implement B12 Bedrock. B12 remains stretch-only and is not required for the search → play → seek spine.
+
 ## Layout
 ```
 apps/api/src/
@@ -16,12 +22,35 @@ apps/api/src/
 │   └── ai.ts                # ★ Bedrock (stretch)
 ├── providers/
 │   ├── saavn.ts  gaana.ts  itunes.ts  lrclib.ts
+├── catalog/
+│   └── catalog.ts             # search cascade, normalization, ranking, cache policy
 ├── lib/
 │   ├── normalize.ts  lrc.ts  matcher.ts  decodeHtml.ts
-│   ├── cache.ts             # DynamoDB + TTL, in-process LRU in front
+│   ├── streamResolver.ts     # URL refresh, Range forwarding, 206 preservation
+│   ├── lyricsPipeline.ts     # LRCLIB ladder → parsed LyricLine[]
+│   ├── cache.ts              # CacheStore seam, TTL and negative-cache policy
 │   ├── fetchWithTimeout.ts  circuitBreaker.ts  errors.ts
-└── db/ dynamo.ts
+└── db/
+    └── dynamo.ts
 ```
+
+## Architecture after review
+
+The detailed architecture plan is in `.planning/12-BACKEND-ARCHITECTURE-PLAN.md`. The implementation follows a deep-module approach: routes are thin HTTP adapters, providers are external adapters, and application policy lives in modules with narrow interfaces.
+
+- `catalog/catalog.ts` is the first strong seam. It owns Saavn → normalization → zero-result-only Gaana fallback → ranking → cache coordination. Provider response shapes never reach routes.
+- `lib/streamResolver.ts` owns stream URL resolution, forced refresh on `403`/`404`, `Range` forwarding, `206` preservation, response headers, and streaming without buffering.
+- `lib/cache.ts` defines the real `CacheStore` seam. An in-memory adapter supports local tests; `db/dynamo.ts` supplies production persistence. Positive, negative, and per-type TTL policy stays inside the cache module.
+- `lib/lyricsPipeline.ts` owns the LRCLIB ladder, HTML rejection, dirty-LRC parsing, matching, scoring, interpolation, and pre-parsed output. The browser never parses LRC.
+- Provider adapters should expose a non-throwing result that preserves `ok` versus `error` while returning an empty `songs` array on failure. The catalog may invoke Gaana only for `ok` + zero Saavn songs; a timeout or provider error must not look like a valid zero-result search.
+
+Use the deletion test for new abstractions. A seam is justified by two real implementations or by protecting the application from a volatile external contract; do not add speculative interfaces.
+
+### Revised execution order
+
+`B1 → B2 → B3 → B4/B5 → B6 → B9 → B7 → B8 → B10 → B11 → B12 (optional)`
+
+The cache ticket intentionally moves before artwork and lyrics so those modules share a tested cache policy and stream URL refresh can be verified before depth work. Ticket IDs and their definitions below remain unchanged.
 
 ## Ticket list, in build order
 

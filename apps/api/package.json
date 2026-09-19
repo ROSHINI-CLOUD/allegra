@@ -1,0 +1,44 @@
+{
+  "name": "@allegra/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "lint": "eslint .",
+    "start": "node dist/index.js",
+    "test": "node --import tsx --test src/app.test.ts src/app.routes.test.ts src/providers/saavn.test.ts src/lib/normalize.test.ts src/lib/lrc.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.862.0",
+    "@aws-sdk/client-ssm": "^3.862.0",
+    "@aws-sdk/lib-dynamodb": "^3.862.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pino": "^9.9.0",
+    "pino-http": "^10.5.0",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.35.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.5.0",
+    "@types/supertest": "^6.0.3",
+    "eslint": "^9.35.0",
+    "globals": "^16.4.0",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.43.0"
+  }
+}
