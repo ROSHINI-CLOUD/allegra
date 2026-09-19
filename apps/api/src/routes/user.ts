@@ -5,7 +5,7 @@ import type { AuthService } from '../auth/auth.js';
 import type { CatalogService } from '../catalog/catalog.js';
 import type { LibraryRecord, UserData } from '../user/store.js';
 import { getUserId, sendUnauthorized } from './auth.js';
-import { sendSuccess, queryString } from './common.js';
+import { asRecord, sendFailure, sendSuccess, sanitizeSettings, songId } from './common.js';
 
 export function userRouter(auth: AuthService, catalog: CatalogService): Router {
   const router = Router();
@@ -19,22 +19,27 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
   router.post('/libraries', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    const body = request.body as Record<string, unknown>;
+    const body = asRecord(request.body);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
-    if (!name) {
+    if (!name || name.length > 100) {
       response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
       return;
     }
+    const description = typeof body.description === 'string' ? body.description.trim().slice(0, 500) : '';
     const library: LibraryRecord = {
       id: crypto.randomUUID(),
       name,
-      ...(typeof body.description === 'string' ? { description: body.description.trim() } : {}),
+      ...(description ? { description } : {}),
       isPublic: body.isPublic === true,
       songIds: [],
       createdAt: new Date().toISOString()
     };
-    await saveUser(auth, { ...user, libraries: [...user.libraries, library] });
-    sendSuccess(response, library, 201);
+    try {
+      await saveUser(auth, { ...user, libraries: [...user.libraries, library] });
+      sendSuccess(response, library, 201);
+    } catch (error) {
+      sendFailure(response, error);
+    }
   });
 
   router.patch('/libraries/:id', async (request, response) => {
@@ -45,7 +50,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
       response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
       return;
     }
-    const body = request.body as Record<string, unknown>;
+    const body = asRecord(request.body);
     const current = user.libraries[index];
     if (!current) {
       response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
@@ -53,14 +58,18 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
     }
     const updated: LibraryRecord = {
       ...current,
-      ...(typeof body.name === 'string' && body.name.trim() ? { name: body.name.trim() } : {}),
-      ...(typeof body.description === 'string' ? { description: body.description.trim() } : {}),
+      ...(typeof body.name === 'string' && body.name.trim() ? { name: body.name.trim().slice(0, 100) } : {}),
+      ...(typeof body.description === 'string' ? { description: body.description.trim().slice(0, 500) } : {}),
       ...(typeof body.isPublic === 'boolean' ? { isPublic: body.isPublic } : {})
     };
     const libraries = [...user.libraries];
     libraries[index] = updated;
-    await saveUser(auth, { ...user, libraries });
-    sendSuccess(response, updated);
+    try {
+      await saveUser(auth, { ...user, libraries });
+      sendSuccess(response, updated);
+    } catch (error) {
+      sendFailure(response, error);
+    }
   });
 
   router.delete('/libraries/:id', async (request, response) => {
@@ -71,16 +80,20 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
       response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
       return;
     }
-    await saveUser(auth, { ...user, libraries });
-    response.status(204).end();
+    try {
+      await saveUser(auth, { ...user, libraries });
+      response.status(204).end();
+    } catch (error) {
+      sendFailure(response, error);
+    }
   });
 
   router.post('/libraries/:id/songs', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    const songId = queryString((request.body as Record<string, unknown>).songId);
+    const id = songId(asRecord(request.body).songId);
     const index = user.libraries.findIndex((library) => library.id === request.params.id);
-    if (!songId || index < 0) {
+    if (!id || index < 0) {
       response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
       return;
     }
@@ -89,11 +102,15 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
       response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
       return;
     }
-    const updated = { ...library, songIds: library.songIds.includes(songId) ? library.songIds : [...library.songIds, songId] };
+    const updated = { ...library, songIds: library.songIds.includes(id) ? library.songIds : [...library.songIds, id] };
     const libraries = [...user.libraries];
     libraries[index] = updated;
-    await saveUser(auth, { ...user, libraries });
-    sendSuccess(response, updated);
+    try {
+      await saveUser(auth, { ...user, libraries });
+      sendSuccess(response, updated);
+    } catch (error) {
+      sendFailure(response, error);
+    }
   });
 
   router.delete('/libraries/:id/songs/:songId', async (request, response) => {
@@ -109,58 +126,82 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
       response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
       return;
     }
-    const updated = { ...library, songIds: library.songIds.filter((songId) => songId !== request.params.songId) };
+    const updated = { ...library, songIds: library.songIds.filter((id) => id !== request.params.songId) };
     const libraries = [...user.libraries];
     libraries[index] = updated;
-    await saveUser(auth, { ...user, libraries });
-    sendSuccess(response, updated);
+    try {
+      await saveUser(auth, { ...user, libraries });
+      sendSuccess(response, updated);
+    } catch (error) {
+      sendFailure(response, error);
+    }
   });
 
   router.get('/me/liked', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    sendSuccess(response, await catalog.getSongs(user.likedSongIds));
+    try {
+      sendSuccess(response, await catalog.getSongs(user.likedSongIds));
+    } catch (error) {
+      sendFailure(response, error);
+    }
   });
 
   router.post('/me/liked', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    const songId = queryString((request.body as Record<string, unknown>).songId);
-    if (!songId) {
+    const id = songId(asRecord(request.body).songId);
+    if (!id) {
       response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
       return;
     }
-    const likedSongIds = user.likedSongIds.includes(songId) ? user.likedSongIds : [...user.likedSongIds, songId];
-    await saveUser(auth, { ...user, likedSongIds });
-    sendSuccess(response, { songId }, 201);
+    const likedSongIds = user.likedSongIds.includes(id) ? user.likedSongIds : [...user.likedSongIds, id];
+    try {
+      await saveUser(auth, { ...user, likedSongIds });
+      sendSuccess(response, { songId: id }, 201);
+    } catch (error) {
+      sendFailure(response, error);
+    }
   });
 
   router.delete('/me/liked/:songId', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    await saveUser(auth, { ...user, likedSongIds: user.likedSongIds.filter((id) => id !== request.params.songId) });
-    response.status(204).end();
+    try {
+      await saveUser(auth, { ...user, likedSongIds: user.likedSongIds.filter((id) => id !== request.params.songId) });
+      response.status(204).end();
+    } catch (error) {
+      sendFailure(response, error);
+    }
   });
 
   router.get('/me/recently-played', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    sendSuccess(response, await catalog.getSongs(user.recentlyPlayed.map((item) => item.songId)));
+    try {
+      sendSuccess(response, await catalog.getSongs(user.recentlyPlayed.map((item) => item.songId)));
+    } catch (error) {
+      sendFailure(response, error);
+    }
   });
 
   router.post('/me/recently-played', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    const body = request.body as Record<string, unknown>;
-    const songId = queryString(body.songId);
-    const playDuration = typeof body.playDuration === 'number' && body.playDuration >= 0 ? body.playDuration : 0;
-    if (!songId) {
+    const body = asRecord(request.body);
+    const id = songId(body.songId);
+    const playDuration = typeof body.playDuration === 'number' && Number.isFinite(body.playDuration) && body.playDuration >= 0 ? body.playDuration : 0;
+    if (!id) {
       response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
       return;
     }
-    const next = [{ songId, playDuration, playedAt: new Date().toISOString() }, ...user.recentlyPlayed.filter((item) => item.songId !== songId)].slice(0, 50);
-    await saveUser(auth, { ...user, recentlyPlayed: next });
-    sendSuccess(response, next[0], 201);
+    const next = [{ songId: id, playDuration, playedAt: new Date().toISOString() }, ...user.recentlyPlayed.filter((item) => item.songId !== id)].slice(0, 50);
+    try {
+      await saveUser(auth, { ...user, recentlyPlayed: next });
+      sendSuccess(response, next[0], 201);
+    } catch (error) {
+      sendFailure(response, error);
+    }
   });
 
   router.get('/me/settings', async (request, response) => {
@@ -172,9 +213,13 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
   router.patch('/me/settings', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    const settings = { ...user.settings, ...(request.body as Record<string, unknown>) };
-    await saveUser(auth, { ...user, settings });
-    sendSuccess(response, settings);
+    const settings = { ...sanitizeSettings(user.settings), ...sanitizeSettings(request.body) };
+    try {
+      await saveUser(auth, { ...user, settings });
+      sendSuccess(response, settings);
+    } catch (error) {
+      sendFailure(response, error);
+    }
   });
 
   return router;
@@ -186,12 +231,17 @@ async function authenticatedUser(auth: AuthService, request: Parameters<typeof g
     sendUnauthorized(response);
     return null;
   }
-  const user = await auth.getUser(userId);
-  if (!user) {
-    sendUnauthorized(response);
+  try {
+    const user = await auth.getUser(userId);
+    if (!user) {
+      sendUnauthorized(response);
+      return null;
+    }
+    return user;
+  } catch (error) {
+    sendFailure(response, error);
     return null;
   }
-  return user;
 }
 
 async function saveUser(auth: AuthService, user: UserData): Promise<void> {

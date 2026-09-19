@@ -27,7 +27,7 @@ export class LrclibProvider {
 
   public async get(trackName: string, artistName: string, duration?: number): Promise<LrclibEntry | null> {
     try {
-      const url = this.url('get', { track_name: trackName, artist_name: artistName, ...(duration ? { duration: String(duration) } : {}) });
+      const url = this.url('get', { track_name: trackName, artist_name: artistName, ...(duration !== undefined && Number.isFinite(duration) ? { duration: String(duration) } : {}) });
       const response = await this.request(url);
       if (response.status === 404) {
         return null;
@@ -47,7 +47,7 @@ export class LrclibProvider {
       const url = this.url('search', {
         track_name: trackName,
         artist_name: artistName,
-        ...(duration ? { duration: String(duration) } : {})
+        ...(duration !== undefined && Number.isFinite(duration) ? { duration: String(duration) } : {})
       });
       const response = await this.request(url);
       if (!response.ok) {
@@ -79,5 +79,13 @@ export class LrclibProvider {
 }
 
 function isEntry(value: unknown): value is LrclibEntry {
-  return typeof value === 'object' && value !== null;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry.trackName === 'string' ||
+    typeof entry.plainLyrics === 'string' ||
+    typeof entry.syncedLyrics === 'string'
+  );
 }

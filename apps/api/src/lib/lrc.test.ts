@@ -13,6 +13,12 @@ test('LRC parser accepts dirty timestamps and emits instrumental lines', () => {
   ]);
 });
 
+test('optional brackets still parse and empty stamped lines become instrumental', () => {
+  const lines = parseLyrics('(0:01)One\n[00:02.5]\n00:03 Two', 30);
+  assert.equal(lines[0]?.text, 'One');
+  assert.equal(lines.some((line) => line.text === '[INSTRUMENTAL]'), true);
+});
+
 test('plain lyrics are interpolated across duration', () => {
   assert.deepEqual(parseLyrics('one\ntwo\nthree', 90), [
     { timestamp: 0, text: 'one', lineOrder: 0 },

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 
+import { PersistenceError } from '../lib/errors.js';
 import type { UserData, UserStore } from '../user/store.js';
 
 export interface AuthUser {
@@ -13,9 +14,10 @@ export class AuthService {
     private readonly secret: string
   ) {}
 
-  public async createGuest(): Promise<{ token: string; user: UserData }> {
+  public async createGuest(): Promise<{ token: string; userId: string }> {
+    const userId = crypto.randomUUID();
     const user: UserData = {
-      userId: crypto.randomUUID(),
+      userId,
       isGuest: true,
       createdAt: new Date().toISOString(),
       libraries: [],
@@ -23,8 +25,12 @@ export class AuthService {
       recentlyPlayed: [],
       settings: {}
     };
-    await this.store.save(user);
-    return { token: this.sign(user.userId), user };
+    try {
+      await this.store.save(user);
+    } catch {
+      throw new PersistenceError();
+    }
+    return { token: this.sign(userId), userId };
   }
 
   public verify(token: string): AuthUser | null {
@@ -40,11 +46,19 @@ export class AuthService {
   }
 
   public async getUser(userId: string): Promise<UserData | null> {
-    return this.store.get(userId);
+    try {
+      return await this.store.get(userId);
+    } catch {
+      throw new PersistenceError();
+    }
   }
 
   public async update(user: UserData): Promise<void> {
-    await this.store.save(user);
+    try {
+      await this.store.save(user);
+    } catch {
+      throw new PersistenceError();
+    }
   }
 
   private sign(userId: string): string {

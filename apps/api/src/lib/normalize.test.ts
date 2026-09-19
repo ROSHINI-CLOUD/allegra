@@ -33,6 +33,38 @@ test('normalization decodes entities, supports array artists, selects quality, a
   });
 });
 
+test('primaryArtists string, missing artist fallback, last-quality fallback, and seconds duration', () => {
+  const named = normalizeSong({
+    id: 'str',
+    name: 'Named',
+    primaryArtists: 'Solo',
+    duration: '245',
+    image: [{ quality: '150x150', url: 'https://img/150.jpg' }],
+    downloadUrl: [{ quality: '160kbps', url: 'https://audio/160.mp4' }]
+  }, 'Saavn');
+  const unknown = normalizeSong({
+    id: 'unk',
+    name: 'No Artist',
+    downloadUrl: [{ url: 'https://audio/song.mp4' }]
+  }, 'Saavn');
+
+  assert.equal(named?.artist, 'Solo');
+  assert.equal(named?.duration, 245);
+  assert.equal(named?.artwork, 'https://img/150.jpg');
+  assert.equal(named?.streamUrl, '/api/stream/str');
+  assert.equal(unknown?.artist, 'Unknown Artist');
+});
+
+test('hex apostrophe decoding is distinct from decimal', () => {
+  const song = normalizeSong({
+    id: 'hex',
+    name: 'It&#x27;s Time',
+    primaryArtists: 'A',
+    downloadUrl: [{ quality: '320kbps', url: 'https://audio/320.mp4' }]
+  }, 'Saavn');
+  assert.equal(song?.title, "It's Time");
+});
+
 test('Gaana play counts are always zero and songs without audio are dropped', () => {
   const song = normalizeSong({
     id: 'gaana',

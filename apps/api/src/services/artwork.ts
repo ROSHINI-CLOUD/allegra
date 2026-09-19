@@ -2,6 +2,8 @@ import { cacheKey, type CacheStore } from '../lib/cache.js';
 import type { ItunesProvider } from '../providers/itunes.js';
 import type { CatalogService } from '../catalog/catalog.js';
 
+const ARTWORK_TTL_SECONDS = 2_592_000;
+
 export class ArtworkService {
   public constructor(
     private readonly itunes: ItunesProvider,
@@ -16,10 +18,11 @@ export class ArtworkService {
       return cached;
     }
 
-    let urls = await this.itunes.search(`${title} ${artist}`, limit);
-    const cleaned = clean(`${title} ${artist}`);
-    if (urls.length === 0 && cleaned !== `${title} ${artist}`) {
-      urls = await this.itunes.search(cleaned, limit);
+    const rawTerm = `${title} ${artist}`.trim();
+    let urls = await this.itunes.search(rawTerm, limit);
+    const cleanedTerm = `${clean(title)} ${clean(artist)}`.replace(/\s+/g, ' ').trim();
+    if (urls.length === 0 && cleanedTerm && cleanedTerm !== rawTerm) {
+      urls = await this.itunes.search(cleanedTerm, limit);
     }
     if (urls.length === 0) {
       try {
@@ -29,9 +32,13 @@ export class ArtworkService {
         urls = [];
       }
     }
-    await this.cache.set(key, urls, 2_592_000);
+    await this.cache.set(key, urls, ARTWORK_TTL_SECONDS);
     return urls;
   }
+}
+
+export function cleanArtworkQuery(value: string): string {
+  return clean(value);
 }
 
 function clean(value: string): string {

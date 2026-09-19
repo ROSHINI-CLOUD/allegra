@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-COPY tsconfig.json eslint.config.js ./
+COPY tsconfig.json tsconfig.build.json eslint.config.js ./
 COPY src ./src
 RUN npm run build
 
@@ -17,6 +17,7 @@ ENV PORT=8080
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
+RUN chown -R node:node /app
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \

@@ -7,11 +7,11 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "dev": "tsx watch src/index.ts",
     "lint": "eslint .",
     "start": "node dist/index.js",
-    "test": "node --import tsx --test src/app.test.ts src/app.routes.test.ts src/providers/saavn.test.ts src/lib/normalize.test.ts src/lib/lrc.test.ts",
+    "test": "node --import tsx --test --test-reporter=spec src/*.test.ts src/*/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
