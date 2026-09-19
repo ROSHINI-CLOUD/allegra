@@ -2,7 +2,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 
 import type { CacheStore } from '../lib/cache.js';
-import type { UserData } from '../user/store.js';
+import type { UserData, UserStore } from '../user/store.js';
 
 export class DynamoCacheStore implements CacheStore {
   private readonly client: DynamoDBDocumentClient;
@@ -24,7 +24,11 @@ export class DynamoCacheStore implements CacheStore {
       await this.delete(key);
       return null;
     }
-    return JSON.parse(item.value) as T;
+    try {
+      return JSON.parse(item.value) as T;
+    } catch {
+      return null;
+    }
   }
 
   public async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
@@ -46,7 +50,7 @@ export class DynamoCacheStore implements CacheStore {
   }
 }
 
-export class DynamoUserStore {
+export class DynamoUserStore implements UserStore {
   private readonly client: DynamoDBDocumentClient;
 
   public constructor(private readonly tableName: string) {
@@ -59,7 +63,7 @@ export class DynamoUserStore {
       Key: { userId }
     }));
     const payload = result.Item?.payload;
-    return typeof payload === 'string' ? JSON.parse(payload) as UserData : null;
+    return typeof payload === 'string' ? parseUserData(payload) : null;
   }
 
   public async save(user: UserData): Promise<void> {
@@ -67,5 +71,17 @@ export class DynamoUserStore {
       TableName: this.tableName,
       Item: { userId: user.userId, payload: JSON.stringify(user), updatedAt: Date.now() }
     }));
+  }
+}
+
+function parseUserData(payload: string): UserData | null {
+  try {
+    const value: unknown = JSON.parse(payload);
+    if (typeof value !== 'object' || value === null || !('userId' in value) || typeof value.userId !== 'string') {
+      return null;
+    }
+    return value as UserData;
+  } catch {
+    return null;
   }
 }

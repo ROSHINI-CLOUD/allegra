@@ -1,29 +1,29 @@
 import { createApp } from './app.js';
+import { loadConfig } from './config.js';
 
-const port = Number.parseInt(process.env.PORT ?? '8080', 10);
-const version = process.env.APP_VERSION ?? '0.1.0';
-const allowedOrigin = process.env.ALLEGRA_ORIGIN;
-const jwtSecret = process.env.JWT_SECRET;
-
-if (process.env.NODE_ENV === 'production' && !jwtSecret) {
-  throw new Error('JWT_SECRET is required in production.');
-}
-
-if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-  throw new Error('PORT must be an integer between 1 and 65535.');
-}
-
+const config = loadConfig(process.env);
 const app = createApp({
-  version,
-  ...(allowedOrigin ? { allowedOrigin } : {}),
-  ...(jwtSecret ? { jwtSecret } : {}),
-  ...(process.env.SAAVN_API_URL ? { saavnApiUrl: process.env.SAAVN_API_URL } : {}),
-  ...(process.env.GAANA_API_URL ? { gaanaApiUrl: process.env.GAANA_API_URL } : {}),
-  ...(process.env.LRCLIB_API_URL ? { lrclibApiUrl: process.env.LRCLIB_API_URL } : {})
+  version: config.version,
+  jwtSecret: config.jwtSecret,
+  saavnApiUrl: config.saavnApiUrl,
+  gaanaApiUrl: config.gaanaApiUrl,
+  lrclibApiUrl: config.lrclibApiUrl,
+  enableRequestLogging: config.enableRequestLogging,
+  ...(config.allowedOrigin ? { allowedOrigin: config.allowedOrigin } : {})
 });
 
-app.listen(port, () => {
-  if (process.env.NODE_ENV !== 'test') {
-    process.stdout.write(`Allegra API listening on port ${port}\n`);
+const server = app.listen(config.port, () => {
+  if (config.nodeEnv !== 'test') {
+    process.stdout.write(`Allegra API listening on port ${config.port}\n`);
   }
 });
+
+function shutdown(): void {
+  server.close((error) => {
+    process.exit(error ? 1 : 0);
+  });
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

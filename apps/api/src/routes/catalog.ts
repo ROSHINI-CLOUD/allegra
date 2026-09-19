@@ -13,7 +13,7 @@ export function catalogRouter(catalog: CatalogService): Router {
       return;
     }
     try {
-      const value = await catalog.search(query, positiveInt(request.query.limit, 20, 50), nonNegativeInt(request.query.page, 0));
+      const value = await catalog.search(query, positiveInt(request.query.limit, 20, 50), nonNegativeInt(request.query.page, 0, 100));
       sendSuccess(response, value);
     } catch (error) {
       sendFailure(response, error);

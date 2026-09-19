@@ -84,6 +84,22 @@ test('provider failures are isolated and preserve an error status for the catalo
   assert.deepEqual(result.data, []);
 });
 
+test('4xx, 5xx, malformed JSON, and network failures do not throw', async () => {
+  for (const fetchImpl of [
+    async () => response({ success: false }, 404),
+    async () => response({ success: false }, 500),
+    async () => new Response('not-json', { status: 200, headers: { 'content-type': 'application/json' } }),
+    async () => {
+      throw new Error('network down');
+    }
+  ]) {
+    const provider = new SaavnProvider({ baseUrl: 'https://saavn.example/api', fetchImpl });
+    const result = await provider.search('test');
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.data, []);
+  }
+});
+
 test('provider requests abort at the configured timeout', async () => {
   let aborted = false;
   const provider = new SaavnProvider({

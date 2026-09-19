@@ -1,9 +1,9 @@
-import { ProviderUnavailableError, NotFoundError } from '../lib/errors.js';
+import { ProviderUnavailableError, NotFoundError, TimeoutError } from '../lib/errors.js';
 import { cacheKey, type CacheStore } from '../lib/cache.js';
 import { CircuitBreaker } from '../lib/circuitBreaker.js';
 import { normalizeSong } from '../lib/normalize.js';
 import type { GaanaProvider } from '../providers/gaana.js';
-import type { SaavnProvider, SaavnSong } from '../providers/saavn.js';
+import type { ProviderResult, SaavnProvider, SaavnSong } from '../providers/saavn.js';
 import type { HomePayload, UnifiedSong } from '../types.js';
 
 export interface CatalogSearch {
@@ -39,18 +39,17 @@ export class CatalogService {
 
     const saavn = await this.call(this.saavnBreaker, () => this.saavn.search(query, limit, page));
     if (!saavn.ok) {
-      throw new ProviderUnavailableError();
+      throw unavailable(saavn.reason);
     }
 
     let raw = saavn.data;
     let source: 'Saavn' | 'Gaana' = 'Saavn';
     if (raw.length === 0) {
-      const gaana = await this.call(this.gaanaBreaker, () => this.gaana.search(query, limit, page));
-      if (!gaana.ok) {
-        throw new ProviderUnavailableError();
+      const gaana = await this.tryGaana(query, limit, page);
+      if (gaana) {
+        raw = gaana;
+        source = 'Gaana';
       }
-      raw = gaana.data;
-      source = 'Gaana';
     }
 
     const value = {
@@ -69,7 +68,10 @@ export class CatalogService {
     }
 
     const result = await this.call(this.saavnBreaker, () => this.saavn.getSong(id));
-    if (!result.ok || !result.data) {
+    if (!result.ok) {
+      throw result.reason === 'timeout' ? new TimeoutError() : new NotFoundError();
+    }
+    if (!result.data) {
       throw new NotFoundError();
     }
     const song = normalizeSong(result.data, 'Saavn');
@@ -100,7 +102,7 @@ export class CatalogService {
 
     const result = await this.call(this.saavnBreaker, () => this.saavn.getSuggestions(id, limit));
     if (!result.ok) {
-      throw new ProviderUnavailableError();
+      throw unavailable(result.reason);
     }
     const songs = normalizeMany(result.data, 'Saavn');
     await this.cache.set(key, songs, 86_400);
@@ -127,9 +129,24 @@ export class CatalogService {
     return home;
   }
 
-  private async call<T>(breaker: CircuitBreaker, operation: () => Promise<{ readonly ok: boolean; readonly data: T }>): Promise<{ readonly ok: boolean; readonly data: T }> {
+  private async tryGaana(query: string, limit: number, page: number): Promise<SaavnSong[] | null> {
+    try {
+      const gaana = await this.call(this.gaanaBreaker, () => this.gaana.search(query, limit, page));
+      if (gaana.ok && gaana.data.length > 0) {
+        return gaana.data;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  private async call<T>(
+    breaker: CircuitBreaker,
+    operation: () => Promise<ProviderResult<T>>
+  ): Promise<ProviderResult<T>> {
     if (breaker.isOpen) {
-      return { ok: false, data: [] as T };
+      throw new ProviderUnavailableError();
     }
     const result = await operation();
     if (result.ok) {
@@ -141,9 +158,18 @@ export class CatalogService {
   }
 }
 
+function unavailable(reason: 'timeout' | 'error' | undefined): Error {
+  return reason === 'timeout' ? new TimeoutError() : new ProviderUnavailableError();
+}
+
 function normalizeMany(raw: SaavnSong[], source: 'Saavn' | 'Gaana'): UnifiedSong[] {
   return raw
     .map((song) => normalizeSong(song, source))
     .filter((song): song is UnifiedSong => song !== null)
-    .sort((left, right) => right.playCount - left.playCount);
+    .sort((left, right) => {
+      if (left.source !== right.source) {
+        return left.source === 'Saavn' ? -1 : 1;
+      }
+      return right.playCount - left.playCount;
+    });
 }

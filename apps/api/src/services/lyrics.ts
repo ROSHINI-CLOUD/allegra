@@ -4,6 +4,9 @@ import { scoreLyrics } from '../lib/matcher.js';
 import type { LrclibEntry, LrclibProvider } from '../providers/lrclib.js';
 import type { LyricsPayload } from '../types.js';
 
+const HIT_TTL_SECONDS = 2_592_000;
+const MISS_TTL_SECONDS = 86_400;
+
 export class LyricsService {
   public constructor(
     private readonly lrclib: LrclibProvider,
@@ -16,8 +19,9 @@ export class LyricsService {
     duration: number | undefined,
     syncedOnly: boolean
   ): Promise<LyricsPayload | null> {
-    const key = cacheKey('lyrics', title, artist, String(duration ?? 0), String(syncedOnly));
-    const missKey = cacheKey('lyrics', 'miss', title, artist, String(duration ?? 0), String(syncedOnly));
+    const cleaned = cleanLyricsQuery(title, artist);
+    const key = cacheKey('lyrics', cleaned.title, cleaned.artist, String(duration ?? 0), String(syncedOnly));
+    const missKey = cacheKey('lyrics', 'miss', cleaned.title, cleaned.artist, String(duration ?? 0), String(syncedOnly));
     if (await this.cache.get<boolean>(missKey)) {
       return null;
     }
@@ -26,25 +30,17 @@ export class LyricsService {
       return cached;
     }
 
-    const precise = await this.lrclib.get(title, artist, duration);
-    const candidates = precise ? [precise] : await this.lrclib.search(title, artist, duration);
-    const valid = candidates.filter((candidate) => isUsable(candidate, syncedOnly));
-    const best = valid.sort((left, right) => scoreLyrics(right, title, duration).score - scoreLyrics(left, title, duration).score)[0];
+    const precise = await this.lrclib.get(cleaned.title, cleaned.artist, duration);
+    const fromGet = precise && isUsable(precise, syncedOnly) ? precise : null;
+    const candidates = fromGet ? [fromGet] : (await this.lrclib.search(cleaned.title, cleaned.artist, duration)).filter((candidate) => isUsable(candidate, syncedOnly));
+    const best = candidates.sort((left, right) => scoreLyrics(right, cleaned.title, duration).score - scoreLyrics(left, cleaned.title, duration).score)[0];
     if (!best) {
-      await this.cache.set(missKey, true, 86_400);
+      await this.cache.set(missKey, true, MISS_TTL_SECONDS);
       return null;
     }
 
-    const raw = best.syncedLyrics?.trim() || best.plainLyrics?.trim() || '';
-    const score = scoreLyrics(best, title, duration);
-    const payload: LyricsPayload = {
-      source: best.syncedLyrics?.trim() ? precise === best ? 'LRCLIB' : 'LRCLIB-search' : 'interpolated',
-      type: best.syncedLyrics?.trim() ? 'synced' : 'plain',
-      matchScore: score.score,
-      matchReason: score.reason,
-      lines: parseLyrics(raw, duration ?? best.duration ?? 180)
-    };
-    await this.cache.set(key, payload, 2_592_000);
+    const payload = toPayload(best, cleaned.title, duration, fromGet === best ? 'LRCLIB' : 'LRCLIB-search');
+    await this.cache.set(key, payload, HIT_TTL_SECONDS);
     return payload;
   }
 
@@ -56,14 +52,15 @@ export class LyricsService {
     readonly matchScore: number;
     readonly matchReason: string;
   }>> {
-    const entries = await this.lrclib.search(title, artist, duration);
+    const cleaned = cleanLyricsQuery(title, artist);
+    const entries = await this.lrclib.search(cleaned.title, cleaned.artist, duration);
     return entries
       .filter((entry) => isUsable(entry, false))
       .map((entry) => {
-        const score = scoreLyrics(entry, title, duration);
+        const score = scoreLyrics(entry, cleaned.title, duration);
         return {
-          title: entry.trackName ?? title,
-          artist: entry.artistName ?? artist,
+          title: entry.trackName ?? cleaned.title,
+          artist: entry.artistName ?? cleaned.artist,
           ...(entry.duration !== undefined ? { duration: entry.duration } : {}),
           type: entry.syncedLyrics?.trim() ? 'synced' as const : 'plain' as const,
           matchScore: score.score,
@@ -72,6 +69,40 @@ export class LyricsService {
       })
       .sort((left, right) => right.matchScore - left.matchScore);
   }
+}
+
+export function cleanLyricsQuery(title: string, artist: string): { title: string; artist: string } {
+  let cleanSong = title
+    .replace(/\(Lyrics\)/gi, '')
+    .replace(/\(Official.*?\)/gi, '')
+    .replace(/\(MP3_\d+K\)/gi, '')
+    .replace(/\(Audio\)/gi, '')
+    .trim();
+  let cleanArtist = artist === 'Unknown Artist' ? '' : artist.trim();
+
+  if (!cleanArtist && cleanSong.includes(' - ')) {
+    const parts = cleanSong.split(' - ');
+    cleanArtist = (parts[0] ?? '').trim();
+    cleanSong = parts.slice(1).join(' - ').trim();
+  }
+
+  return {
+    title: cleanSong || title.trim(),
+    artist: cleanArtist || artist.trim()
+  };
+}
+
+function toPayload(best: LrclibEntry, title: string, duration: number | undefined, source: 'LRCLIB' | 'LRCLIB-search'): LyricsPayload {
+  const raw = best.syncedLyrics?.trim() || best.plainLyrics?.trim() || '';
+  const score = scoreLyrics(best, title, duration);
+  const synced = Boolean(best.syncedLyrics?.trim());
+  return {
+    source: synced ? source : 'interpolated',
+    type: synced ? 'synced' : 'plain',
+    matchScore: score.score,
+    matchReason: score.reason,
+    lines: parseLyrics(raw, duration ?? best.duration ?? 180)
+  };
 }
 
 function isUsable(entry: LrclibEntry, syncedOnly: boolean): boolean {

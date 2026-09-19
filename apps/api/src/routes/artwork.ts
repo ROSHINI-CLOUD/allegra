@@ -1,7 +1,7 @@
 import { Router } from 'express';
 
 import type { ArtworkService } from '../services/artwork.js';
-import { sendSuccess, queryString, positiveInt } from './common.js';
+import { sendFailure, sendSuccess, queryString, positiveInt } from './common.js';
 
 export function artworkRouter(artwork: ArtworkService): Router {
   const router = Router();
@@ -12,7 +12,11 @@ export function artworkRouter(artwork: ArtworkService): Router {
       response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
       return;
     }
-    sendSuccess(response, { urls: await artwork.find(title, artist, positiveInt(request.query.limit, 5, 20)) });
+    try {
+      sendSuccess(response, { urls: await artwork.find(title, artist, positiveInt(request.query.limit, 5, 20)) });
+    } catch (error) {
+      sendFailure(response, error);
+    }
   });
   return router;
 }

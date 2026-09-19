@@ -2,13 +2,17 @@ import { Router, type Request, type Response } from 'express';
 
 import { bearerToken } from '../auth/auth.js';
 import type { AuthService } from '../auth/auth.js';
-import { sendSuccess } from './common.js';
+import { sendFailure, sendSuccess } from './common.js';
 
 export function authRouter(auth: AuthService): Router {
   const router = Router();
 
   const createGuest = async (_request: Request, response: Response): Promise<void> => {
-    sendSuccess(response, await auth.createGuest());
+    try {
+      sendSuccess(response, await auth.createGuest());
+    } catch (error) {
+      sendFailure(response, error);
+    }
   };
   router.post('/auth/anon', createGuest);
   router.post('/auth/guest', createGuest);
@@ -19,12 +23,16 @@ export function authRouter(auth: AuthService): Router {
       sendUnauthorized(response);
       return;
     }
-    const user = await auth.getUser(userId);
-    if (!user) {
-      sendUnauthorized(response);
-      return;
+    try {
+      const user = await auth.getUser(userId);
+      if (!user) {
+        sendUnauthorized(response);
+        return;
+      }
+      sendSuccess(response, { userId: user.userId, isGuest: user.isGuest, createdAt: user.createdAt });
+    } catch (error) {
+      sendFailure(response, error);
     }
-    sendSuccess(response, user);
   });
 
   return router;

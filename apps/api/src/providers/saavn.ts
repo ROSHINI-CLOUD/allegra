@@ -1,3 +1,5 @@
+import { fetchWithTimeout, isAbortError } from '../lib/fetchWithTimeout.js';
+
 const DEFAULT_TIMEOUT_MS = 25_000;
 
 export const BROWSER_HEADERS = {
@@ -30,9 +32,12 @@ export interface SaavnSong {
   readonly downloadUrl?: readonly SaavnAsset[];
 }
 
+export type ProviderFailureReason = 'timeout' | 'error';
+
 export interface ProviderResult<T> {
   readonly ok: boolean;
   readonly data: T;
+  readonly reason?: ProviderFailureReason;
 }
 
 interface JsonRecord {
@@ -74,14 +79,14 @@ export class SaavnProvider {
     try {
       const response = await this.request(`songs/${encodeURIComponent(id)}`);
       if (!response.ok) {
-        return { ok: false, data: null };
+        return { ok: false, data: null, reason: 'error' };
       }
 
       const body: unknown = await response.json();
       const song = parseSongResponse(body);
-      return song ? { ok: true, data: song } : { ok: false, data: null };
-    } catch {
-      return { ok: false, data: null };
+      return song ? { ok: true, data: song } : { ok: false, data: null, reason: 'error' };
+    } catch (error) {
+      return { ok: false, data: null, reason: isAbortError(error) ? 'timeout' : 'error' };
     }
   }
 
@@ -101,14 +106,14 @@ export class SaavnProvider {
     try {
       const response = await this.request(path, params);
       if (!response.ok) {
-        return { ok: false, data: [] };
+        return { ok: false, data: [], reason: 'error' };
       }
 
       const body: unknown = await response.json();
       const songs = parseResults(body);
-      return songs ? { ok: true, data: songs } : { ok: false, data: [] };
-    } catch {
-      return { ok: false, data: [] };
+      return songs ? { ok: true, data: songs } : { ok: false, data: [], reason: 'error' };
+    } catch (error) {
+      return { ok: false, data: [], reason: isAbortError(error) ? 'timeout' : 'error' };
     }
   }
 
@@ -123,17 +128,12 @@ export class SaavnProvider {
       }
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    try {
-      return await this.fetchImpl(url, {
-        headers: BROWSER_HEADERS,
-        signal: controller.signal
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+    return fetchWithTimeout(
+      url,
+      { headers: BROWSER_HEADERS },
+      this.timeoutMs,
+      this.fetchImpl
+    );
   }
 }
 
