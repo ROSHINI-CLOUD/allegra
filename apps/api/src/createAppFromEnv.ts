@@ -14,10 +14,14 @@ export function createAppFromEnv(env: NodeJS.Dict<string>): Express {
     gaanaApiUrl: config.gaanaApiUrl,
     lrclibApiUrl: config.lrclibApiUrl,
     ...(config.lyricaApiUrl ? { lyricaApiUrl: config.lyricaApiUrl } : {}),
+    ...(config.betterLyricsApiUrl ? { betterLyricsApiUrl: config.betterLyricsApiUrl } : {}),
+    ...(config.betterLyricsApiKey ? { betterLyricsApiKey: config.betterLyricsApiKey } : {}),
     ...(config.convexUrl && config.convexServerSecret
       ? { convexUrl: config.convexUrl, convexServerSecret: config.convexServerSecret }
       : {}),
     enableRequestLogging: config.enableRequestLogging,
+    ai: config.ai,
+    ...(config.uploads ? { uploads: config.uploads } : {}),
     ...(config.allowedOrigin ? { allowedOrigin: config.allowedOrigin } : {}),
     ...(config.additionalOrigins ? { additionalOrigins: config.additionalOrigins } : {})
   };

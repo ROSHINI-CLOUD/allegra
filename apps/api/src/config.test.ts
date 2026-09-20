@@ -53,4 +53,32 @@ test('production accepts a complete trusted configuration', () => {
   assert.equal(config.allowedOrigin, 'https://app.example');
   assert.equal(config.saavnApiUrl, 'https://saavn.example/api');
   assert.equal(config.enableRequestLogging, true);
+  assert.equal(config.uploads, undefined);
+});
+
+test('S3 cover uploads load only when every required piece is present', () => {
+  assert.throws(
+    () => loadConfig({
+      NODE_ENV: 'development',
+      S3_COVERS_BUCKET: 'allegra-covers'
+    }),
+    /S3 cover uploads need/
+  );
+
+  const config = loadConfig({
+    NODE_ENV: 'development',
+    AWS_ACCESS_KEY_ID: 'AKIAEXAMPLE',
+    AWS_SECRET_ACCESS_KEY: 'secret',
+    AWS_REGION: 'us-east-1',
+    S3_COVERS_BUCKET: 'allegra-covers',
+    S3_COVERS_PUBLIC_BASE_URL: 'https://cdn.example/'
+  });
+  assert.deepEqual(config.uploads, {
+    bucket: 'allegra-covers',
+    region: 'us-east-1',
+    publicBaseUrl: 'https://cdn.example',
+    accessKeyId: 'AKIAEXAMPLE',
+    secretAccessKey: 'secret',
+    expiresInSeconds: 120
+  });
 });

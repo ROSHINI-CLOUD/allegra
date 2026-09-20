@@ -3,17 +3,20 @@ import { Router } from 'express';
 
 import type { AuthService } from '../auth/auth.js';
 import type { CatalogService } from '../catalog/catalog.js';
-import type { LibraryRecord, UserData } from '../user/store.js';
+import { forPersistence, isOwnedCoverKey, withCoverUrl, withCoverUrls } from '../lib/covers.js';
+import type { LibraryRecord, TasteProfile, UserData } from '../user/store.js';
+import { SIGNAL_WEIGHT, applySeeds, applySignal, emptyTaste, playWeight } from '../user/taste.js';
 import { getUserId, sendUnauthorized } from './auth.js';
 import { asRecord, sendFailure, sendSuccess, sanitizeSettings, songId } from './common.js';
 
-export function userRouter(auth: AuthService, catalog: CatalogService): Router {
+export function userRouter(auth: AuthService, catalog: CatalogService, coversPublicBaseUrl?: string): Router {
   const router = Router();
+  const present = (library: LibraryRecord): LibraryRecord => withCoverUrl(library, coversPublicBaseUrl);
 
   router.get('/libraries', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    sendSuccess(response, user.libraries);
+    sendSuccess(response, withCoverUrls(user.libraries, coversPublicBaseUrl));
   });
 
   router.post('/libraries', async (request, response) => {
@@ -36,7 +39,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
     };
     try {
       await saveUser(auth, { ...user, libraries: [...user.libraries, library] });
-      sendSuccess(response, library, 201);
+      sendSuccess(response, present(library), 201);
     } catch (error) {
       sendFailure(response, error);
     }
@@ -56,17 +59,44 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
       response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
       return;
     }
+
+    let coverKeyUpdate: { coverKey?: string } | undefined;
+    if (body.coverKey === null) {
+      coverKeyUpdate = {};
+    } else if (typeof body.coverKey === 'string') {
+      const coverKey = body.coverKey.trim();
+      if (!isOwnedCoverKey(coverKey, user.userId, current.id)) {
+        response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
+        return;
+      }
+      coverKeyUpdate = { coverKey };
+    }
+
+    const base = forPersistence(current);
     const updated: LibraryRecord = {
-      ...current,
-      ...(typeof body.name === 'string' && body.name.trim() ? { name: body.name.trim().slice(0, 100) } : {}),
-      ...(typeof body.description === 'string' ? { description: body.description.trim().slice(0, 500) } : {}),
-      ...(typeof body.isPublic === 'boolean' ? { isPublic: body.isPublic } : {})
+      id: base.id,
+      name: typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 100) : base.name,
+      ...(typeof body.description === 'string'
+        ? (body.description.trim() ? { description: body.description.trim().slice(0, 500) } : {})
+        : base.description
+          ? { description: base.description }
+          : {}),
+      isPublic: typeof body.isPublic === 'boolean' ? body.isPublic : base.isPublic,
+      songIds: base.songIds,
+      createdAt: base.createdAt,
+      ...(coverKeyUpdate
+        ? coverKeyUpdate.coverKey
+          ? { coverKey: coverKeyUpdate.coverKey }
+          : {}
+        : base.coverKey
+          ? { coverKey: base.coverKey }
+          : {})
     };
     const libraries = [...user.libraries];
     libraries[index] = updated;
     try {
       await saveUser(auth, { ...user, libraries });
-      sendSuccess(response, updated);
+      sendSuccess(response, present(updated));
     } catch (error) {
       sendFailure(response, error);
     }
@@ -102,12 +132,14 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
       response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
       return;
     }
-    const updated = { ...library, songIds: library.songIds.includes(id) ? library.songIds : [...library.songIds, id] };
+    const adding = !library.songIds.includes(id);
+    const updated = { ...library, songIds: adding ? [...library.songIds, id] : library.songIds };
     const libraries = [...user.libraries];
     libraries[index] = updated;
     try {
-      await saveUser(auth, { ...user, libraries });
-      sendSuccess(response, updated);
+      const taught = adding ? await learn(catalog, user, id, () => SIGNAL_WEIGHT.playlistAdd) : user;
+      await saveUser(auth, { ...taught, libraries });
+      sendSuccess(response, present(updated));
     } catch (error) {
       sendFailure(response, error);
     }
@@ -131,7 +163,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
     libraries[index] = updated;
     try {
       await saveUser(auth, { ...user, libraries });
-      sendSuccess(response, updated);
+      sendSuccess(response, present(updated));
     } catch (error) {
       sendFailure(response, error);
     }
@@ -155,9 +187,11 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
       response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
       return;
     }
-    const likedSongIds = user.likedSongIds.includes(id) ? user.likedSongIds : [...user.likedSongIds, id];
+    const isNew = !user.likedSongIds.includes(id);
+    const likedSongIds = isNew ? [...user.likedSongIds, id] : user.likedSongIds;
     try {
-      await saveUser(auth, { ...user, likedSongIds });
+      const taught = isNew ? await learn(catalog, user, id, () => SIGNAL_WEIGHT.like) : user;
+      await saveUser(auth, { ...taught, likedSongIds });
       sendSuccess(response, { songId: id }, 201);
     } catch (error) {
       sendFailure(response, error);
@@ -168,7 +202,9 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
     try {
-      await saveUser(auth, { ...user, likedSongIds: user.likedSongIds.filter((id) => id !== request.params.songId) });
+      const wasLiked = user.likedSongIds.includes(String(request.params.songId));
+      const taught = wasLiked ? await learn(catalog, user, String(request.params.songId), () => SIGNAL_WEIGHT.unlike) : user;
+      await saveUser(auth, { ...taught, likedSongIds: user.likedSongIds.filter((id) => id !== request.params.songId) });
       response.status(204).end();
     } catch (error) {
       sendFailure(response, error);
@@ -197,7 +233,9 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
     }
     const next = [{ songId: id, playDuration, playedAt: new Date().toISOString() }, ...user.recentlyPlayed.filter((item) => item.songId !== id)].slice(0, 50);
     try {
-      await saveUser(auth, { ...user, recentlyPlayed: next });
+      // Pressing play is a mild vote. How long they stayed arrives separately, as a listen signal.
+      const taught = await learn(catalog, user, id, (song) => (playDuration > 0 ? playWeight(playDuration, song.duration) : 0.3));
+      await saveUser(auth, { ...taught, recentlyPlayed: next });
       sendSuccess(response, next[0], 201);
     } catch (error) {
       sendFailure(response, error);
@@ -222,7 +260,80 @@ export function userRouter(auth: AuthService, catalog: CatalogService): Router {
     }
   });
 
+  router.get('/me/taste', async (request, response) => {
+    const user = await authenticatedUser(auth, request, response);
+    if (!user) return;
+    sendSuccess(response, tasteSummary(user.taste));
+  });
+
+  // Onboarding: the listener names favourites. Everything after that is learned from behaviour.
+  router.post('/me/taste/seed', async (request, response) => {
+    const user = await authenticatedUser(auth, request, response);
+    if (!user) return;
+    const body = asRecord(request.body);
+    const artists = stringList(body.artists, 30);
+    const languages = stringList(body.languages, 8);
+    try {
+      const taste = applySeeds(user.taste, artists, languages);
+      await saveUser(auth, { ...user, taste });
+      sendSuccess(response, tasteSummary(taste));
+    } catch (error) {
+      sendFailure(response, error);
+    }
+  });
+
+  // How long a song was actually listened to. A few seconds counts against it, most of it counts for it.
+  router.post('/me/taste/signal', async (request, response) => {
+    const user = await authenticatedUser(auth, request, response);
+    if (!user) return;
+    const body = asRecord(request.body);
+    const id = songId(body.songId);
+    const seconds = typeof body.seconds === 'number' && Number.isFinite(body.seconds) && body.seconds >= 0 ? Math.min(body.seconds, 3600) : null;
+    if (!id || seconds === null) {
+      response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
+      return;
+    }
+    try {
+      const taught = await learn(catalog, user, id, (song) => playWeight(seconds, song.duration));
+      if (taught !== user) await saveUser(auth, taught);
+      response.status(204).end();
+    } catch (error) {
+      sendFailure(response, error);
+    }
+  });
+
   return router;
+}
+
+/** The slice of taste the browser needs: who they love, in what language, and whether to ask them to pick favourites. */
+function tasteSummary(taste: TasteProfile | undefined): { topArtists: { name: string; score: number }[]; languages: { name: string; score: number }[]; signals: number; onboarded: boolean } {
+  const value = taste ?? emptyTaste();
+  return {
+    topArtists: value.artists.slice(0, 12).map((entry) => ({ name: entry.name, score: entry.score })),
+    languages: value.languages.slice(0, 5).map((entry) => ({ name: entry.name, score: entry.score })),
+    signals: value.signals,
+    onboarded: value.onboarded
+  };
+}
+
+function stringList(value: unknown, max: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item): item is string => typeof item === 'string').map((item) => item.trim().slice(0, 80)).filter(Boolean))].slice(0, max);
+}
+
+/**
+ * Folds one behaviour on one song into the user's taste. Looking the song up can fail (provider down); that must
+ * never fail the action the listener took, so on any trouble the user is returned untouched.
+ */
+async function learn(catalog: CatalogService, user: UserData, id: string, weightFor: (song: { duration: number }) => number): Promise<UserData> {
+  try {
+    const [song] = await catalog.getSongs([id]);
+    if (!song) return user;
+    const taste = applySignal(user.taste, { artist: song.artist, ...(song.language ? { language: song.language } : {}) }, weightFor(song));
+    return { ...user, taste };
+  } catch {
+    return user;
+  }
 }
 
 async function authenticatedUser(auth: AuthService, request: Parameters<typeof getUserId>[1], response: Parameters<typeof sendUnauthorized>[0]): Promise<UserData | null> {

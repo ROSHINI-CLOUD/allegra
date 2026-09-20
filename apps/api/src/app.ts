@@ -4,14 +4,18 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 
+import type { AiConfig, UploadsConfig } from './config.js';
 import { createServices, type AppServices } from './services.js';
 import { createLogger, REDACTED_PATHS } from './lib/logger.js';
+import { aiRouter } from './routes/ai.js';
 import { artworkRouter } from './routes/artwork.js';
 import { authRouter } from './routes/auth.js';
 import { catalogRouter } from './routes/catalog.js';
 import { sendFailure } from './routes/common.js';
 import { lyricsRouter } from './routes/lyrics.js';
+import { sharedRouter } from './routes/shared.js';
 import { streamRouter } from './routes/stream.js';
+import { uploadsRouter } from './routes/uploads.js';
 import { userRouter } from './routes/user.js';
 
 export interface RateLimitConfig {
@@ -30,8 +34,12 @@ export interface AppOptions {
   readonly gaanaApiUrl?: string;
   readonly lrclibApiUrl?: string;
   readonly lyricaApiUrl?: string;
+  readonly betterLyricsApiUrl?: string;
+  readonly betterLyricsApiKey?: string;
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
+  readonly ai?: AiConfig;
+  readonly uploads?: UploadsConfig;
   readonly fetchImpl?: typeof fetch;
   readonly rateLimit?: false | {
     readonly api?: RateLimitConfig;
@@ -75,8 +83,11 @@ export function createApp(options: AppOptions): Express {
     ...(options.gaanaApiUrl ? { gaanaApiUrl: options.gaanaApiUrl } : {}),
     ...(options.lrclibApiUrl ? { lrclibApiUrl: options.lrclibApiUrl } : {}),
     ...(options.lyricaApiUrl ? { lyricaApiUrl: options.lyricaApiUrl } : {}),
+    ...(options.betterLyricsApiUrl ? { betterLyricsApiUrl: options.betterLyricsApiUrl } : {}),
+    ...(options.betterLyricsApiKey ? { betterLyricsApiKey: options.betterLyricsApiKey } : {}),
     ...(options.convexUrl ? { convexUrl: options.convexUrl } : {}),
     ...(options.convexServerSecret ? { convexServerSecret: options.convexServerSecret } : {}),
+    ...(options.ai ? { ai: options.ai } : {}),
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
   });
 
@@ -95,7 +106,10 @@ export function createApp(options: AppOptions): Express {
   app.use('/api', lyricsRouter(services.lyrics));
   app.use('/api', streamRouter(services.stream));
   app.use('/api', authRouter(services.auth));
-  app.use('/api', userRouter(services.auth, services.catalog));
+  app.use('/api', userRouter(services.auth, services.catalog, options.uploads?.publicBaseUrl));
+  app.use('/api', sharedRouter(services.auth, services.catalog, options.uploads?.publicBaseUrl));
+  app.use('/api', uploadsRouter(services.auth, options.uploads));
+  app.use('/api', aiRouter(services.translation, services.recommendations, services.auth, services.catalog));
 
   app.use((_request, response) => {
     response.status(404).json({ success: false, data: null, error: "We couldn't find that." });

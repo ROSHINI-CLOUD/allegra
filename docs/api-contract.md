@@ -67,6 +67,11 @@ Cache 1 h. Budget: <800 ms cold, <200 ms cached.
 `→ ApiResponse<{ trending: UnifiedSong[]; madeForYou: UnifiedSong[]; recommended: UnifiedSong[] }>`
 Cache 1 h. Fallback = hardcoded curated playlist IDs.
 
+### `GET /api/artists/:name` → `ApiResponse<ArtistProfile>` · cache 6 h — added 2026-09-21
+Additive endpoint (no existing shape changed). `name` is the lead artist as shown on a song. Resolves the name through the provider's artist search (exact match preferred), then returns `ArtistProfile` from `packages/shared/types.ts`: a real `image` (500×500 photo or `null`), `isVerified`, `followerCount`, optional `bio`, `songs` (most popular first, all playable), `albums` (with cover + year) and `similar` artists. `404` when no artist matches.
+### `GET /api/artists/faces?names=a,b,c` → `ApiResponse<ArtistSummary[]>` · cache 24 h — added 2026-09-21
+Up to 12 comma-separated names; returns `{ id, name, image }` for each one that has a photo. Unmatched names are simply omitted. Used for avatars on lists.
+
 ### `GET /api/artwork`
 `title`, `artist`, `limit`=5 → `ApiResponse<{ urls: string[] }>` · cache 30 d
 Index 0 is the best guess; the array exists for a future "fix artwork" picker.
@@ -97,7 +102,7 @@ Called once on first load, token stored client-side and sent as `Authorization: 
 ```
 GET    /api/libraries                  → ApiResponse<Library[]>
 POST   /api/libraries                  { name, description?, isPublic? }
-PATCH  /api/libraries/:id
+PATCH  /api/libraries/:id              { name?, description?, isPublic?, coverKey? }
 DELETE /api/libraries/:id
 POST   /api/libraries/:id/songs        { songId }
 DELETE /api/libraries/:id/songs/:songId
@@ -110,16 +115,75 @@ POST   /api/me/recently-played         { songId, playDuration }
 GET/PATCH /api/me/settings
 ```
 
+`Library` is additive: optional `coverKey` (S3 object key) and derived `coverUrl` (CloudFront / public base + key). `coverUrl` is never persisted — the API adds it on read when uploads are configured. `PATCH` accepts `coverKey` from a prior `/api/uploads/sign` (must be under `covers/<userId>/<libraryId>/`) or `coverKey: null` to clear.
+
 ### `POST /api/ai/mood` ★ stretch
 `{ prompt: string }` → `ApiResponse<{ queue: UnifiedSong[]; explanation: string }>`
-**Not shipped.** Bedrock was the only planned backend and the project no longer uses AWS; the mood pills in the UI run a plain `/api/search` instead.
+**Not shipped.** The mood pills in the UI run a plain `/api/search` instead.
+
+### `POST /api/ai/translate-lyrics` — shipped 2026-09-20
+`{ title, artist, lines: LyricLine[], targetLanguage? = "English" }` (no auth required, same as `/api/lyrics`)
+`→ ApiResponse<{ lines: LyricLine[]; provider: string }>`
+Same `lines` length/order/timestamps as the request — only `text` changes, translated for **meaning**, not word-for-word. `[INSTRUMENTAL]` markers pass through unchanged. `provider` names whichever of the cascade actually answered (`gemini` | `openrouter` | `nvidia` | `groq` | `bedrock`) — surface it in the UI, it's a nice "how this works" detail.
+`503` if no AI provider is configured at all. `502` if every configured provider failed or replied with something unparseable.
+
+### `GET /api/ai/recommendations` — shipped 2026-09-20
+`songId`? (current song, added to taste context if present) · requires `Authorization: Bearer <token>`
+`→ ApiResponse<{ songs: UnifiedSong[]; provider: string; reasoning: string }>`
+Infers taste from the caller's liked + recently-played songs, asks the AI cascade for search queries reflecting that taste, then runs those through the existing catalog search — every returned song is a real, playable catalog result, never AI-invented. Excludes songs already liked or recently played. `404` if the listener has no liked/recent/current song yet (nothing to infer from). `503` if no AI provider is configured.
+
+Cascade for both: **Gemini → OpenRouter → NVIDIA → Groq → Bedrock**, first success wins. All optional — with none configured, both routes degrade to `503` and nothing else in the app is affected.
+
+## Accounts, taste and sharing — additive, shipped 2026-09-21
+
+Additive only: no existing shape changed. Every response uses `{ success, data, error? }`.
+
+### Accounts (a guest can become an account without losing anything)
+
+| Endpoint | Auth | Body → response |
+|---|---|---|
+| `POST /api/auth/register` | optional guest `Bearer` | `{ email, password (>=8), displayName? }` → `201 { token, userId }`. **Converts the caller's guest session into the account** (same `userId`, `isGuest` flips to false, likes/playlists/plays/taste kept). No/expired guest token → a fresh account. `400` bad email/short password, `409` email already registered. |
+| `POST /api/auth/login` | optional guest `Bearer` | `{ email, password }` → `{ token, userId }`. If a guest token is sent and differs from the account, the guest's likes, playlists, recents and taste are **merged into the account**. `401` on any mismatch, with the same copy for "no such email" and "wrong password". |
+| `GET /api/auth/me` | Bearer | → `{ userId, isGuest, createdAt, displayName?, email? }` (never the hash) |
+| `PATCH /api/me/profile` | Bearer | `{ displayName }` → same profile. Empty string clears it. |
+
+Passwords are stored as `scrypt$<salt>$<hash>` (Node `crypto.scrypt`, per-user salt). Sign-out is client-side: drop the token and call `POST /api/auth/anon`.
+
+### Taste (what the app learns about a listener)
+
+| Endpoint | Auth | Body → response |
+|---|---|---|
+| `GET /api/me/taste` | Bearer | → `{ topArtists: {name,score}[] (<=12), languages: {name,score}[] (<=5), signals: number, onboarded: boolean }` |
+| `POST /api/me/taste/seed` | Bearer | `{ artists: string[] (<=30), languages: string[] (<=8) }` → same as `GET`. Onboarding: strong weight, sets `onboarded: true`. |
+| `POST /api/me/taste/signal` | Bearer | `{ songId, seconds }` → `204`. How long a song was really listened to: `<10 s` counts against the artist, most of a song counts for them. |
+
+Taste is also updated **automatically** by existing routes (it never fails them; a lookup error leaves taste unchanged): `POST /api/me/recently-played` (+0.3 when `playDuration` is 0, else by listened time), `POST /api/me/liked` (+3), `DELETE /api/me/liked/:songId` (−2), `POST /api/libraries/:id/songs` (+2). Scores decay ×0.985 on every signal, so recent listening outweighs old. Artist credits: headline artist full weight, featured artists half. `GET /api/ai/recommendations` now also sends the top artists/languages to the model.
+
+### Sharing a playlist
+
+| Endpoint | Auth | Body → response |
+|---|---|---|
+| `POST /api/libraries/:id/share` | Bearer (owner) | → `{ code, path: "#shared/<code>" }` (`201` first time, `200` after). Sets the playlist `isPublic: true`. The link is **live**: it points at the owner's playlist. |
+| `DELETE /api/libraries/:id/share` | Bearer (owner) | → `204`. Link stops working immediately; `isPublic: false`. |
+| `GET /api/shared/:code` | **none** | → `{ code, name, description?, coverUrl?, ownerName, songs: UnifiedSong[] }`. `404` if the code is unknown, malformed, or sharing was turned off. |
+| `POST /api/shared/:code/save` | Bearer | → `201 LibraryRecord`. Copies the playlist into the caller's own library (`isPublic: false`, new id). |
+
+Codes are 8 characters from `abcdefghjkmnpqrstuvwxyz23456789`.
+
+### Playlist cover uploads — additive, shipped 2026-09-21
+
+| Endpoint | Auth | Body → response |
+|---|---|---|
+| `POST /api/uploads/sign` | Bearer (owner) | `{ libraryId, contentType: "image/jpeg"\|"image/png"\|"image/webp", contentLength }` → `{ uploadUrl, coverKey, coverUrl, headers: { "Content-Type", "Content-Length" }, expiresInSeconds }`. Browser `PUT`s the bytes straight to `uploadUrl` with those exact headers, then `PATCH /api/libraries/:id` with `{ coverKey }`. `400` if type/size invalid (`contentLength` 1..2 MB). `503` if S3 is not configured. No AWS keys ever reach the browser. |
 
 ## Errors
 
 | HTTP | When | `error` copy |
 |---|---|---|
 | 400 | Bad params | "Something's missing from that request." |
+| 401 | Wrong email/password, or no session | "That email and password did not match." / "Please start a guest session first." |
 | 404 | Not found | "We couldn't find that." |
+| 409 | Email already registered | "That email already has an account. Try signing in instead." |
 | 429 | Rate limited | "Too many requests — give it a moment." |
 | 502 | All providers down | "Music service is having a moment. Try again shortly." |
 | 504 | Timeout | "That took too long. Check your connection and retry." |

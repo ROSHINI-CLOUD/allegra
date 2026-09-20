@@ -20,6 +20,19 @@ export interface AppConfig {
   readonly convexServerSecret?: string;
   readonly enableRequestLogging: boolean;
   readonly ai: AiConfig;
+  /** Playlist-cover uploads. Unset disables POST /api/uploads/sign. */
+  readonly uploads?: UploadsConfig;
+}
+
+/** Credentials + bucket for hand-rolled S3 PUT presigning (no AWS SDK). */
+export interface UploadsConfig {
+  readonly bucket: string;
+  readonly region: string;
+  /** CloudFront or public S3 website/base URL used to build coverUrl for the browser. */
+  readonly publicBaseUrl: string;
+  readonly accessKeyId: string;
+  readonly secretAccessKey: string;
+  readonly expiresInSeconds: number;
 }
 
 /** Every field optional and independently configured — the AI cascade just skips whatever isn't set. */
@@ -116,6 +129,8 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     }
   }
 
+  const uploads = loadUploadsConfig(env, ai);
+
   const config: AppConfig = {
     nodeEnv,
     port,
@@ -130,7 +145,8 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     ...(betterLyricsApiKey ? { betterLyricsApiKey } : {}),
     ...(convexUrl && convexServerSecret ? { convexUrl, convexServerSecret } : {}),
     enableRequestLogging: nodeEnv === 'production',
-    ai
+    ai,
+    ...(uploads ? { uploads } : {})
   };
 
   const withOrigin = allowedOrigin ? { ...config, allowedOrigin } : config;
@@ -139,6 +155,37 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
 
 function isOff(value: string | undefined): boolean {
   return value?.trim().toLowerCase() === 'off';
+}
+
+/**
+ * Cover uploads need a bucket, a public base URL, and the same AWS keys Bedrock
+ * already uses. Any missing piece leaves uploads disabled (503) rather than
+ * half-configured.
+ */
+function loadUploadsConfig(env: NodeJS.Dict<string>, ai: AiConfig): UploadsConfig | undefined {
+  const bucket = env.S3_COVERS_BUCKET?.trim();
+  const publicBaseUrl = env.S3_COVERS_PUBLIC_BASE_URL?.trim();
+  const region = (env.S3_COVERS_REGION?.trim() || env.AWS_REGION?.trim() || ai.awsRegion || '').trim();
+  const accessKeyId = ai.awsAccessKeyId?.trim();
+  const secretAccessKey = ai.awsSecretAccessKey?.trim();
+  if (!bucket && !publicBaseUrl) return undefined;
+  if (!bucket || !publicBaseUrl || !region || !accessKeyId || !secretAccessKey) {
+    throw new Error(
+      'S3 cover uploads need S3_COVERS_BUCKET, S3_COVERS_PUBLIC_BASE_URL, AWS_REGION (or S3_COVERS_REGION), and AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.'
+    );
+  }
+  try {
+    const parsed = new URL(publicBaseUrl);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('scheme');
+  } catch {
+    throw new Error('S3_COVERS_PUBLIC_BASE_URL must be an http(s) URL.');
+  }
+  const expiresRaw = env.S3_COVERS_UPLOAD_EXPIRES_SECONDS?.trim();
+  const expiresInSeconds = expiresRaw ? Number.parseInt(expiresRaw, 10) : 120;
+  if (!Number.isInteger(expiresInSeconds) || expiresInSeconds < 30 || expiresInSeconds > 900) {
+    throw new Error('S3_COVERS_UPLOAD_EXPIRES_SECONDS must be an integer between 30 and 900.');
+  }
+  return { bucket, region, publicBaseUrl: publicBaseUrl.replace(/\/+$/, ''), accessKeyId, secretAccessKey, expiresInSeconds };
 }
 
 function readOptionalProviderUrl(value: string | undefined, production: boolean, name: string): string | undefined {
