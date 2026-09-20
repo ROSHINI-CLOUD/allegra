@@ -55,7 +55,16 @@ web on `:5173`, driven in a real Chromium browser at 1440×900 / 1351×918.
 
 ## 3.4 Deploy (AWS)
 
-- [ ] **22–25** — not started (hosting, Bedrock primary, S3 covers, README).
+- [ ] **22. Hosting** — App Runner + Amplify not started (needs human GitHub connect + console).
+- [~] **23. Bedrock primary** — code done (`AI_PRIMARY=bedrock` in `buildAiClient`); runtime enablement
+  still needs human `aws configure` + Bedrock model access + IAM. Not verified live.
+- [~] **24. S3 playlist covers** — code path landed this session:
+  hand-rolled SigV4 query-string presigner (`apps/api/src/lib/s3Presign.ts`),
+  `POST /api/uploads/sign`, additive `coverKey`/`coverUrl` on libraries (Convex + contract),
+  Change cover glass popover on playlist page, covers shown on Home tiles / Library cards / hero.
+  Gates green (111 API + 5 infra). **Not verified against a real bucket** — waiting on `aws configure`
+  then bucket + CloudFront + env (`S3_COVERS_BUCKET`, `S3_COVERS_PUBLIC_BASE_URL`).
+- [ ] **25. README "How we used AWS"** — not started.
 
 ---
 

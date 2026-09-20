@@ -1,5 +1,5 @@
-import { ArrowLeft, ChevronRight, House, Heart as HeartIcon, Moon, Sun, Disc3, Pause, Play, SkipBack, SkipForward, Sparkles, Waves, Clock, Compass, Library as LibraryIcon, ListMusic, PanelLeftClose, PanelLeftOpen, Repeat, Repeat1, Shuffle, Volume2, VolumeX } from 'lucide-react';
-import { motion, useReducedMotion } from 'motion/react';
+import { ArrowLeft, ChevronRight, House, Heart as HeartIcon, Moon, Sun, Disc3, Pause, Play, SkipBack, SkipForward, Sparkles, Waves, Clock, Compass, Library as LibraryIcon, ListMusic, PanelLeftClose, PanelLeftOpen, Repeat, Repeat1, Shuffle, Volume2, VolumeX, X } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 
@@ -146,13 +146,32 @@ export default function App() {
     });
   };
   const [queueOpen, setQueueOpen] = useState(false);
+  const queuePanelRef = useRef<HTMLDivElement | null>(null);
+  const queueToggleRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (!queueOpen) return undefined;
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') setQueueOpen(false);
     };
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target as Node;
+      if (queuePanelRef.current?.contains(target)) return;
+      if (queueToggleRef.current?.contains(target)) return;
+      setQueueOpen(false);
+    };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [queueOpen]);
+  useEffect(() => {
+    if (!queueOpen) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      queuePanelRef.current?.querySelector<HTMLElement>('button, [href], input')?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [queueOpen]);
   const nowPlayingRef = useRef<HTMLElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -472,6 +491,17 @@ export default function App() {
   const nextSongs = queueSongs.filter((song) => song.id !== activeSong?.id).slice(0, 3);
   const lightSong = nextSongs[0] ?? activeSong ?? home?.madeForYou[0] ?? home?.recommended[0] ?? null;
   const queueDuration = useMemo(() => queueSongs.reduce((total, song) => total + song.duration, 0), [queueSongs]);
+  const playingNext = useMemo(() => {
+    const live = audio.queue;
+    if (live.length === 0) return [] as UnifiedSong[];
+    const currentIndex = live.findIndex((song) => song.id === audio.currentSong?.id);
+    const start = currentIndex >= 0 ? currentIndex + 1 : 0;
+    return live.slice(start);
+  }, [audio.queue, audio.currentSong?.id]);
+  const playingNextDuration = useMemo(
+    () => playingNext.reduce((total, song) => total + song.duration, 0),
+    [playingNext]
+  );
   // Popular artists: one avatar per lead artist, taken from what is already on screen.
   const knownSongs = useMemo(
     () => [...displaySongs, ...(home?.trending ?? []), ...(home?.madeForYou ?? []), ...(home?.recommended ?? []), ...likedSongs, ...recentlyPlayed],
@@ -590,13 +620,13 @@ export default function App() {
   const backdropSource = view === 'artist'
     ? (artistProfile?.image ?? artistTracks[0]?.artwork ?? null)
     : view === 'playlist'
-      ? (activePlaylistSongs[0]?.artwork ?? null)
+      ? (activePlaylist?.coverUrl ?? activePlaylistSongs[0]?.artwork ?? null)
       : view === 'liked'
         ? (likedSongs[0]?.artwork ?? null)
         : view === 'album'
           ? (albumSeed?.artwork ?? null)
           : view === 'shared'
-            ? (shared?.songs[0]?.artwork ?? null)
+            ? (shared?.coverUrl ?? shared?.songs[0]?.artwork ?? null)
             : null;
   const [backdropPalette, setBackdropPalette] = useState<{ source: string; palette: Palette } | null>(null);
   useEffect(() => {
@@ -781,6 +811,10 @@ export default function App() {
   const immersiveOpen = playerMode === 'immersive' || playerMode === 'workspace';
 
   useEffect(() => {
+    if (immersiveOpen && queueOpen) setQueueOpen(false);
+  }, [immersiveOpen, queueOpen]);
+
+  useEffect(() => {
     if (!immersiveOpen && view !== 'words') return undefined;
     const root = document.documentElement;
     const body = document.body;
@@ -907,6 +941,7 @@ export default function App() {
               songs={shared?.songs ?? []}
               loading={sharedLoading}
               ownerName={shared?.ownerName ?? 'a listener'}
+              {...(shared?.coverUrl ? { coverUrl: shared.coverUrl } : {})}
               currentSongId={audio.currentSong?.id ?? null}
               isPlaying={audio.isPlaying}
               likedIds={likedIds}
@@ -924,7 +959,7 @@ export default function App() {
               }}
             />
           )
-        ) : view === 'library' ? <LibraryPage likedSongs={likedSongs} recentlyPlayed={recentlyPlayed} likedIds={likedIds} loading={personalLoading} error={personalError} actionError={personalActionError} currentSongId={audio.currentSong?.id} isPlaying={audio.isPlaying} onPlay={playSong} onLike={toggleLike} onRetry={() => void loadPersonalSpace()} onDiscover={() => { window.location.hash = '#discover'; window.setTimeout(() => setPaletteOpen(true), 0); }} /> : view === 'liked' ? <CollectionPage kind="liked" title="Liked Songs" songs={likedSongs} loading={personalLoading} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onToggle={audio.togglePlayback} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={(shuffle) => playAlbumTracks(likedSongs, shuffle)} onLike={toggleLike} onOpenAlbum={openAlbum} onDiscover={() => { window.location.hash = '#discover'; window.setTimeout(() => setPaletteOpen(true), 0); }} /> : view === 'playlist' ? <CollectionPage kind="playlist" title={activePlaylist?.name ?? (playlists.loading ? 'Playlist' : 'Playlist not found')} songs={activePlaylistSongs} loading={playlists.loading || (activePlaylist !== null && activePlaylistSongs.length < activePlaylist.songIds.length)} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onToggle={audio.togglePlayback} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={(shuffle) => playAlbumTracks(activePlaylistSongs, shuffle)} onLike={toggleLike} onOpenAlbum={openAlbum} onDiscover={() => { window.location.hash = '#discover'; window.setTimeout(() => setPaletteOpen(true), 0); }} {...(activePlaylist ? { onDelete: () => { void playlists.remove(activePlaylist.id); window.location.hash = '#library'; }, share: { libraryId: activePlaylist.id, isPublic: activePlaylist.isPublic, onChanged: () => { void playlists.reload(); } } } : {})} /> : view === 'artist' && artistName ? <ArtistPage name={artistName} profile={artistProfile} songs={artistTracks} related={relatedArtists} loading={artistLoading && artistTracks.length === 0} error={artistTracks.length === 0 ? artistError : null} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onBack={() => goBack('#discover')} onRetry={() => setArtistReload((count) => count + 1)} onToggle={audio.togglePlayback} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={(shuffle) => playAlbumTracks(artistTracks, shuffle)} onLike={toggleLike} onOpenAlbum={openAlbumByName} onOpenArtist={openArtist} /> : view === 'album' && albumSeed ? <AlbumPage seed={albumSeed} tracks={albumTracks} palette={palette} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={() => playAlbumTracks(albumTracks, false)} onShuffle={() => playAlbumTracks(albumTracks, true)} onLike={toggleLike} onLikeAlbum={() => toggleLike(albumSeed)} albumLiked={likedIds.has(albumSeed.id)} /> : view === 'words' ? <WordsPage song={audio.currentSong} palette={palette} energy={audio.isPlaying ? 0.8 : 0.4} queue={audio.queue} lines={displayLyrics} currentTime={audio.currentTime} lyricsLoading={lyricsLoading} lyricsError={lyricsError} suggestions={suggestions} suggestionsLoading={suggestionsLoading} suggestionsError={suggestionsError} likedIds={likedIds} isPlaying={audio.isPlaying} onRetryLyrics={retryLyrics} onRetrySuggestions={retrySuggestions} onSeek={(time) => void audio.seek(time)} onPlay={playSong} onLike={toggleLike} onDiscover={() => { window.location.hash = '#discover'; window.setTimeout(() => setPaletteOpen(true), 0); }} translating={translating} translated={showTranslated} translateError={translateError} translateProvider={translateProvider} onToggleTranslate={toggleTranslate} /> : <>
+        ) : view === 'library' ? <LibraryPage likedSongs={likedSongs} recentlyPlayed={recentlyPlayed} likedIds={likedIds} loading={personalLoading} error={personalError} actionError={personalActionError} currentSongId={audio.currentSong?.id} isPlaying={audio.isPlaying} onPlay={playSong} onLike={toggleLike} onRetry={() => void loadPersonalSpace()} onDiscover={() => { window.location.hash = '#discover'; window.setTimeout(() => setPaletteOpen(true), 0); }} /> : view === 'liked' ? <CollectionPage kind="liked" title="Liked Songs" songs={likedSongs} loading={personalLoading} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onToggle={audio.togglePlayback} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={(shuffle) => playAlbumTracks(likedSongs, shuffle)} onLike={toggleLike} onOpenAlbum={openAlbum} onDiscover={() => { window.location.hash = '#discover'; window.setTimeout(() => setPaletteOpen(true), 0); }} /> : view === 'playlist' ? <CollectionPage kind="playlist" title={activePlaylist?.name ?? (playlists.loading ? 'Playlist' : 'Playlist not found')} songs={activePlaylistSongs} loading={playlists.loading || (activePlaylist !== null && activePlaylistSongs.length < activePlaylist.songIds.length)} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onToggle={audio.togglePlayback} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={(shuffle) => playAlbumTracks(activePlaylistSongs, shuffle)} onLike={toggleLike} onOpenAlbum={openAlbum} onDiscover={() => { window.location.hash = '#discover'; window.setTimeout(() => setPaletteOpen(true), 0); }} {...(activePlaylist ? { onDelete: () => { void playlists.remove(activePlaylist.id); window.location.hash = '#library'; }, share: { libraryId: activePlaylist.id, isPublic: activePlaylist.isPublic, onChanged: () => { void playlists.reload(); } }, cover: { libraryId: activePlaylist.id, ...(activePlaylist.coverUrl ? { coverUrl: activePlaylist.coverUrl } : {}), onUpload: playlists.setCover } } : {})} /> : view === 'artist' && artistName ? <ArtistPage name={artistName} profile={artistProfile} songs={artistTracks} related={relatedArtists} loading={artistLoading && artistTracks.length === 0} error={artistTracks.length === 0 ? artistError : null} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onBack={() => goBack('#discover')} onRetry={() => setArtistReload((count) => count + 1)} onToggle={audio.togglePlayback} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={(shuffle) => playAlbumTracks(artistTracks, shuffle)} onLike={toggleLike} onOpenAlbum={openAlbumByName} onOpenArtist={openArtist} /> : view === 'album' && albumSeed ? <AlbumPage seed={albumSeed} tracks={albumTracks} palette={palette} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={() => playAlbumTracks(albumTracks, false)} onShuffle={() => playAlbumTracks(albumTracks, true)} onLike={toggleLike} onLikeAlbum={() => toggleLike(albumSeed)} albumLiked={likedIds.has(albumSeed.id)} /> : view === 'words' ? <WordsPage song={audio.currentSong} palette={palette} energy={audio.isPlaying ? 0.8 : 0.4} queue={audio.queue} lines={displayLyrics} currentTime={audio.currentTime} lyricsLoading={lyricsLoading} lyricsError={lyricsError} suggestions={suggestions} suggestionsLoading={suggestionsLoading} suggestionsError={suggestionsError} likedIds={likedIds} isPlaying={audio.isPlaying} onRetryLyrics={retryLyrics} onRetrySuggestions={retrySuggestions} onSeek={(time) => void audio.seek(time)} onPlay={playSong} onLike={toggleLike} onDiscover={() => { window.location.hash = '#discover'; window.setTimeout(() => setPaletteOpen(true), 0); }} translating={translating} translated={showTranslated} translateError={translateError} translateProvider={translateProvider} onToggleTranslate={toggleTranslate} /> : <>
         <div className="browse-grid">
           <div className="browse-main">
             <motion.section className="hero-banner" variants={pageVariants} initial="hidden" animate="visible" transition={pageTransition} aria-label="Featured track" data-live={audio.isPlaying ? 'true' : undefined}>
@@ -974,8 +1009,24 @@ export default function App() {
         </>}
       </main>
 
+      <AnimatePresence>
+        {queueOpen && audio.currentSong && !immersiveOpen ? (
+          <motion.button
+            key="am-queue-scrim"
+            type="button"
+            className="am-queue-scrim"
+            aria-label="Close playing next"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduced ? motionTokens.duration.instant : motionTokens.duration.fast, ease: motionTokens.ease.standard }}
+            onClick={() => setQueueOpen(false)}
+          />
+        ) : null}
+      </AnimatePresence>
+
       {audio.currentSong && !immersiveOpen ? (
-        <div className="mini-player" role="region" aria-label="Player bar">
+        <div className={`mini-player${queueOpen ? ' is-queue-open' : ''}`} role="region" aria-label="Player bar">
           <div className="am-transport">
             <button type="button" className={`am-btn ${audio.shuffle ? 'is-on' : ''}`} aria-pressed={audio.shuffle} aria-label={audio.shuffle ? 'Shuffle on' : 'Shuffle off'} title="Shuffle" onClick={audio.toggleShuffle}><Shuffle size={16} aria-hidden="true" /></button>
             <button type="button" className="am-btn am-btn--skip" aria-label="Previous track" title="Previous" onClick={audio.skipPrevious}><SkipBack size={20} fill="currentColor" aria-hidden="true" /></button>
@@ -1013,7 +1064,7 @@ export default function App() {
           </div>
 
           <div className="am-right">
-            <button type="button" className="am-btn" aria-label={audio.isMuted ? 'Unmute' : 'Mute'} title={audio.isMuted ? 'Unmute' : 'Mute'} onClick={audio.toggleMute}>{audio.isMuted || audio.volume === 0 ? <VolumeX size={17} aria-hidden="true" /> : <Volume2 size={17} aria-hidden="true" />}</button>
+            <button type="button" className="am-btn am-btn--mute" aria-label={audio.isMuted ? 'Unmute' : 'Mute'} title={audio.isMuted ? 'Unmute' : 'Mute'} onClick={audio.toggleMute}>{audio.isMuted || audio.volume === 0 ? <VolumeX size={17} aria-hidden="true" /> : <Volume2 size={17} aria-hidden="true" />}</button>
             <input
               type="range"
               className="am-range am-volume"
@@ -1025,25 +1076,101 @@ export default function App() {
               style={{ '--fill': `${(audio.isMuted ? 0 : audio.volume) * 100}%` } as CSSProperties}
               onChange={(event) => audio.setVolume(Number(event.target.value))}
             />
-            <button type="button" className="am-btn" aria-label="Lyrics" title="Lyrics" onClick={() => setPlayerMode('workspace')}><Waves size={17} aria-hidden="true" /></button>
-            <button type="button" className={`am-btn ${queueOpen ? 'is-on' : ''}`} aria-pressed={queueOpen} aria-label="Playing next" title="Playing next" onClick={() => setQueueOpen((open) => !open)}><ListMusic size={17} aria-hidden="true" /></button>
+            <button type="button" className="am-btn am-btn--lyrics" aria-label="Lyrics" title="Lyrics" onClick={() => setPlayerMode('workspace')}><Waves size={17} aria-hidden="true" /></button>
+            <button
+              ref={queueToggleRef}
+              type="button"
+              className={`am-btn am-btn--queue ${queueOpen ? 'is-on' : ''}`}
+              aria-pressed={queueOpen}
+              aria-expanded={queueOpen}
+              aria-controls="am-playing-next"
+              aria-label="Playing next"
+              title="Playing next"
+              onClick={() => setQueueOpen((open) => !open)}
+            >
+              <ListMusic size={17} aria-hidden="true" />
+              {playingNext.length > 0 ? <span className="am-queue-badge" aria-hidden="true">{Math.min(playingNext.length, 99)}</span> : null}
+            </button>
           </div>
 
-          {queueOpen ? (
-            <div className="am-queue" role="dialog" aria-label="Playing next">
-              <div className="am-queue-head"><strong>Playing Next</strong><span>{audio.queue.length} songs</span></div>
-              <div className="queue-items">
-                {audio.queue.length < 2 ? <div className="queue-empty"><ListMusic size={18} aria-hidden="true" /><span>Nothing queued after this song.</span></div> : null}
-                {audio.queue.slice(Math.max(0, audio.queue.findIndex((song) => song.id === audio.currentSong?.id)) + 1).slice(0, 12).map((song) => (
-                  <button className="queue-item" key={song.id} onClick={() => playSong(song, audio.queue)}>
-                    <Artwork song={song} size="small" />
-                    <span className="queue-item-copy"><strong>{song.title}</strong><small>{song.artist}</small></span>
-                    <span className="queue-item-time">{formatTime(song.duration)}</span>
+          <AnimatePresence>
+            {queueOpen ? (
+              <motion.div
+                key="am-queue"
+                ref={queuePanelRef}
+                id="am-playing-next"
+                className="am-queue"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Playing next"
+                initial={reduced ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.98 }}
+                animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                exit={reduced ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.98 }}
+                transition={reduced ? { duration: motionTokens.duration.instant } : spring.sheet}
+              >
+                <div className="am-queue-head">
+                  <div className="am-queue-title">
+                    <strong>Playing Next</strong>
+                    <span>
+                      {playingNext.length === 0
+                        ? 'Queue empty'
+                        : `${playingNext.length} ${playingNext.length === 1 ? 'song' : 'songs'} · ${formatTime(playingNextDuration)}`}
+                    </span>
+                  </div>
+                  <button type="button" className="am-btn am-queue-close" aria-label="Close playing next" onClick={() => setQueueOpen(false)}>
+                    <X size={16} aria-hidden="true" />
                   </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
+                </div>
+
+                {audio.currentSong ? (
+                  <div className="am-queue-now" aria-label="Now playing">
+                    <span className="am-queue-eyebrow">Now playing</span>
+                    <div className="am-queue-row is-current">
+                      <Artwork song={audio.currentSong} size="small" />
+                      <span className="am-queue-copy">
+                        <strong>{audio.currentSong.title}</strong>
+                        <small>{audio.currentSong.artist}</small>
+                      </span>
+                      <span className="am-queue-meta">{audio.isPlaying ? 'Playing' : 'Paused'}</span>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="am-queue-section">
+                  <span className="am-queue-eyebrow">Up next</span>
+                  <div className="am-queue-list" role="list">
+                    {playingNext.length === 0 ? (
+                      <div className="am-queue-empty">
+                        <ListMusic size={18} aria-hidden="true" />
+                        <span>Nothing queued after this song. Play an album or search to build a queue.</span>
+                      </div>
+                    ) : (
+                      playingNext.slice(0, 16).map((song, index) => (
+                        <button
+                          key={`${song.id}-${index}`}
+                          type="button"
+                          className="am-queue-row"
+                          role="listitem"
+                          onClick={() => {
+                            playSong(song, audio.queue);
+                            setQueueOpen(false);
+                          }}
+                        >
+                          <span className="am-queue-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+                          <Artwork song={song} size="small" />
+                          <span className="am-queue-copy">
+                            <strong>{song.title}</strong>
+                            <small>{song.artist}</small>
+                          </span>
+                          <span className="am-queue-time">{formatTime(song.duration)}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
       ) : null}
       <p className="sr-only" aria-live="polite">{audio.currentSong ? `${audio.isPlaying ? 'Playing' : 'Paused'} ${audio.currentSong.title} by ${audio.currentSong.artist}` : ''}</p>

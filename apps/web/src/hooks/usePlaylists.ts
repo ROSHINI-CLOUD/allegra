@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useRef, useState } from 'react'
 
 import type { UnifiedSong } from '@shared/types';
 
-import { addSongToLibrary, createLibrary, deleteLibrary, fetchLibraries, fetchSongsByIds, removeSongFromLibrary } from '../lib/api';
+import { addSongToLibrary, createLibrary, deleteLibrary, fetchLibraries, fetchSongsByIds, removeSongFromLibrary, uploadLibraryCover } from '../lib/api';
 import type { LibraryRecord } from '../lib/api';
 
 export interface PlaylistsApi {
@@ -17,6 +17,7 @@ export interface PlaylistsApi {
   readonly remove: (libraryId: string) => Promise<void>;
   /** Adds the song if it is absent from the playlist, removes it otherwise. */
   readonly toggleSong: (libraryId: string, song: UnifiedSong) => Promise<void>;
+  readonly setCover: (libraryId: string, file: File, onProgress?: (ratio: number) => void) => Promise<LibraryRecord | null>;
 }
 
 export const PlaylistsContext = createContext<PlaylistsApi | null>(null);
@@ -119,5 +120,17 @@ export function usePlaylists(): PlaylistsApi {
     }
   }, [commit, remember]);
 
-  return { playlists, songs, loading, error, actionError, reload, create, remove, toggleSong };
+  const setCover = useCallback(async (libraryId: string, file: File, onProgress?: (ratio: number) => void): Promise<LibraryRecord | null> => {
+    setActionError(null);
+    try {
+      const saved = await uploadLibraryCover(libraryId, file, onProgress);
+      commit(playlistsRef.current.map((library) => (library.id === saved.id ? saved : library)));
+      return saved;
+    } catch (caught) {
+      setActionError(messageOf(caught, 'That cover could not be saved.'));
+      return null;
+    }
+  }, [commit]);
+
+  return { playlists, songs, loading, error, actionError, reload, create, remove, toggleSong, setCover };
 }

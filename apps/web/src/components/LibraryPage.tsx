@@ -70,7 +70,7 @@ export function LibraryPage({ likedSongs, recentlyPlayed, likedIds, loading, err
 }
 
 function LibrarySection({ eyebrow, title, icon, children }: { readonly eyebrow: string; readonly title: string; readonly icon: ReactNode; readonly children: ReactNode }) {
-  return <motion.section className="library-section" variants={itemVariants}><div className="library-section-heading"><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div><span className="library-section-icon">{icon}</span></div>{children}</motion.section>;
+  return <motion.section id={`library-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} className="library-section" variants={itemVariants}><div className="library-section-heading"><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div><span className="library-section-icon">{icon}</span></div>{children}</motion.section>;
 }
 
 function SongGrid({ songs, currentSongId, isPlaying, likedIds, onPlay, onLike }: { readonly songs: UnifiedSong[]; readonly currentSongId?: string; readonly isPlaying: boolean; readonly likedIds: Set<string>; readonly onPlay: (song: UnifiedSong, queue?: UnifiedSong[]) => void; readonly onLike: (song: UnifiedSong) => void }) {
@@ -116,8 +116,13 @@ function PlaylistCard({ playlist, songs, likedIds, currentSongId, isPlaying, onP
   return (
     <article className="playlist-card" aria-label={`Playlist ${playlist.name}`}>
       <header className="playlist-card-head">
+        {playlist.coverUrl ? (
+          <a className="playlist-card-cover" href={`#playlist/${encodeURIComponent(playlist.id)}`} aria-hidden="true" tabIndex={-1}>
+            <img src={playlist.coverUrl} alt="" />
+          </a>
+        ) : null}
         <div>
-          <h3 title={playlist.name}>{playlist.name}</h3>
+          <h3 title={playlist.name}><a className="playlist-open" href={`#playlist/${encodeURIComponent(playlist.id)}`}>{playlist.name}</a></h3>
           <span>{playlist.songIds.length} {playlist.songIds.length === 1 ? 'track' : 'tracks'}</span>
         </div>
         <div className="playlist-card-actions">
