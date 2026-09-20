@@ -60,17 +60,20 @@ Console → **App Runner** → **Create service**.
 
 ## 3. Web on Vercel
 
-1. Import the repo in the Vercel dashboard.
-2. **Root Directory**: `apps/web`. Expand the root-directory settings and turn **on**
-   "Include files outside the root directory" — the build type-checks
-   `packages/shared/types.ts` via a `tsconfig.json` path alias, so Vercel needs to see files
-   above `apps/web/`.
-3. Framework preset: **Vite** (auto-detected; `apps/web/vercel.json` pins build/output commands
-   regardless).
-4. **Environment variable**: `VITE_API_BASE_URL` = the App Runner URL from step 2.8. Vite inlines
-   this at build time — changing it later means a rebuild, not just a redeploy, so get the App
-   Runner URL first.
-5. Deploy. Note the production URL (`https://<project>.vercel.app`, or your custom domain).
+`apps/web` imports `packages/shared/types.ts` through a `tsconfig.json` path alias, so the
+project is deployed from the **repo root** (Root Directory left at its default), not from
+`apps/web` — that keeps `packages/shared` on disk during the build without needing the
+"include files outside the root directory" toggle. The root `vercel.json` does the rest
+(`npm --prefix apps/web ci` / `run build`, output `apps/web/dist`).
+
+Dashboard: import the repo, leave Root Directory blank, deploy.
+
+CLI: from the repo root, `vercel link` then `vercel --prod`.
+
+Either way, set the environment variable **before** the first real deploy:
+`VITE_API_BASE_URL` = the App Runner URL from step 2.8. Vite inlines this at build time —
+changing it later means a rebuild, not just a redeploy, so get the App Runner URL first if you
+can. Note the production URL (`https://<project>.vercel.app`, or your custom domain).
 
 No rewrite/redirect rule is needed: the app has no client-side router (single root route), so
 there's no deep-link path for a 404 to hide behind.

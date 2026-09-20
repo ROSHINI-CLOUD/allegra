@@ -9,10 +9,9 @@ async function text(path) {
 }
 
 test('Vercel build config targets the web app and outputs dist', async () => {
-  const vercel = JSON.parse(await text('apps/web/vercel.json'));
-  assert.equal(vercel.framework, 'vite');
-  assert.match(vercel.buildCommand, /npm run build/);
-  assert.equal(vercel.outputDirectory, 'dist');
+  const vercel = JSON.parse(await text('vercel.json'));
+  assert.match(vercel.buildCommand, /apps\/web/);
+  assert.equal(vercel.outputDirectory, 'apps/web/dist');
 });
 
 test('Convex schema and functions exist for the UserStore seam', async () => {
