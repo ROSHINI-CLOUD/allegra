@@ -6,7 +6,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { UnifiedSong } from '@shared/types';
 
 import { LyricsPanel } from './LyricsPanel';
-import { Artwork, IconButton } from './ui';
+import { PlaylistMenu } from './PlaylistMenu';
+import { Turntable } from './Turntable';
+import { IconButton } from './ui';
 import { formatTime, clamp } from '../lib/utils';
 import { motionTokens, spring } from '../motion';
 
@@ -55,6 +57,8 @@ export function PlayerPanel({ song, queue, currentTime, duration, isPlaying, pla
             animate={{ opacity: 1, y: 0 }}
             exit={reduced ? { opacity: 0 } : { opacity: 0, y: 28 }}
             transition={transition}
+            data-live={isPlaying ? 'true' : undefined}
+            data-state={playbackError ? 'error' : isPlaying ? 'playing' : 'paused'}
             role="dialog"
             aria-modal="true"
             aria-labelledby="player-title"
@@ -69,7 +73,7 @@ export function PlayerPanel({ song, queue, currentTime, duration, isPlaying, pla
               <div className="player-art-stage">
                 <div className="player-orbit orbit-one" aria-hidden="true" />
                 <div className="player-orbit orbit-two" aria-hidden="true" />
-                <Artwork song={song} size="large" layoutId={`art-${song.id}`} />
+                <Turntable song={song} playing={isPlaying} layoutId={`art-${song.id}`} />
               </div>
               <div className="player-copy">
                 <span className="eyebrow">{song.album ?? 'Allegra session'}</span>
@@ -77,6 +81,7 @@ export function PlayerPanel({ song, queue, currentTime, duration, isPlaying, pla
                 <p>{song.artist}</p>
                 <div className="player-actions">
                   <IconButton icon={Heart} label={liked ? 'Remove from likes' : 'Add to likes'} active={liked} onClick={onLike} />
+                  <PlaylistMenu song={song} />
                   <IconButton icon={muted ? VolumeX : Volume2} label={muted ? 'Unmute' : 'Mute'} active={muted} onClick={onMute} />
                 </div>
               </div>

@@ -9,6 +9,8 @@ export interface AudioPlayerState {
   readonly currentSong: UnifiedSong | null;
   readonly queue: UnifiedSong[];
   readonly isPlaying: boolean;
+  /** True only while the element is genuinely waiting on data it needs to keep playing. */
+  readonly isBuffering: boolean;
   readonly currentTime: number;
   readonly duration: number;
   readonly isMuted: boolean;
@@ -16,6 +18,7 @@ export interface AudioPlayerState {
   readonly selectSong: (song: UnifiedSong, queue?: UnifiedSong[]) => void;
   readonly togglePlayback: () => void;
   readonly requestPlayback: (playing: boolean) => Promise<void>;
+  readonly stop: () => void;
   readonly seek: (seconds: number) => Promise<void>;
   readonly skipNext: () => void;
   readonly skipPrevious: () => void;
@@ -29,28 +32,40 @@ export function useAudioPlayer(): AudioPlayerState {
   const queueRef = useRef<UnifiedSong[]>([]);
   const isPlayingRef = useRef(false);
   const pendingPlaybackRef = useRef(false);
+  const playbackIntentRef = useRef(false);
+  const playbackGenerationRef = useRef(0);
+  const pendingCanPlayRef = useRef<(() => void) | null>(null);
   const autoAdvancedRef = useRef(false);
   const [currentSong, setCurrentSong] = useState<UnifiedSong | null>(null);
   const [queue, setQueue] = useState<UnifiedSong[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const requestPlayback = useCallback(async (playing: boolean): Promise<void> => {
+    playbackIntentRef.current = playing;
     const audio = audioRef.current;
     if (!audio || !currentSongRef.current) return;
     if (!playing) {
       audio.pause();
       return;
     }
+    const generation = playbackGenerationRef.current;
     try {
       await audio.play();
+      if (generation !== playbackGenerationRef.current || !playbackIntentRef.current || !currentSongRef.current) {
+        audio.pause();
+        return;
+      }
       setError(null);
     } catch {
+      if (generation !== playbackGenerationRef.current || !playbackIntentRef.current) return;
       setError('Playback needs a tap to begin. Try the play button again.');
       setIsPlaying(false);
+      setIsBuffering(false);
     }
   }, []);
 
@@ -58,13 +73,22 @@ export function useAudioPlayer(): AudioPlayerState {
     const audio = audioRef.current;
     if (currentSongRef.current?.id === song.id && audio) {
       pendingPlaybackRef.current = true;
+      playbackIntentRef.current = true;
       void requestPlayback(true);
       return;
     }
-    const next = nextQueue.length > 0 ? nextQueue : [song];
+    const source = nextQueue.length > 0 ? nextQueue : [song];
+    const seen = new Set<string>();
+    const next = (source.some((item) => item.id === song.id) ? source : [song, ...source]).filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+    playbackGenerationRef.current += 1;
     currentSongRef.current = song;
     queueRef.current = next;
     pendingPlaybackRef.current = true;
+    playbackIntentRef.current = true;
     autoAdvancedRef.current = false;
     setCurrentSong(song);
     setQueue(next);
@@ -89,9 +113,14 @@ export function useAudioPlayer(): AudioPlayerState {
   }, [selectSong]);
 
   const skipNext = useCallback((): void => {
+    const song = currentSongRef.current;
+    const list = queueRef.current;
+    if (!song || list.length < 2) return;
     autoAdvancedRef.current = false;
-    advanceToNext();
-  }, [advanceToNext]);
+    const index = list.findIndex((item) => item.id === song.id);
+    const next = list[(index + 1 + list.length) % list.length];
+    if (next) selectSong(next, list);
+  }, [selectSong]);
 
   const skipPrevious = useCallback((): void => {
     const song = currentSongRef.current;
@@ -103,9 +132,39 @@ export function useAudioPlayer(): AudioPlayerState {
       return;
     }
     const index = list.findIndex((item) => item.id === song.id);
-    const previous = index > 0 ? list[index - 1] : undefined;
+    if (list.length < 2) return;
+    const previous = list[(index - 1 + list.length) % list.length];
     if (previous) selectSong(previous, list);
   }, [selectSong]);
+
+  const stop = useCallback((): void => {
+    playbackGenerationRef.current += 1;
+    playbackIntentRef.current = false;
+    pendingPlaybackRef.current = false;
+    autoAdvancedRef.current = true;
+    currentSongRef.current = null;
+    queueRef.current = [];
+    isPlayingRef.current = false;
+
+    const audio = audioRef.current;
+    if (audio) {
+      if (pendingCanPlayRef.current) {
+        audio.removeEventListener('canplay', pendingCanPlayRef.current);
+        pendingCanPlayRef.current = null;
+      }
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+    }
+
+    setCurrentSong(null);
+    setQueue([]);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsPlaying(false);
+    setIsBuffering(false);
+    setError(null);
+  }, []);
 
   const seek = useCallback(async (seconds: number): Promise<void> => {
     const audio = audioRef.current;
@@ -141,12 +200,18 @@ export function useAudioPlayer(): AudioPlayerState {
     const onPause = (): void => {
       isPlayingRef.current = false;
       setIsPlaying(false);
+      setIsBuffering(false);
     };
     const onEnded = (): void => advanceToNext();
     const onError = (): void => {
+      setIsBuffering(false);
+      if (!currentSongRef.current) return;
       setError('This track could not be loaded. Try another song.');
       setIsPlaying(false);
     };
+    // `waiting` is the only honest signal that sound has stopped for lack of data.
+    const onWaiting = (): void => { if (playbackIntentRef.current) setIsBuffering(true); };
+    const onPlaying = (): void => setIsBuffering(false);
 
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
@@ -154,6 +219,10 @@ export function useAudioPlayer(): AudioPlayerState {
     audio.addEventListener('pause', onPause);
     audio.addEventListener('ended', onEnded);
     audio.addEventListener('error', onError);
+    audio.addEventListener('waiting', onWaiting);
+    audio.addEventListener('stalled', onWaiting);
+    audio.addEventListener('playing', onPlaying);
+    audio.addEventListener('canplay', onPlaying);
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
@@ -161,23 +230,54 @@ export function useAudioPlayer(): AudioPlayerState {
       audio.removeEventListener('pause', onPause);
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('error', onError);
+      audio.removeEventListener('waiting', onWaiting);
+      audio.removeEventListener('stalled', onWaiting);
+      audio.removeEventListener('playing', onPlaying);
+      audio.removeEventListener('canplay', onPlaying);
     };
   }, [advanceToNext]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentSong) return;
+    if (pendingCanPlayRef.current) {
+      audio.removeEventListener('canplay', pendingCanPlayRef.current);
+      pendingCanPlayRef.current = null;
+    }
+    const generation = playbackGenerationRef.current;
+    const songId = currentSong.id;
+    let onCanPlay: (() => void) | null = null;
     audio.pause();
     audio.src = resolveApiUrl(currentSong.streamUrl);
     audio.load();
     const shouldPlay = pendingPlaybackRef.current;
     pendingPlaybackRef.current = false;
     if (shouldPlay) {
-      const onCanPlay = (): void => void requestPlayback(true);
+      setIsBuffering(true);
+      onCanPlay = (): void => {
+        if (generation !== playbackGenerationRef.current || currentSongRef.current?.id !== songId || !playbackIntentRef.current) return;
+        void requestPlayback(true);
+      };
+      pendingCanPlayRef.current = onCanPlay;
       audio.addEventListener('canplay', onCanPlay, { once: true });
       void requestPlayback(true);
     }
+    return () => {
+      if (onCanPlay) audio.removeEventListener('canplay', onCanPlay);
+      if (pendingCanPlayRef.current === onCanPlay) pendingCanPlayRef.current = null;
+    };
   }, [currentSong, requestPlayback]);
+
+  useEffect(() => {
+    const stopOnPageExit = (): void => stop();
+    window.addEventListener('pagehide', stopOnPageExit);
+    window.addEventListener('beforeunload', stopOnPageExit);
+    return () => {
+      window.removeEventListener('pagehide', stopOnPageExit);
+      window.removeEventListener('beforeunload', stopOnPageExit);
+      stop();
+    };
+  }, [stop]);
 
   useEffect(() => {
     if (duration <= 0 || duration - currentTime > 0.35 || !isPlayingRef.current || autoAdvancedRef.current) return;
@@ -203,6 +303,7 @@ export function useAudioPlayer(): AudioPlayerState {
     currentSong,
     queue,
     isPlaying,
+    isBuffering,
     currentTime,
     duration,
     isMuted,
@@ -210,6 +311,7 @@ export function useAudioPlayer(): AudioPlayerState {
     selectSong,
     togglePlayback: () => void requestPlayback(!isPlayingRef.current),
     requestPlayback,
+    stop,
     seek,
     skipNext,
     skipPrevious,

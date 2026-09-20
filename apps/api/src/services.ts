@@ -1,22 +1,28 @@
 import { ArtworkService } from './services/artwork.js';
 import { LyricsService } from './services/lyrics.js';
 import { CatalogService } from './catalog/catalog.js';
-import { DynamoCacheStore, DynamoUserStore } from './db/dynamo.js';
+import { ConvexUserStore } from './db/convex.js';
 import { AuthService } from './auth/auth.js';
-import { LayeredCacheStore, MemoryCacheStore, type CacheStore } from './lib/cache.js';
+import { MemoryCacheStore, type CacheStore } from './lib/cache.js';
 import { StreamResolver } from './lib/streamResolver.js';
 import { GaanaProvider } from './providers/gaana.js';
 import { ItunesProvider } from './providers/itunes.js';
 import { LrclibProvider } from './providers/lrclib.js';
+import { LyricaProvider } from './providers/lyrica.js';
 import { SaavnProvider } from './providers/saavn.js';
 import { MemoryUserStore, type UserStore } from './user/store.js';
 
 export interface ServiceOptions {
   readonly saavnApiUrl?: string;
+  readonly saavnSecondaryApiUrl?: string;
   readonly gaanaApiUrl?: string;
   readonly lrclibApiUrl?: string;
+  readonly lyricaApiUrl?: string;
   readonly cacheStore?: CacheStore;
   readonly userStore?: UserStore;
+  /** With both set, user data lives in Convex; otherwise it stays in memory. */
+  readonly convexUrl?: string;
+  readonly convexServerSecret?: string;
   readonly fetchImpl?: typeof fetch;
   readonly jwtSecret: string;
 }
@@ -30,15 +36,11 @@ export interface AppServices {
 }
 
 export function createServices(options: ServiceOptions): AppServices {
-  const memoryCache = new MemoryCacheStore();
-  let cache = options.cacheStore ?? memoryCache;
-  const cacheTable = process.env.DDB_TABLE_CACHE;
-  if (!options.cacheStore && cacheTable) {
-    cache = new LayeredCacheStore(memoryCache, new DynamoCacheStore(cacheTable));
-  }
+  const cache = options.cacheStore ?? new MemoryCacheStore();
 
   const saavn = new SaavnProvider({
     baseUrl: options.saavnApiUrl ?? 'https://example.invalid/api',
+    ...(options.saavnSecondaryApiUrl ? { secondaryBaseUrl: options.saavnSecondaryApiUrl } : {}),
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
   });
   const gaana = new GaanaProvider({
@@ -46,8 +48,8 @@ export function createServices(options: ServiceOptions): AppServices {
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
   });
   const catalog = new CatalogService({ saavn, gaana, cache });
-  const userStore = options.userStore ?? (process.env.DDB_TABLE_USERS
-    ? new DynamoUserStore(process.env.DDB_TABLE_USERS)
+  const userStore = options.userStore ?? (options.convexUrl && options.convexServerSecret
+    ? new ConvexUserStore({ url: options.convexUrl, serverSecret: options.convexServerSecret })
     : new MemoryUserStore());
 
   return {
@@ -57,7 +59,7 @@ export function createServices(options: ServiceOptions): AppServices {
     lyrics: new LyricsService(new LrclibProvider({
       ...(options.lrclibApiUrl ? { baseUrl: options.lrclibApiUrl } : {}),
       ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
-    }), cache),
+    }), cache, options.lyricaApiUrl ? new LyricaProvider({ baseUrl: options.lyricaApiUrl, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) }) : undefined),
     auth: new AuthService(userStore, options.jwtSecret)
   };
 }

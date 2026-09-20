@@ -6,10 +6,14 @@ const app = createApp({
   version: config.version,
   jwtSecret: config.jwtSecret,
   saavnApiUrl: config.saavnApiUrl,
+  ...(config.saavnSecondaryApiUrl ? { saavnSecondaryApiUrl: config.saavnSecondaryApiUrl } : {}),
   gaanaApiUrl: config.gaanaApiUrl,
   lrclibApiUrl: config.lrclibApiUrl,
+  ...(config.lyricaApiUrl ? { lyricaApiUrl: config.lyricaApiUrl } : {}),
+  ...(config.convexUrl && config.convexServerSecret ? { convexUrl: config.convexUrl, convexServerSecret: config.convexServerSecret } : {}),
   enableRequestLogging: config.enableRequestLogging,
-  ...(config.allowedOrigin ? { allowedOrigin: config.allowedOrigin } : {})
+  ...(config.allowedOrigin ? { allowedOrigin: config.allowedOrigin } : {}),
+  ...(config.additionalOrigins ? { additionalOrigins: config.additionalOrigins } : {})
 });
 
 const server = app.listen(config.port, () => {

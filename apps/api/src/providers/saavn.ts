@@ -46,17 +46,21 @@ interface JsonRecord {
 
 export interface SaavnProviderOptions {
   readonly baseUrl: string;
+  readonly secondaryBaseUrl?: string;
   readonly fetchImpl?: typeof fetch;
   readonly timeoutMs?: number;
 }
 
 export class SaavnProvider {
-  private readonly baseUrl: string;
+  private readonly baseUrls: string[];
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
 
   public constructor(options: SaavnProviderOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/+$/, '');
+    this.baseUrls = [options.baseUrl, options.secondaryBaseUrl]
+      .filter((value): value is string => Boolean(value?.trim()))
+      .map((value) => value.replace(/\/+$/, ''))
+      .filter((value, index, values) => values.indexOf(value) === index);
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
@@ -76,18 +80,24 @@ export class SaavnProvider {
   public async getSong(
     id: string
   ): Promise<ProviderResult<SaavnSong | null>> {
-    try {
-      const response = await this.request(`songs/${encodeURIComponent(id)}`);
-      if (!response.ok) {
-        return { ok: false, data: null, reason: 'error' };
-      }
+    let reason: ProviderFailureReason = 'error';
+    for (const baseUrl of this.baseUrls) {
+      try {
+        const response = await this.request(baseUrl, `songs/${encodeURIComponent(id)}`);
+        if (!response.ok) {
+          continue;
+        }
 
-      const body: unknown = await response.json();
-      const song = parseSongResponse(body);
-      return song ? { ok: true, data: song } : { ok: false, data: null, reason: 'error' };
-    } catch (error) {
-      return { ok: false, data: null, reason: isAbortError(error) ? 'timeout' : 'error' };
+        const body: unknown = await response.json();
+        const song = parseSongResponse(body);
+        if (song) {
+          return { ok: true, data: song };
+        }
+      } catch (error) {
+        reason = isAbortError(error) ? 'timeout' : 'error';
+      }
     }
+    return { ok: false, data: null, reason };
   }
 
   public async getSuggestions(
@@ -103,25 +113,35 @@ export class SaavnProvider {
     path: string,
     params: Record<string, string>
   ): Promise<ProviderResult<SaavnSong[]>> {
-    try {
-      const response = await this.request(path, params);
-      if (!response.ok) {
-        return { ok: false, data: [], reason: 'error' };
-      }
+    let reason: ProviderFailureReason = 'error';
+    for (const baseUrl of this.baseUrls) {
+      try {
+        const response = await this.request(baseUrl, path, params);
+        if (!response.ok) {
+          continue;
+        }
 
-      const body: unknown = await response.json();
-      const songs = parseResults(body);
-      return songs ? { ok: true, data: songs } : { ok: false, data: [], reason: 'error' };
-    } catch (error) {
-      return { ok: false, data: [], reason: isAbortError(error) ? 'timeout' : 'error' };
+        const body: unknown = await response.json();
+        const songs = parseResults(body);
+        if (songs) {
+          // A valid empty result is meaningful: the catalog owns the Gaana
+          // zero-result fallback, while the secondary Saavn URL is reserved
+          // for provider failures.
+          return { ok: true, data: songs };
+        }
+      } catch (error) {
+        reason = isAbortError(error) ? 'timeout' : 'error';
+      }
     }
+    return { ok: false, data: [], reason };
   }
 
   private async request(
+    baseUrl: string,
     path: string,
     params?: Record<string, string>
   ): Promise<Response> {
-    const url = new URL(path.replace(/^\/+/, ''), `${this.baseUrl}/`);
+    const url = new URL(path.replace(/^\/+/, ''), `${baseUrl}/`);
     if (params) {
       for (const [key, value] of Object.entries(params)) {
         url.searchParams.set(key, value);
@@ -138,11 +158,15 @@ export class SaavnProvider {
 }
 
 function parseResults(body: unknown): SaavnSong[] | null {
-  if (!isRecord(body) || body.success !== true || !isRecord(body.data)) {
+  if (!isRecord(body) || body.success !== true || body.data === undefined || body.data === null) {
     return null;
   }
 
-  const results = body.data.results;
+  const results = Array.isArray(body.data)
+    ? body.data
+    : isRecord(body.data) && Array.isArray(body.data.results)
+      ? body.data.results
+      : null;
   if (!Array.isArray(results)) {
     return null;
   }
@@ -151,7 +175,15 @@ function parseResults(body: unknown): SaavnSong[] | null {
 }
 
 function parseSongResponse(body: unknown): SaavnSong | null {
-  if (!isRecord(body) || body.success !== true || !isRecord(body.data)) {
+  if (!isRecord(body) || body.success !== true || body.data === undefined || body.data === null) {
+    return null;
+  }
+
+  if (Array.isArray(body.data)) {
+    const first = body.data.find(isRecord);
+    return first ? (first as SaavnSong) : null;
+  }
+  if (!isRecord(body.data)) {
     return null;
   }
 

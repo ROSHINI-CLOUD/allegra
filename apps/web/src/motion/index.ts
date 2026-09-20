@@ -55,3 +55,49 @@ export const reducedTransition: Transition = {
 export function transitionForReducedMotion(reduced: boolean, transition: Transition): Transition {
   return reduced ? reducedTransition : transition;
 }
+
+/*
+ * Spatial grammar. One language, reused everywhere.
+ *
+ *   There is a light behind the page. Things that arrive RISE OUT of it.
+ *   Things that leave SINK BACK into it. Text lifts away upward.
+ *
+ * Every scene change in the app uses these three poses, so a change always
+ * reads as the same kind of event no matter which section it happens in.
+ */
+
+/** Arriving object: rises out of the light. */
+export const riseIn: Variants = {
+  hidden: { opacity: 0, y: 18, scale: 0.97 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: motionTokens.duration.slow, ease: motionTokens.ease.decelerate }
+  }
+};
+
+/** Leaving text: lifts and fades. */
+export const exitUp = {
+  opacity: 0,
+  y: -14,
+  transition: { duration: motionTokens.duration.fast, ease: motionTokens.ease.accelerate }
+} as const;
+
+/** Leaving object: sinks back down into the light. */
+export const exitDown = {
+  opacity: 0,
+  y: 22,
+  scale: 0.96,
+  transition: { duration: motionTokens.duration.base, ease: motionTokens.ease.accelerate }
+} as const;
+
+/** Content swapping inside a container that stays put. */
+export const swapVariants: Variants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: motionTokens.duration.base, ease: motionTokens.ease.decelerate } },
+  exit: { opacity: 0, y: -10, transition: { duration: motionTokens.duration.fast, ease: motionTokens.ease.accelerate } }
+};
+
+/** A tapped control confirms within this window, independent of any network call. */
+export const ACK_MS = 120;

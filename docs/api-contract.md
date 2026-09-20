@@ -5,7 +5,7 @@
 >
 > **To change it:** propose in the channel → update this file → both sides adapt. **Never a silent shape change.** A renamed field at hour 20 costs a night.
 
-Base URL: `VITE_API_BASE_URL` (mock server in dev, App Runner in prod)
+Base URL: `VITE_API_BASE_URL` (mock server in dev, the Render API in prod)
 
 ## Envelope — every response
 
@@ -51,7 +51,7 @@ export interface LyricsPayload {
 ## Endpoints
 
 ### `GET /api/health`
-`→ { ok: true, version: string }` — App Runner health check. Must exist before infra can deploy.
+`→ { ok: true, version: string }` — Render health check.
 
 ### `GET /api/search`
 `q` (required) · `limit`=20 · `page`=0
@@ -112,7 +112,7 @@ GET/PATCH /api/me/settings
 
 ### `POST /api/ai/mood` ★ stretch
 `{ prompt: string }` → `ApiResponse<{ queue: UnifiedSong[]; explanation: string }>`
-Bedrock → search terms → hydrate. **Degrades to a plain search on any failure.**
+**Not shipped.** Bedrock was the only planned backend and the project no longer uses AWS; the mood pills in the UI run a plain `/api/search` instead.
 
 ## Errors
 

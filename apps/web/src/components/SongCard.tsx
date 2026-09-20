@@ -3,8 +3,10 @@ import { motion, useReducedMotion } from 'motion/react';
 
 import type { UnifiedSong } from '@shared/types';
 
+import { PlaylistMenu } from './PlaylistMenu';
 import { IconButton, Artwork } from './ui';
 import { itemVariants, spring } from '../motion';
+import { usePress } from '../hooks/usePress';
 import { formatTime } from '../lib/utils';
 
 interface SongCardProps {
@@ -12,23 +14,26 @@ interface SongCardProps {
   readonly index: number;
   readonly isCurrent: boolean;
   readonly isPlaying: boolean;
-  readonly onPlay: () => void;
+  /** Receives the tapped element so the page can fly light from it to the player. */
+  readonly onPlay: (origin: HTMLElement) => void;
   readonly onLike: () => void;
   readonly liked: boolean;
 }
 
 export function SongCard({ song, index, isCurrent, isPlaying, onPlay, onLike, liked }: SongCardProps) {
   const reduced = useReducedMotion();
+  const press = usePress();
   return (
     <motion.article
       className={`song-card track-row ${isCurrent ? 'is-current' : ''}`}
+      data-playing={isPlaying ? 'true' : undefined}
       variants={itemVariants}
       custom={index}
       whileTap={reduced ? undefined : { y: 1 }}
       transition={spring.tactile}
     >
       <span className="track-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
-      <button className="card-art-wrap" onClick={onPlay} aria-label={`${isPlaying ? 'Pause' : 'Play'} ${song.title}`}>
+      <button className="card-art-wrap" {...press} onClick={(event) => onPlay(event.currentTarget)} aria-label={`${isPlaying ? 'Pause' : 'Play'} ${song.title}`}>
         <Artwork song={song} size="small" layoutId={isCurrent ? `art-${song.id}` : undefined} />
         <span className="card-play">
           {isPlaying ? <Pause size={16} fill="currentColor" strokeWidth={1.5} aria-hidden="true" /> : <Play size={16} fill="currentColor" strokeWidth={1.5} aria-hidden="true" />}
@@ -39,6 +44,7 @@ export function SongCard({ song, index, isCurrent, isPlaying, onPlay, onLike, li
         <div className="card-title-row">
           <h3 title={song.title}>{song.title}</h3>
           <IconButton icon={Heart} label={liked ? 'Remove from likes' : 'Add to likes'} active={liked} onClick={onLike} />
+          <PlaylistMenu song={song} />
         </div>
         <p title={song.artist}>{song.artist}</p>
       </div>

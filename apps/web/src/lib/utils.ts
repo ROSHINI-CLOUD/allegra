@@ -13,10 +13,10 @@ export function titleGradient(title: string): string {
   let hash = 0;
   for (const character of title) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   const gradients = [
-    'linear-gradient(145deg, #a9d85e, #174d4a)',
+    'linear-gradient(145deg, #8fbcff, #1c3564)',
     'linear-gradient(145deg, #6fc8ff, #123d83)',
     'linear-gradient(145deg, #6cb9f5, #24336f)',
-    'linear-gradient(145deg, #d892ff, #3b2674)',
+    'linear-gradient(145deg, #7f9dd8, #212a4e)',
     'linear-gradient(145deg, #9ab7ff, #1a347c)'
   ];
   return gradients[hash % gradients.length] ?? gradients[0];

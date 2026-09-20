@@ -1,7 +1,8 @@
 import { cacheKey, type CacheStore } from '../lib/cache.js';
-import { parseLyrics } from '../lib/lrc.js';
+import { hasTimestamps, parseLyrics } from '../lib/lrc.js';
 import { scoreLyrics } from '../lib/matcher.js';
 import type { LrclibEntry, LrclibProvider } from '../providers/lrclib.js';
+import type { LyricaProvider } from '../providers/lyrica.js';
 import type { LyricsPayload } from '../types.js';
 
 const HIT_TTL_SECONDS = 2_592_000;
@@ -10,7 +11,8 @@ const MISS_TTL_SECONDS = 86_400;
 export class LyricsService {
   public constructor(
     private readonly lrclib: LrclibProvider,
-    private readonly cache: CacheStore
+    private readonly cache: CacheStore,
+    private readonly lyrica?: LyricaProvider
   ) {}
 
   public async find(
@@ -34,14 +36,21 @@ export class LyricsService {
     const fromGet = precise && isUsable(precise, syncedOnly) ? precise : null;
     const candidates = fromGet ? [fromGet] : (await this.lrclib.search(cleaned.title, cleaned.artist, duration)).filter((candidate) => isUsable(candidate, syncedOnly));
     const best = candidates.sort((left, right) => scoreLyrics(right, cleaned.title, duration).score - scoreLyrics(left, cleaned.title, duration).score)[0];
-    if (!best) {
-      await this.cache.set(missKey, true, MISS_TTL_SECONDS);
-      return null;
+    if (best) {
+      const payload = toPayload(best, cleaned.title, duration, fromGet === best ? 'LRCLIB' : 'LRCLIB-search');
+      await this.cache.set(key, payload, HIT_TTL_SECONDS);
+      return payload;
     }
 
-    const payload = toPayload(best, cleaned.title, duration, fromGet === best ? 'LRCLIB' : 'LRCLIB-search');
-    await this.cache.set(key, payload, HIT_TTL_SECONDS);
-    return payload;
+    const lyrica = this.lyrica ? await this.lyrica.find(cleaned.title, cleaned.artist, duration, syncedOnly) : null;
+    if (lyrica) {
+      const payload = toPayloadFromRaw(lyrica.lyrics, cleaned.title, duration, lyrica.source);
+      await this.cache.set(key, payload, HIT_TTL_SECONDS);
+      return payload;
+    }
+
+    await this.cache.set(missKey, true, MISS_TTL_SECONDS);
+    return null;
   }
 
   public async search(title: string, artist: string, duration?: number): Promise<Array<{
@@ -102,6 +111,18 @@ function toPayload(best: LrclibEntry, title: string, duration: number | undefine
     matchScore: score.score,
     matchReason: score.reason,
     lines: parseLyrics(raw, duration ?? best.duration ?? 180)
+  };
+}
+
+function toPayloadFromRaw(raw: string, title: string, duration: number | undefined, source: string): LyricsPayload {
+  const synced = hasTimestamps(raw);
+  const lines = parseLyrics(raw, duration ?? 180);
+  return {
+    source: synced ? source : 'interpolated',
+    type: synced ? 'synced' : 'plain',
+    matchScore: synced ? 50 : 20,
+    matchReason: `${title} • ${synced ? 'Synced' : 'Plain text'}`,
+    lines
   };
 }
 

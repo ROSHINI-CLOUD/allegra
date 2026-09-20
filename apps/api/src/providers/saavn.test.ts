@@ -70,6 +70,24 @@ test('Saavn song and suggestions calls parse their response shapes', async () =>
   ]);
 });
 
+test('Saavn accepts live song and suggestion payloads with data arrays', async () => {
+  const provider = new SaavnProvider({
+    baseUrl: 'https://saavn.example/api',
+    fetchImpl: async (input) => {
+      const url = String(input);
+      if (url.includes('/suggestions')) {
+        return response({ success: true, data: [song] });
+      }
+      return response({ success: true, data: [song] });
+    }
+  });
+
+  const result = await provider.getSong('song-1');
+  const suggestions = await provider.getSuggestions('song-1');
+  assert.equal(result.data?.id, 'song-1');
+  assert.equal(suggestions.data[0]?.id, 'song-1');
+});
+
 test('provider failures are isolated and preserve an error status for the catalog', async () => {
   const provider = new SaavnProvider({
     baseUrl: 'https://saavn.example/api',

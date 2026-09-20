@@ -22,11 +22,16 @@ export interface RateLimitConfig {
 export interface AppOptions {
   readonly version: string;
   readonly allowedOrigin?: string;
+  readonly additionalOrigins?: readonly string[];
   readonly jwtSecret?: string;
   readonly services?: AppServices;
   readonly saavnApiUrl?: string;
+  readonly saavnSecondaryApiUrl?: string;
   readonly gaanaApiUrl?: string;
   readonly lrclibApiUrl?: string;
+  readonly lyricaApiUrl?: string;
+  readonly convexUrl?: string;
+  readonly convexServerSecret?: string;
   readonly fetchImpl?: typeof fetch;
   readonly rateLimit?: false | {
     readonly api?: RateLimitConfig;
@@ -43,7 +48,13 @@ export function createApp(options: AppOptions): Express {
   app.use(helmet());
   app.use(
     cors({
-      origin: options.allowedOrigin ?? false,
+      /*
+       * A string origin makes cors echo the header unconditionally; an array makes
+       * it echo only on a match. Keep the string form whenever there is exactly one
+       * origin so production behaviour is byte-identical, and only widen to an
+       * array when development actually added a sibling host.
+       */
+      origin: resolveCorsOrigin(options),
       credentials: false
     })
   );
@@ -60,8 +71,12 @@ export function createApp(options: AppOptions): Express {
   const services = options.services ?? createServices({
     jwtSecret: options.jwtSecret ?? process.env.JWT_SECRET ?? 'local-development-only',
     ...(options.saavnApiUrl ? { saavnApiUrl: options.saavnApiUrl } : {}),
+    ...(options.saavnSecondaryApiUrl ? { saavnSecondaryApiUrl: options.saavnSecondaryApiUrl } : {}),
     ...(options.gaanaApiUrl ? { gaanaApiUrl: options.gaanaApiUrl } : {}),
     ...(options.lrclibApiUrl ? { lrclibApiUrl: options.lrclibApiUrl } : {}),
+    ...(options.lyricaApiUrl ? { lyricaApiUrl: options.lyricaApiUrl } : {}),
+    ...(options.convexUrl ? { convexUrl: options.convexUrl } : {}),
+    ...(options.convexServerSecret ? { convexServerSecret: options.convexServerSecret } : {}),
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
   });
 
@@ -141,3 +156,9 @@ const errorHandler: ErrorRequestHandler = (error, _request, response, next) => {
   }
   sendFailure(response, error);
 };
+
+function resolveCorsOrigin(options: AppOptions): string | string[] | false {
+  if (!options.allowedOrigin) return false;
+  const extra = options.additionalOrigins ?? [];
+  return extra.length > 0 ? [options.allowedOrigin, ...extra] : options.allowedOrigin;
+}

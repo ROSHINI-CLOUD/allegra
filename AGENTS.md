@@ -5,7 +5,7 @@ Agent-facing guide for the Allegra repo. Human-facing rules are in `CLAUDE.md` �
 ## Orientation, in order
 1. `.planning/03-DELIVERY.md` — the schedule and current phase
 2. `docs/api-contract.md` — **frozen**. The FE↔BE seam.
-3. The plan for your area — `.planning/05-` backend, `06-` frontend, `07-` motion, `08-` AWS, `09-` QA
+3. The plan for your area — `.planning/05-` backend, `06-` frontend, `07-` motion, `13-` completion plan (no AWS), `09-` QA
 4. `CLAUDE.md` — the hard rules
 
 Role briefings: `docs/agent-prompts/{backend,frontend,infra,qa}-agent.md`
@@ -50,6 +50,6 @@ Role briefings: `docs/agent-prompts/{backend,frontend,infra,qa}-agent.md`
 ```
 apps/web   VITE_API_BASE_URL          # the ONLY client env var
 apps/api   PORT · ALLEGRA_ORIGIN · SAAVN_API_URL · GAANA_API_URL
-           LRCLIB_API_URL · JWT_SECRET · AWS_REGION · DDB_TABLE_*
+           LRCLIB_API_URL · JWT_SECRET · CONVEX_URL · CONVEX_SERVER_SECRET
 ```
-Everything secret comes from SSM Parameter Store at boot, read once and cached. `.env.example` stays current; real values never get committed.
+Everything secret comes from the host environment (Render dashboard) and the Convex dashboard. `.env.example` stays current; real values never get committed.
