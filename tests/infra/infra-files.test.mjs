@@ -8,19 +8,19 @@ async function text(path) {
   return readFile(new URL(path, root), 'utf8');
 }
 
-test('Amplify build config targets the web app and outputs dist', async () => {
-  const amplify = await text('amplify.yml');
-  assert.match(amplify, /appRoot:\s*apps\/web/);
-  assert.match(amplify, /npm ci/);
-  assert.match(amplify, /npm run build/);
-  assert.match(amplify, /baseDirectory:\s*dist/);
+test('Vercel build config targets the web app and outputs dist', async () => {
+  const vercel = JSON.parse(await text('apps/web/vercel.json'));
+  assert.equal(vercel.framework, 'vite');
+  assert.match(vercel.buildCommand, /npm run build/);
+  assert.equal(vercel.outputDirectory, 'dist');
 });
 
-test('Amplify SPA rewrite sends deep links to index.html', async () => {
-  const rewrites = JSON.parse(await text('infra/amplify-rewrites.json'));
-  const rule = rewrites[0];
-  assert.equal(rule.target, '/index.html');
-  assert.equal(rule.status, '200');
+test('Convex schema and functions exist for the UserStore seam', async () => {
+  const schema = await text('convex/schema.ts');
+  assert.match(schema, /users:\s*defineTable/);
+  const users = await text('convex/users.ts');
+  assert.match(users, /export const get = query/);
+  assert.match(users, /export const save = mutation/);
 });
 
 test('the API Dockerfile still builds (App Runner deploys from source, but the image stays CI-checked)', async () => {
