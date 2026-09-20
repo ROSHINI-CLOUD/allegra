@@ -13,10 +13,35 @@ export interface AppConfig {
   readonly gaanaApiUrl: string;
   readonly lrclibApiUrl: string;
   readonly lyricaApiUrl?: string;
+  readonly betterLyricsApiUrl?: string;
+  readonly betterLyricsApiKey?: string;
   /** Convex deployment URL. Unset means user data stays in memory. */
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
   readonly enableRequestLogging: boolean;
+  readonly ai: AiConfig;
+}
+
+/** Every field optional and independently configured — the AI cascade just skips whatever isn't set. */
+export interface AiConfig {
+  readonly geminiApiKey?: string;
+  readonly geminiModel?: string;
+  readonly openrouterApiKey?: string;
+  readonly openrouterModel?: string;
+  readonly nvidiaApiKey?: string;
+  readonly nvidiaModel?: string;
+  readonly groqApiKey?: string;
+  readonly groqModel?: string;
+  readonly awsAccessKeyId?: string;
+  readonly awsSecretAccessKey?: string;
+  readonly awsRegion?: string;
+  readonly bedrockModelId?: string;
+  /**
+   * Name of the provider to try first, e.g. `bedrock`. The rest keep their
+   * relative order behind it. A name with no configured key is simply ignored,
+   * so setting this can never empty the cascade.
+   */
+  readonly primary?: string;
 }
 
 // These public community deployments are development fallbacks only. Production
@@ -25,6 +50,8 @@ export interface AppConfig {
 const DEFAULT_SAAVN = 'https://jiosaavn-api-byprats.vercel.app/api';
 const DEFAULT_GAANA = 'https://gaanaapibyprats.vercel.app/api';
 const DEFAULT_LRCLIB = 'https://lrclib.net/api';
+const DEFAULT_LYRICA = 'https://test-0k.onrender.com/lyrics';
+const DEFAULT_BETTER_LYRICS = 'https://lyrics-api.boidu.dev';
 
 export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
   const nodeEnv = parseNodeEnv(env.NODE_ENV);
@@ -54,7 +81,26 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
   const saavnSecondaryApiUrl = readOptionalProviderUrl(env.SAAVN_SECONDARY_API_URL, production, 'SAAVN_SECONDARY_API_URL');
   const gaanaApiUrl = readProviderUrl(env.GAANA_API_URL, DEFAULT_GAANA, production, 'GAANA_API_URL');
   const lrclibApiUrl = readProviderUrl(env.LRCLIB_API_URL, DEFAULT_LRCLIB, production, 'LRCLIB_API_URL');
-  const lyricaApiUrl = readOptionalProviderUrl(env.LYRICA_API_URL, production, 'LYRICA_API_URL');
+  // Lyrics fallbacks are on by default (they only run when LRCLIB has nothing) and set to `off` to disable.
+  const lyricaApiUrl = isOff(env.LYRICA_API_URL) ? undefined : readOptionalProviderUrl(env.LYRICA_API_URL, production, 'LYRICA_API_URL') ?? DEFAULT_LYRICA;
+  const betterLyricsApiUrl = isOff(env.BETTERLYRICS_API_URL) ? undefined : readOptionalProviderUrl(env.BETTERLYRICS_API_URL, production, 'BETTERLYRICS_API_URL') ?? DEFAULT_BETTER_LYRICS;
+  const betterLyricsApiKey = env.BETTERLYRICS_API_KEY?.trim() || undefined;
+
+  const ai: AiConfig = {
+    ...(env.GEMINI_API_KEY?.trim() ? { geminiApiKey: env.GEMINI_API_KEY.trim() } : {}),
+    ...(env.GEMINI_MODEL?.trim() ? { geminiModel: env.GEMINI_MODEL.trim() } : {}),
+    ...(env.OPENROUTER_API_KEY?.trim() ? { openrouterApiKey: env.OPENROUTER_API_KEY.trim() } : {}),
+    ...(env.OPENROUTER_MODEL?.trim() ? { openrouterModel: env.OPENROUTER_MODEL.trim() } : {}),
+    ...(env.NVIDIA_API_KEY?.trim() ? { nvidiaApiKey: env.NVIDIA_API_KEY.trim() } : {}),
+    ...(env.NVIDIA_MODEL?.trim() ? { nvidiaModel: env.NVIDIA_MODEL.trim() } : {}),
+    ...(env.GROQ_API_KEY?.trim() ? { groqApiKey: env.GROQ_API_KEY.trim() } : {}),
+    ...(env.GROQ_MODEL?.trim() ? { groqModel: env.GROQ_MODEL.trim() } : {}),
+    ...(env.AWS_ACCESS_KEY_ID?.trim() ? { awsAccessKeyId: env.AWS_ACCESS_KEY_ID.trim() } : {}),
+    ...(env.AWS_SECRET_ACCESS_KEY?.trim() ? { awsSecretAccessKey: env.AWS_SECRET_ACCESS_KEY.trim() } : {}),
+    ...(env.AWS_REGION?.trim() ? { awsRegion: env.AWS_REGION.trim() } : {}),
+    ...(env.BEDROCK_MODEL_ID?.trim() ? { bedrockModelId: env.BEDROCK_MODEL_ID.trim() } : {}),
+    ...(env.AI_PRIMARY?.trim() ? { primary: env.AI_PRIMARY.trim().toLowerCase() } : {})
+  };
 
   const convexUrl = env.CONVEX_URL?.trim() || undefined;
   const convexServerSecret = env.CONVEX_SERVER_SECRET?.trim() || undefined;
@@ -80,12 +126,19 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     gaanaApiUrl,
     lrclibApiUrl,
     ...(lyricaApiUrl ? { lyricaApiUrl } : {}),
+    ...(betterLyricsApiUrl ? { betterLyricsApiUrl } : {}),
+    ...(betterLyricsApiKey ? { betterLyricsApiKey } : {}),
     ...(convexUrl && convexServerSecret ? { convexUrl, convexServerSecret } : {}),
-    enableRequestLogging: nodeEnv === 'production'
+    enableRequestLogging: nodeEnv === 'production',
+    ai
   };
 
   const withOrigin = allowedOrigin ? { ...config, allowedOrigin } : config;
   return additionalOrigins.length > 0 ? { ...withOrigin, additionalOrigins } : withOrigin;
+}
+
+function isOff(value: string | undefined): boolean {
+  return value?.trim().toLowerCase() === 'off';
 }
 
 function readOptionalProviderUrl(value: string | undefined, production: boolean, name: string): string | undefined {
