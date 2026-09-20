@@ -1,6 +1,6 @@
 import type { Response } from 'express';
 
-import { NotFoundError, PersistenceError, ProviderUnavailableError, TimeoutError } from '../lib/errors.js';
+import { ConflictError, InvalidCredentialsError, NotFoundError, PersistenceError, ProviderUnavailableError, TimeoutError } from '../lib/errors.js';
 import type { ApiResponse } from '../types.js';
 
 export function sendSuccess<T>(response: Response, data: T, status = 200): void {
@@ -15,6 +15,14 @@ export function sendFailure(response: Response, error: unknown): void {
     response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
     return;
   }
+  if (error instanceof ConflictError) {
+    response.status(409).json({ success: false, data: null, error: 'That email already has an account. Try signing in instead.' });
+    return;
+  }
+  if (error instanceof InvalidCredentialsError) {
+    response.status(401).json({ success: false, data: null, error: 'That email and password did not match.' });
+    return;
+  }
   if (error instanceof TimeoutError) {
     response.status(504).json({ success: false, data: null, error: 'That took too long. Check your connection and retry.' });
     return;
@@ -23,7 +31,23 @@ export function sendFailure(response: Response, error: unknown): void {
     response.status(502).json({ success: false, data: null, error: 'Music service is having a moment. Try again shortly.' });
     return;
   }
+  // Everything above is a failure we expected and already have copy for. Anything
+  // reaching here is a bug, and returning only the friendly sentence would throw
+  // away the one description of it that exists. Log it against the request (so it
+  // carries the same x-request-id as the access log) and still tell the browser
+  // nothing about the internals.
+  logUnexpected(response, error);
   response.status(500).json({ success: false, data: null, error: 'Something went wrong. Try again shortly.' });
+}
+
+/** pino-http hangs a per-request child logger off the request; fall back to stderr when it is absent. */
+function logUnexpected(response: Response, error: unknown): void {
+  const log = (response.req as { log?: { error?: (object: unknown, message: string) => void } } | undefined)?.log;
+  if (log?.error) {
+    log.error({ err: error }, 'unhandled request failure');
+    return;
+  }
+  process.stderr.write(`unhandled request failure: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`);
 }
 
 export function queryString(value: unknown): string | null {

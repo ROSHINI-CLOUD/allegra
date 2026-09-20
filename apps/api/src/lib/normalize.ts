@@ -41,6 +41,24 @@ export function normalizeSong(
   };
 }
 
+/**
+ * A key that is the same for two provider rows describing the same recording.
+ * The providers list one row per release, so the same song comes back several
+ * times with a different id — which makes a shelf or a recommendation show it
+ * twice in a row. The title loses its "(From "Some Film")" / "(Telugu)" trailers,
+ * which is where the rows disagree most, and the artist credits are sorted
+ * because a re-release often lists the same people in a different order.
+ */
+export function songIdentity(song: UnifiedSong): string {
+  const title = flatten(song.title.replace(/[([][^)\]]*[)\]]/gu, ' '));
+  const artists = flatten(song.artist).split(' ').sort().join(' ');
+  return `${title}|${artists}`;
+}
+
+function flatten(value: string): string {
+  return decodeHtml(value).toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
 function getArtist(raw: SaavnSong): string {
   if (raw.primaryArtists?.trim()) {
     return raw.primaryArtists.trim();

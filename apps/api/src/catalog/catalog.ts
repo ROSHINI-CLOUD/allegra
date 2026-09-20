@@ -1,7 +1,7 @@
 import { ProviderUnavailableError, NotFoundError, TimeoutError } from '../lib/errors.js';
 import { cacheKey, type CacheStore } from '../lib/cache.js';
 import { CircuitBreaker } from '../lib/circuitBreaker.js';
-import { normalizeSong } from '../lib/normalize.js';
+import { normalizeSong, songIdentity } from '../lib/normalize.js';
 import type { GaanaProvider } from '../providers/gaana.js';
 import type { ProviderResult, SaavnAsset, SaavnProvider, SaavnSong } from '../providers/saavn.js';
 import { decodeHtml } from '../lib/decodeHtml.js';
@@ -286,18 +286,6 @@ function normalizeMany(raw: SaavnSong[], source: 'Saavn' | 'Gaana'): UnifiedSong
 
 function normalizeName(value: string): string {
   return decodeHtml(value).toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-}
-
-/**
- * A key that is the same for two provider rows describing the same recording.
- * The title loses its "(From "Some Film")" / "(Telugu)" trailers, which is where
- * the providers disagree most, and the artist list is sorted because the same
- * credits often come back in a different order on a re-release.
- */
-function songIdentity(song: UnifiedSong): string {
-  const title = normalizeName(song.title.replace(/[([][^)\]]*[)\]]/gu, ' '));
-  const artists = normalizeName(song.artist).split(' ').sort().join(' ');
-  return `${title}|${artists}`;
 }
 
 /** Largest available image, preferring 500x500. Empty provider placeholders resolve to null. */
