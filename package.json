@@ -16,7 +16,15 @@
     "test": "npm --prefix apps/api test && npm run infra:test",
     "build": "npm --prefix apps/api run build && npm --prefix apps/web run build"
   },
-  "devDependencies": {
-    "convex": "^1.46.0"
+  "dependencies": {
+    "convex": "^1.46.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pino": "^9.9.0",
+    "pino-http": "^10.5.0",
+    "zod": "^4.1.5"
   }
 }
