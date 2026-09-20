@@ -35,7 +35,18 @@ export class RecommendationService {
     return this.ai.isConfigured;
   }
 
-  public async recommend(context: TasteContext, excludeIds: ReadonlySet<string>, limit = 12): Promise<RecommendationResult | null> {
+  /**
+   * `excludeSongs` are the listener's liked and recently played songs. They are
+   * wanted in full, not just as ids, because the catalog hands the same recording
+   * back under a different release id — so excluding by id alone happily
+   * recommends a song that is already sitting in the listener's likes.
+   */
+  public async recommend(
+    context: TasteContext,
+    excludeIds: ReadonlySet<string>,
+    excludeSongs: readonly UnifiedSong[] = [],
+    limit = 12
+  ): Promise<RecommendationResult | null> {
     if (!this.ai.isConfigured) return null;
     if (context.likedSongs.length === 0 && context.recentSongs.length === 0 && !context.currentSong && !(context.favoriteArtists?.length)) return null;
 
@@ -52,8 +63,9 @@ export class RecommendationService {
     const seen = new Set(excludeIds);
     // Overlapping queries ("Arijit Singh top hits" and "Hindi romantic") return
     // the same recording under different release ids, so id alone is not enough
-    // to keep a song off the shelf twice.
-    const identities = new Set<string>();
+    // to keep a song off the shelf twice — or to keep one the listener already
+    // has off it at all.
+    const identities = new Set(excludeSongs.map(songIdentity));
     const songs: UnifiedSong[] = [];
     for (const query of queries) {
       if (songs.length >= limit) break;

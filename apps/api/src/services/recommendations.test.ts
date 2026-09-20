@@ -83,6 +83,21 @@ test('a queries value that is neither array nor string returns null rather than 
   assert.equal(await service.recommend({ likedSongs: [{ title: 'T', artist: 'A' }], recentSongs: [] }, new Set()), null);
 });
 
+test('a song the listener already liked is not recommended back under another release id', async () => {
+  const provider: AiProvider = { name: 'fake', async complete() { return JSON.stringify({ queries: ['x'] }); } };
+  const alreadyLiked = { ...song('liked-id'), title: 'Raga of Revenge', artist: 'Anirudh Ravichander' };
+  const rerelease = { ...song('other-id'), title: 'Raga of Revenge (From "DC")', artist: 'Anirudh Ravichander' };
+  const catalog = fakeCatalog({ x: [rerelease, song('fresh')] });
+  const service = new RecommendationService(new AiClient([provider]), catalog);
+
+  const result = await service.recommend(
+    { likedSongs: [{ title: 'Raga of Revenge', artist: 'Anirudh Ravichander' }], recentSongs: [] },
+    new Set(['liked-id']),
+    [alreadyLiked]
+  );
+  assert.deepEqual(result?.songs.map((s) => s.id), ['fresh']);
+});
+
 test('the same recording returned under two release ids only appears once', async () => {
   const provider: AiProvider = { name: 'fake', async complete() { return JSON.stringify({ queries: ['one', 'two'] }); } };
   const rerelease = { ...song('id-2'), title: 'Zaalima (From "Raees")', artist: 'Harshdeep Kaur, Arijit Singh' };
