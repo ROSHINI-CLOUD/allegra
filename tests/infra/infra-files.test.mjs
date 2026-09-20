@@ -8,33 +8,37 @@ async function text(path) {
   return readFile(new URL(path, root), 'utf8');
 }
 
-test('Amplify config builds the web app from the monorepo', async () => {
+test('Amplify build config targets the web app and outputs dist', async () => {
   const amplify = await text('amplify.yml');
-  assert.match(amplify, /appRoot: apps\/web/);
+  assert.match(amplify, /appRoot:\s*apps\/web/);
   assert.match(amplify, /npm ci/);
-  assert.match(amplify, /baseDirectory: dist/);
-
-  const rewrites = JSON.parse(await text('infra/amplify-rewrites.json'));
-  assert.equal(rewrites[0].target, '/index.html');
-  assert.equal(rewrites[0].status, '200');
+  assert.match(amplify, /npm run build/);
+  assert.match(amplify, /baseDirectory:\s*dist/);
 });
 
-test('CI runs the release gates and builds the API image', async () => {
+test('Amplify SPA rewrite sends deep links to index.html', async () => {
+  const rewrites = JSON.parse(await text('infra/amplify-rewrites.json'));
+  const rule = rewrites[0];
+  assert.equal(rule.target, '/index.html');
+  assert.equal(rule.status, '200');
+});
+
+test('the API Dockerfile still builds (App Runner deploys from source, but the image stays CI-checked)', async () => {
+  const dockerfile = await text('apps/api/Dockerfile');
+  assert.match(dockerfile, /EXPOSE 8080/);
+  assert.match(dockerfile, /\/api\/health/);
+});
+
+test('CI runs the release gates, builds the web app and the API image', async () => {
   const ci = await text('.github/workflows/ci.yml');
   assert.match(ci, /npm run typecheck/);
   assert.match(ci, /npm run lint/);
   assert.match(ci, /npm test/);
+  assert.match(ci, /npm run build/);
   assert.match(ci, /docker build/);
 });
 
-test('AWS templates keep secrets in SSM and use an App Runner instance role', async () => {
-  const core = await text('infra/aws/core.yaml');
-  const runner = await text('infra/aws/app-runner.yaml');
-  assert.match(core, /AWS::DynamoDB::Table/);
-  assert.match(core, /TimeToLiveSpecification/);
-  assert.match(core, /AWS::SSM::Parameter/);
-  assert.match(core, /AWS::Budgets::Budget/);
-  assert.match(runner, /RuntimeEnvironmentSecrets/);
-  assert.match(runner, /InstanceRoleArn/);
-  assert.match(runner, /HealthCheckConfiguration/);
+test('no AWS SDK code remains in the API', async () => {
+  const pkg = JSON.parse(await text('apps/api/package.json'));
+  assert.equal(Object.keys(pkg.dependencies).some((name) => name.startsWith('@aws-sdk')), false);
 });

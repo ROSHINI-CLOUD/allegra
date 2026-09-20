@@ -1,46 +1,66 @@
+/*
+ * Allegra design tokens.
+ *
+ * One palette, one radius scale, one type scale, one motion scale.
+ * Token names describe the colour they hold. If a value changes hue,
+ * the name changes with it.
+ *
+ * Principle: the album artwork is the most saturated thing on screen.
+ * Every surface here is desaturated so the music stays the subject.
+ */
+
 :root {
   color-scheme: dark;
 
-  /* Cool blue studio: deep ocean canvas, soft-black panels, one clear signal. */
-  --bg: #06101a;
-  --bg-deep: #030812;
-  --surface: #0d1b2b;
-  --surface-soft: #12263a;
-  --surface-inverse: #050b13;
-  --surface-raised: #11243a;
-  --surface-hover: #173252;
-  --ink: #eef7ff;
-  --ink-soft: #cfe4f4;
-  --ink-muted: #8fa9be;
-  --ink-faint: #587287;
-  --ink-inverse: #f7fbff;
-  --border: rgba(214, 236, 255, 0.13);
-  --border-strong: rgba(214, 236, 255, 0.27);
-  --border-inverse: rgba(214, 236, 255, 0.15);
-  --border-inverse-strong: rgba(98, 180, 255, 0.34);
+  /* Surfaces: near-black with a cool cast, lifted in even steps. */
+  --bg: #0a0e14;
+  --bg-deep: #06090e;
+  --surface: #11161f;
+  --surface-raised: #161d28;
+  --surface-hover: #1c2432;
+  --surface-sunken: #080c11;
 
-  --accent: #62b4ff;
-  --accent-blue: #8cd2ff;
-  --accent-violet: #7e8cff;
-  --accent-coral: #6ed6ff;
-  --accent-cobalt: #2d7fe4;
-  --accent-green: #8dd7cf;
-  --accent-teal: #9bb5ff;
-  --accent-soft: rgba(74, 159, 247, 0.16);
-  --accent-border: rgba(98, 180, 255, 0.64);
-  --cream: #eef7ff;
-  --ink-on-cream: #06101a;
+  /* Text. Every value below is >= 4.5:1 on --bg. */
+  --ink: #eef2f7;        /* 16.8:1 */
+  --ink-soft: #c3ccd8;   /* 11.2:1 */
+  --ink-muted: #96a1b2;  /*  7.4:1 */
+  --ink-faint: #7d8b9c;  /*  5.5:1 */
 
-  --radius-sm: 12px;
-  --radius-md: 20px;
-  --radius-lg: 30px;
-  --radius-xl: 38px;
+  /* Hairlines. */
+  --border: rgba(199, 216, 238, 0.10);
+  --border-strong: rgba(199, 216, 238, 0.20);
+
+  /* One accent. It marks what is playing, what is focused, what is next. */
+  --accent: #5b9dff;         /* 7.1:1 on --bg */
+  --accent-bright: #8fbcff;
+  --accent-deep: #2f6fd0;
+  --accent-ink: #061020;     /* text on a solid --accent fill, 6.9:1 */
+  --accent-wash: rgba(91, 157, 255, 0.10);
+  --accent-line: rgba(91, 157, 255, 0.38);
+
+  /* Radius. Panels 20, controls 12, art 10, pills full. No other values. */
+  --radius-panel: 20px;
+  --radius-control: 12px;
+  --radius-art: 10px;
   --radius-pill: 999px;
 
-  --shadow-card: 0 25px 70px rgba(0, 0, 0, 0.26);
-  --shadow-panel: 0 18px 48px rgba(0, 0, 0, 0.38);
-  --shadow-button: 0 4px 0 rgba(3, 21, 43, 0.9), 0 0 22px rgba(67, 155, 255, 0.24);
+  /* Elevation. Tinted to the background, never pure black. */
+  --shadow-panel: 0 18px 44px rgba(4, 8, 16, 0.42);
+  --shadow-lift: 0 10px 26px rgba(4, 8, 16, 0.36);
 
+  /* Type scale. */
+  --text-display: clamp(44px, 5.6vw, 76px);
+  --text-title: clamp(26px, 3vw, 36px);
+  --text-heading: 20px;
+  --text-body: 15px;
+  --text-small: 13px;
+  --text-meta: 11px;
+
+  --tracking-display: -0.035em;
+  --tracking-title: -0.022em;
+  --tracking-meta: 0.08em;
+
+  /* Motion. Every duration and easing in the app comes from here. */
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
   --ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
@@ -50,12 +70,14 @@
   --d-base: 240ms;
   --d-panel: 300ms;
   --d-slow: 420ms;
-  --d-cine: 700ms;
   --d-spin: 900ms;
-  --d-shimmer: 1200ms;
-  --stagger: 40ms;
+  --d-shimmer: 1400ms;
 
-  --font-body: 'DM Sans', sans-serif;
-  --font-display: 'DM Sans', sans-serif;
-  --font-mono: 'DM Mono', monospace;
+  /* Layout. */
+  --shell-width: 1180px;
+  --gutter: clamp(16px, 3.5vw, 40px);
+
+  --font-body: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, monospace;
 }

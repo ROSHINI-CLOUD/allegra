@@ -1,3 +1,5 @@
+> **Superseded (2026-09-20):** the DynamoDB/ECR/CloudFormation shape below was replaced with a Console-only deploy (no AWS CLI needed): **AWS Amplify Hosting (web) + AWS App Runner source-deploy (API) + Convex (user data)**. See `infra/README.md` for the actual runbook. AWS hosting is still a hard requirement (`01-GOAL.md` — Ship It). This file is kept for the "fuller AWS story" reference the README links to.
+
 # 08 — AWS DEPLOYMENT (P3 owns) — the Ship It track
 
 > **The architecture is part of the score.** Don't just get it live — be able to explain every box in the diagram and why it isn't a different box.

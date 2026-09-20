@@ -2,14 +2,15 @@
 
 Music-streaming web app. Built for **First Commit** (Bharat Builds Tour, WeMakeDevs × AWS), 17–20 Sept 2026. Team of 4, ~30 hours.
 
-**Before doing anything:** read `.planning/03-DELIVERY.md` for where we are, then the plan for your area (`05-BACKEND-PLAN.md`, `06-FRONTEND-PLAN.md`, `07-MOTION-DESIGN-SYSTEM.md`, `08-AWS-DEPLOYMENT.md`, `09-QA-TEST-PLAN.md`).
+**Before doing anything:** read `.planning/03-DELIVERY.md` for where we are, then the plan for your area (`05-BACKEND-PLAN.md`, `06-FRONTEND-PLAN.md`, `07-MOTION-DESIGN-SYSTEM.md`, `13-COMPLETION-PLAN.md` (replaces the AWS deploy plan), `09-QA-TEST-PLAN.md`).
 
 ## Repo
 ```
 apps/web      React 19 · Vite · Tailwind v4 · Framer Motion   (P2)
 apps/api      Node 20 · Express · TypeScript                  (P1)
 packages/shared   types imported by BOTH — the integration seam
-infra/        AWS config, CI                                  (P3)
+infra/        deploy notes (Render, Vercel, Convex), CI       (P3)
+convex/       user-data schema + functions (Convex)
 tests/        contract + integration                          (P4)
 .planning/    GSD docs — the plan
 docs/         reference, API contract, agent briefings
@@ -18,7 +19,7 @@ docs/         reference, API contract, agent briefings
 ## Hard rules
 
 1. **`docs/api-contract.md` is frozen.** Changing a response shape breaks the other half of the team silently. Propose → update the doc → announce → both sides adapt. Never a silent rename.
-2. **No provider URLs, tokens or secrets in the frontend.** Vite inlines `VITE_*` into the public bundle. Everything provider-side is server-side. Secrets come from SSM at boot.
+2. **No provider URLs, tokens or secrets in the frontend.** Vite inlines `VITE_*` into the public bundle. Everything provider-side is server-side. Secrets live in the host's environment (Render), never in the repo.
 3. **Duration is always seconds.** Every provider, every type, every component.
 4. **`{ success, data, error? }` on every API response.** `error` is user-facing copy — never a raw provider error.
 5. **Animate `transform` and `opacity` only.** `width`, `top`, `height`, `box-shadow` are banned in transitions.
