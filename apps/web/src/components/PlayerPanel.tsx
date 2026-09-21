@@ -130,9 +130,9 @@ export function PlayerPanel({
               '--art-secondary': palette.secondary
             } as CSSProperties
           }
-          initial={reduced ? { opacity: 0 } : { y: '100%' }}
-          animate={reduced ? { opacity: 1 } : { y: 0 }}
-          exit={reduced ? { opacity: 0 } : { y: '100%' }}
+          initial={reduced ? { opacity: 0 } : { y: '100vh' }}
+          animate={reduced ? { opacity: 1 } : { y: '0vh' }}
+          exit={reduced ? { opacity: 0 } : { y: '100vh' }}
           transition={sheetTransition}
         >
           {/* Shader rides with the sheet — stays painted for the whole open session. */}
