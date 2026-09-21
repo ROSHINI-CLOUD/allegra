@@ -26,6 +26,29 @@ export interface LyricsPayload {
   readonly lines: LyricLine[];
 }
 
+/** Mirrors packages/shared/types.ts. */
+export interface ArtistSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly image: string | null;
+}
+
+export interface ArtistAlbum {
+  readonly id: string;
+  readonly name: string;
+  readonly year: string | null;
+  readonly image: string | null;
+}
+
+export interface ArtistProfile extends ArtistSummary {
+  readonly isVerified: boolean;
+  readonly followerCount: number | null;
+  readonly bio: string | null;
+  readonly songs: UnifiedSong[];
+  readonly albums: ArtistAlbum[];
+  readonly similar: ArtistSummary[];
+}
+
 export interface HomePayload {
   readonly trending: UnifiedSong[];
   readonly madeForYou: UnifiedSong[];

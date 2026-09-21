@@ -20,6 +20,33 @@ export function catalogRouter(catalog: CatalogService): Router {
     }
   });
 
+  // Static path first so "faces" is never read as an artist name.
+  router.get('/artists/faces', async (request, response) => {
+    const names = queryString(request.query.names)?.split(',').map((name) => name.trim()).filter(Boolean) ?? [];
+    if (names.length === 0 || names.length > 12) {
+      response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
+      return;
+    }
+    try {
+      sendSuccess(response, await catalog.getArtistFaces(names));
+    } catch (error) {
+      sendFailure(response, error);
+    }
+  });
+
+  router.get('/artists/:name', async (request, response) => {
+    const name = queryString(request.params.name);
+    if (!name) {
+      response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
+      return;
+    }
+    try {
+      sendSuccess(response, await catalog.getArtist(name));
+    } catch (error) {
+      sendFailure(response, error);
+    }
+  });
+
   router.get('/songs', async (request, response) => {
     const ids = queryString(request.query.ids)?.split(',').map((id) => id.trim()).filter(Boolean) ?? [];
     if (ids.length === 0 || ids.length > 50) {

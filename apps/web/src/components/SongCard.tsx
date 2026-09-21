@@ -18,9 +18,10 @@ interface SongCardProps {
   readonly onPlay: (origin: HTMLElement) => void;
   readonly onLike: () => void;
   readonly liked: boolean;
+  readonly onOpenAlbum?: (song: UnifiedSong) => void;
 }
 
-export function SongCard({ song, index, isCurrent, isPlaying, onPlay, onLike, liked }: SongCardProps) {
+export function SongCard({ song, index, isCurrent, isPlaying, onPlay, onLike, liked, onOpenAlbum }: SongCardProps) {
   const reduced = useReducedMotion();
   const press = usePress();
   return (
@@ -42,13 +43,26 @@ export function SongCard({ song, index, isCurrent, isPlaying, onPlay, onLike, li
       </button>
       <div className="card-copy">
         <div className="card-title-row">
-          <h3 title={song.title}>{song.title}</h3>
+          <button className="card-title-button" type="button" title={`Play ${song.title}`} onClick={(event) => onPlay(event.currentTarget)}>
+            <h3>{song.title}</h3>
+          </button>
           <IconButton icon={Heart} label={liked ? 'Remove from likes' : 'Add to likes'} active={liked} onClick={onLike} />
           <PlaylistMenu song={song} />
         </div>
         <p title={song.artist}>{song.artist}</p>
       </div>
-      <div className="track-album" title={song.album ?? 'Single'}>{song.album ?? 'Single'}</div>
+      {onOpenAlbum && song.album ? (
+        <button
+          type="button"
+          className="track-album track-album--link"
+          title={`Open album ${song.album}`}
+          onClick={() => onOpenAlbum(song)}
+        >
+          {song.album}
+        </button>
+      ) : (
+        <div className="track-album" title={song.album ?? 'Single'}>{song.album ?? 'Single'}</div>
+      )}
       <div className="card-meta"><span>{formatTime(song.duration)}</span><span className="meta-dot" aria-hidden="true" /><span>{song.language ?? song.source}</span></div>
     </motion.article>
   );

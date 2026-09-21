@@ -5,6 +5,8 @@ import type { UnifiedSong } from '@shared/types';
 import { resolveApiUrl } from '../lib/api';
 import { clamp } from '../lib/utils';
 
+export type RepeatMode = 'off' | 'all' | 'one';
+
 export interface AudioPlayerState {
   readonly currentSong: UnifiedSong | null;
   readonly queue: UnifiedSong[];
@@ -14,6 +16,10 @@ export interface AudioPlayerState {
   readonly currentTime: number;
   readonly duration: number;
   readonly isMuted: boolean;
+  /** 0-1. Persisted per browser. */
+  readonly volume: number;
+  readonly shuffle: boolean;
+  readonly repeat: RepeatMode;
   readonly error: string | null;
   readonly selectSong: (song: UnifiedSong, queue?: UnifiedSong[]) => void;
   readonly togglePlayback: () => void;
@@ -23,6 +29,9 @@ export interface AudioPlayerState {
   readonly skipNext: () => void;
   readonly skipPrevious: () => void;
   readonly toggleMute: () => void;
+  readonly setVolume: (value: number) => void;
+  readonly toggleShuffle: () => void;
+  readonly cycleRepeat: () => void;
   readonly audioRef: React.RefObject<HTMLAudioElement | null>;
 }
 
@@ -36,6 +45,8 @@ export function useAudioPlayer(): AudioPlayerState {
   const playbackGenerationRef = useRef(0);
   const pendingCanPlayRef = useRef<(() => void) | null>(null);
   const autoAdvancedRef = useRef(false);
+  const shuffleRef = useRef(false);
+  const repeatRef = useRef<RepeatMode>('off');
   const [currentSong, setCurrentSong] = useState<UnifiedSong | null>(null);
   const [queue, setQueue] = useState<UnifiedSong[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -43,6 +54,16 @@ export function useAudioPlayer(): AudioPlayerState {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolumeState] = useState(() => {
+    try {
+      const stored = Number(window.localStorage.getItem('allegra-volume'));
+      return window.localStorage.getItem('allegra-volume') !== null && Number.isFinite(stored) ? clamp(stored, 0, 1) : 1;
+    } catch {
+      return 1;
+    }
+  });
+  const [shuffle, setShuffle] = useState(false);
+  const [repeat, setRepeat] = useState<RepeatMode>('off');
   const [error, setError] = useState<string | null>(null);
 
   const requestPlayback = useCallback(async (playing: boolean): Promise<void> => {
@@ -101,8 +122,17 @@ export function useAudioPlayer(): AudioPlayerState {
     const song = currentSongRef.current;
     const list = queueRef.current;
     if (!song || autoAdvancedRef.current) return;
+    const audio = audioRef.current;
+    if (repeatRef.current === 'one' && audio) {
+      // Same song again, through the one playback funnel.
+      audio.currentTime = 0;
+      void requestPlayback(true);
+      return;
+    }
     const index = list.findIndex((item) => item.id === song.id);
-    const next = index >= 0 ? list[index + 1] : undefined;
+    let next: UnifiedSong | undefined;
+    if (shuffleRef.current && list.length > 1) next = pickRandom(list, song.id);
+    else if (index >= 0) next = list[index + 1] ?? (repeatRef.current === 'all' ? list[0] : undefined);
     if (!next) {
       autoAdvancedRef.current = true;
       setIsPlaying(false);
@@ -110,7 +140,7 @@ export function useAudioPlayer(): AudioPlayerState {
     }
     autoAdvancedRef.current = true;
     selectSong(next, list);
-  }, [selectSong]);
+  }, [selectSong, requestPlayback]);
 
   const skipNext = useCallback((): void => {
     const song = currentSongRef.current;
@@ -118,7 +148,7 @@ export function useAudioPlayer(): AudioPlayerState {
     if (!song || list.length < 2) return;
     autoAdvancedRef.current = false;
     const index = list.findIndex((item) => item.id === song.id);
-    const next = list[(index + 1 + list.length) % list.length];
+    const next = shuffleRef.current ? pickRandom(list, song.id) : list[(index + 1 + list.length) % list.length];
     if (next) selectSong(next, list);
   }, [selectSong]);
 
@@ -177,6 +207,30 @@ export function useAudioPlayer(): AudioPlayerState {
     if (wasPlaying) await requestPlayback(true);
   }, [duration, requestPlayback]);
 
+  const setVolume = useCallback((value: number): void => {
+    const audio = audioRef.current;
+    const next = clamp(value, 0, 1);
+    setVolumeState(next);
+    try { window.localStorage.setItem('allegra-volume', String(next)); } catch { /* storage unavailable: volume just will not persist */ }
+    if (!audio) return;
+    audio.volume = next;
+    // Dragging the slider up from silence is an explicit "I want to hear it".
+    if (next > 0 && audio.muted) {
+      audio.muted = false;
+      setIsMuted(false);
+    }
+  }, []);
+
+  const toggleShuffle = useCallback((): void => {
+    shuffleRef.current = !shuffleRef.current;
+    setShuffle(shuffleRef.current);
+  }, []);
+
+  const cycleRepeat = useCallback((): void => {
+    repeatRef.current = repeatRef.current === 'off' ? 'all' : repeatRef.current === 'all' ? 'one' : 'off';
+    setRepeat(repeatRef.current);
+  }, []);
+
   const toggleMute = useCallback((): void => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -188,6 +242,7 @@ export function useAudioPlayer(): AudioPlayerState {
     const audio = audioRef.current;
     if (!audio) return;
 
+    audio.volume = volume;
     const onTimeUpdate = (): void => setCurrentTime(audio.currentTime);
     const onLoadedMetadata = (): void => {
       const nextDuration = Number.isFinite(audio.duration) ? audio.duration : currentSongRef.current?.duration ?? 0;
@@ -307,6 +362,9 @@ export function useAudioPlayer(): AudioPlayerState {
     currentTime,
     duration,
     isMuted,
+    volume,
+    shuffle,
+    repeat,
     error,
     selectSong,
     togglePlayback: () => void requestPlayback(!isPlayingRef.current),
@@ -316,6 +374,15 @@ export function useAudioPlayer(): AudioPlayerState {
     skipNext,
     skipPrevious,
     toggleMute,
+    setVolume,
+    toggleShuffle,
+    cycleRepeat,
     audioRef
   };
+}
+
+/** A random song from the list that is not the one currently playing. */
+function pickRandom(list: readonly UnifiedSong[], currentId: string): UnifiedSong | undefined {
+  const others = list.filter((item) => item.id !== currentId);
+  return others[Math.floor(Math.random() * others.length)];
 }

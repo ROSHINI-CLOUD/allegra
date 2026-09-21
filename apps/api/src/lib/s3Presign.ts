@@ -18,6 +18,8 @@ import { createHash, createHmac } from 'node:crypto';
 export interface PresignPutOptions {
   readonly accessKeyId: string;
   readonly secretAccessKey: string;
+  /** Required for temporary creds from `aws login` / STS (ASIA… keys). */
+  readonly sessionToken?: string;
   readonly region: string;
   readonly bucket: string;
   readonly key: string;
@@ -48,7 +50,8 @@ export function presignPutUrl(options: PresignPutOptions): string {
     ['X-Amz-Credential', `${options.accessKeyId}/${credentialScope}`],
     ['X-Amz-Date', amzDate],
     ['X-Amz-Expires', String(options.expiresInSeconds)],
-    ['X-Amz-SignedHeaders', signedHeaders]
+    ['X-Amz-SignedHeaders', signedHeaders],
+    ...(options.sessionToken ? [['X-Amz-Security-Token', options.sessionToken] as const] : [])
   ]);
   const canonicalQuery = [...query.entries()]
     .map(([name, value]) => [rfc3986(name), rfc3986(value)] as const)

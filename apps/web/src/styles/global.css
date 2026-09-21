@@ -1,4 +1,4 @@
-@import './tokens.css';
+@layer legacy {
 
 /* =========================================================================
    Allegra stylesheet.
@@ -947,6 +947,8 @@ input:focus-visible,
 }
 
 .lyrics-status { flex: 0 0 auto; color: var(--ink-faint); font-size: var(--text-meta); }
+.lyrics-translate-error { margin: 0 0 12px; color: var(--danger, #e07a5f); font-size: var(--text-meta); }
+.lyrics-translate-note { margin: 0 0 12px; color: var(--ink-faint); font-size: var(--text-meta); font-style: italic; }
 
 .lyrics-scroll {
   max-height: 380px;
@@ -1735,10 +1737,10 @@ input:focus-visible,
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+    scroll-behavior: auto;
   }
 
   .aura-orb { transform: translate3d(-50%, 0, 0); }
@@ -3077,7 +3079,7 @@ body::before { background: radial-gradient(circle at 64% -10%, rgba(180, 198, 25
 .feature-topline { position: relative; z-index: 1; color: var(--listen-faint); font-size: 10px; letter-spacing: 0.09em; }
 .feature-topline span:first-child { color: var(--listen-accent); }
 .feature-scene { position: relative; z-index: 1; display: grid; flex: 1; min-height: 0; place-items: center; padding: 20px 0 8px; }
-.feature-readout { top: 16px; right: 0; display: grid; gap: 1px; padding: 8px 10px; border: 1px solid var(--listen-line); border-radius: 10px; background: rgba(6, 7, 9, 0.42); color: var(--listen-faint); }
+.feature-readout { top: 16px; left: auto; right: 0; display: grid; justify-items: end; align-items: start; gap: 1px; width: max-content; padding: 8px 10px; border: 1px solid var(--listen-line); border-radius: 10px; background: rgba(6, 7, 9, 0.42); color: var(--listen-faint); }
 .feature-readout strong { color: var(--listen-ink); font-size: 12px; }
 .feature-readout span { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
 .feature-readout i { display: none; }
@@ -3435,4 +3437,5 @@ body::before { background: radial-gradient(circle at 64% -10%, rgba(180, 198, 25
 @media (max-width: 560px) {
   .playlist-new { flex-direction: column; }
   .playlist-card-head { align-items: flex-start; flex-direction: column; }
+}
 }

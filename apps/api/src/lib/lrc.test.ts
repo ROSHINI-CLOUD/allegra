@@ -26,3 +26,10 @@ test('plain lyrics are interpolated across duration', () => {
     { timestamp: 60, text: 'three', lineOrder: 2 }
   ]);
 });
+
+test('LRC header tags are metadata and never become lyric lines', () => {
+  const lines = parseLyrics(['[ar: Someone]', '[length: 3:47]', '[offset:+200]', '[00:01.00] first', '[00:02.00] second'].join(String.fromCharCode(10)), 200);
+  assert.deepEqual(lines.map((line) => line.text), ['first', 'second']);
+  const plain = parseLyrics(['[length: 3:47]', 'only text'].join(String.fromCharCode(10)), 100);
+  assert.deepEqual(plain.map((line) => line.text), ['only text']);
+});

@@ -32,6 +32,29 @@ export interface SaavnSong {
   readonly downloadUrl?: readonly SaavnAsset[];
 }
 
+export interface SaavnArtistSummary {
+  readonly id?: string | number;
+  readonly name?: string;
+  readonly image?: readonly SaavnAsset[];
+  readonly isVerified?: boolean;
+}
+
+export interface SaavnAlbumSummary {
+  readonly id?: string | number;
+  readonly name?: string;
+  readonly year?: string | number;
+  readonly image?: readonly SaavnAsset[];
+}
+
+export interface SaavnArtist extends SaavnArtistSummary {
+  readonly followerCount?: number | string;
+  readonly bio?: unknown;
+  readonly topSongs?: readonly SaavnSong[];
+  readonly topAlbums?: readonly SaavnAlbumSummary[];
+  readonly singles?: readonly SaavnAlbumSummary[];
+  readonly similarArtists?: readonly SaavnArtistSummary[];
+}
+
 export type ProviderFailureReason = 'timeout' | 'error';
 
 export interface ProviderResult<T> {
@@ -107,6 +130,32 @@ export class SaavnProvider {
     return this.requestResults(`songs/${encodeURIComponent(id)}/suggestions`, {
       limit: String(limit)
     });
+  }
+
+  /** Artist search (`/search/artists`): id, name and a real photo per match. */
+  public async searchArtists(query: string, limit = 5): Promise<ProviderResult<SaavnArtistSummary[]>> {
+    const result = await this.requestResults('search/artists', { query, limit: String(limit) });
+    return { ...result, data: result.data as SaavnArtistSummary[] };
+  }
+
+  /** Artist detail (`/artists?id=`): photo, followers, top songs, albums, similar artists. */
+  public async getArtist(id: string, songCount = 15, albumCount = 8): Promise<ProviderResult<SaavnArtist | null>> {
+    let reason: ProviderFailureReason = 'error';
+    for (const baseUrl of this.baseUrls) {
+      try {
+        const response = await this.request(baseUrl, 'artists', { id, songCount: String(songCount), albumCount: String(albumCount) });
+        if (!response.ok) {
+          continue;
+        }
+        const body: unknown = await response.json();
+        if (isRecord(body) && body.success === true && isRecord(body.data)) {
+          return { ok: true, data: body.data as SaavnArtist };
+        }
+      } catch (error) {
+        reason = isAbortError(error) ? 'timeout' : 'error';
+      }
+    }
+    return { ok: false, data: null, reason };
   }
 
   private async requestResults(

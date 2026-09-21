@@ -1,0 +1,221 @@
+/*
+ * Cover shelf — the collection hero.
+ *
+ * A playlist, Liked Songs or a shared link leads with its covers on a shelf instead of one square
+ * tile: the centred song faces you, its neighbours turn away in perspective, and the collection
+ * colour pools underneath.
+ *
+ * Every moving value here is transform or opacity. Card spacing is a percentage of the card width,
+ * so one set of numbers covers 360px through 1920px and nothing is measured in JS.
+ */
+
+/* The shelf stands where the square cover tile used to, so the hero keeps its shape: art block on
+ * the left, name and controls beside it. */
+.collection-hero--flow { align-items: center; }
+
+.coverflow {
+  --cf-w: clamp(112px, 15vw, 176px);
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: clamp(280px, 36vw, 520px);
+  flex: 0 0 auto;
+  justify-items: center;
+  padding: 6px 0 2px;
+}
+
+/* A pool of the collection colour under the shelf, so it is lit rather than floating on the page. */
+.coverflow::before {
+  position: absolute;
+  z-index: -1;
+  inset: 2% -4% 6%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 55%, color-mix(in oklab, var(--art-primary, #5b9dff) 40%, transparent) 0%, transparent 72%);
+  opacity: 0.6;
+  content: '';
+  filter: blur(34px);
+}
+
+.coverflow-stage {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: calc(var(--cf-w) * 1.44);
+  grid-template: 1fr / 1fr;
+  place-items: center;
+  perspective: 1100px;
+  /* Sideways belongs to the shelf, up and down still scrolls the page. */
+  touch-action: pan-y;
+  cursor: grab;
+  /* A swipe across the covers must not paint a text selection over the hero. */
+  user-select: none;
+  -webkit-user-select: none;
+  /* The far covers dissolve rather than meeting the edge of the hero as a cut. */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10%, #000 90%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 10%, #000 90%, transparent 100%);
+}
+
+.coverflow-stage:active { cursor: grabbing; }
+
+.coverflow-card {
+  display: block;
+  width: var(--cf-w);
+  padding: 10px 10px 4px;
+  border: 0;
+  border-radius: 20px;
+  margin: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.04));
+  box-shadow: 0 26px 54px -26px rgba(0, 0, 0, 0.78), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  grid-area: 1 / 1;
+  transform-style: preserve-3d;
+  will-change: transform, opacity;
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+}
+
+/* The one in front is brighter glass, so the shelf has an obvious subject. */
+.coverflow-card[data-centre] {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08));
+  box-shadow: 0 40px 80px -28px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.coverflow-card:focus-visible { outline: 2px solid var(--wave); outline-offset: 5px; }
+
+.coverflow-art {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 13px;
+  aspect-ratio: 1;
+  box-shadow: 0 12px 26px -14px rgba(0, 0, 0, 0.85);
+}
+
+.coverflow-art img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  -webkit-user-drag: none;
+}
+
+.coverflow-initial {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(0, 0, 0, 0.38);
+  font-size: calc(var(--cf-w) * 0.3);
+  font-weight: 800;
+}
+
+/* The playing state of the centred cover, and the tap target it implies. */
+.coverflow-badge {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--wave);
+  color: var(--wave-ink);
+  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  transform: scale(0.82);
+  transition: opacity var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-standard);
+}
+
+.coverflow-card[data-centre] .coverflow-badge { opacity: 1; transform: none; }
+
+/* Whatever is actually playing keeps a ring, even when it is off to the side. */
+.coverflow-card[data-current] .coverflow-art { outline: 2px solid var(--wave); outline-offset: -2px; }
+
+/* Only the cover in front is named; the rest would read as clutter poking out from behind it. */
+.coverflow-card:not([data-centre]) .coverflow-caption { opacity: 0; }
+
+.coverflow-caption {
+  display: grid;
+  transition: opacity var(--d-base) var(--ease-standard);
+  gap: 2px;
+  padding: 10px 2px 8px;
+  text-align: center;
+}
+
+.coverflow-caption strong,
+.coverflow-caption span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coverflow-caption strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.coverflow-caption span {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.coverflow-arrow {
+  position: absolute;
+  top: calc(50% - 26px);
+  z-index: 12;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface-glass);
+  color: var(--ink);
+  cursor: pointer;
+  transition: opacity var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+
+.coverflow-arrow--prev { left: 0; }
+.coverflow-arrow--next { right: 0; }
+.coverflow-arrow:hover { background: var(--surface-hover); transform: scale(1.06); }
+.coverflow-arrow:active { transform: scale(0.94); }
+.coverflow-arrow:disabled { cursor: default; opacity: 0.26; transform: none; }
+
+.coverflow-count {
+  margin: 2px 0 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+/* Phone and small tablet: the hero stacks, so the shelf runs the full width above the name. */
+@media (max-width: 900px) {
+  .collection-hero--flow { align-items: stretch; }
+
+  .coverflow {
+    --cf-w: clamp(124px, 34vw, 168px);
+    width: 100%;
+    padding: 2px 0 0;
+  }
+
+  /* No room for arrows beside the covers; drag and swipe carry the shelf here. */
+  .coverflow-arrow { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coverflow-badge,
+  .coverflow-arrow { transition: opacity var(--d-instant) var(--ease-standard); }
+  .coverflow-arrow:hover,
+  .coverflow-arrow:active { transform: none; }
+}

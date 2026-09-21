@@ -188,7 +188,22 @@ test('invalid tokens are rejected and persistence failures stay in the envelope'
     async get() {
       return null;
     },
+    async findByEmail() {
+      return null;
+    },
     async save() {
+      throw new Error('dynamo down');
+    },
+    async getShare() {
+      return null;
+    },
+    async findShare() {
+      return null;
+    },
+    async saveShare() {
+      throw new Error('dynamo down');
+    },
+    async deleteShare() {
       throw new Error('dynamo down');
     }
   };

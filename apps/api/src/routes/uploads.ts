@@ -80,6 +80,7 @@ export function uploadsRouter(auth: AuthService, uploads?: UploadsConfig): Route
       const uploadUrl = presignPutUrl({
         accessKeyId: uploads.accessKeyId,
         secretAccessKey: uploads.secretAccessKey,
+        ...(uploads.sessionToken ? { sessionToken: uploads.sessionToken } : {}),
         region: uploads.region,
         bucket: uploads.bucket,
         key: coverKey,

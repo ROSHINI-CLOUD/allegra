@@ -19,10 +19,25 @@ export const motionTokens = {
   stagger: 0.04
 } as const;
 
+/** Imperative GSAP moments use the same timing vocabulary as Motion scenes. */
+export const gsapTokens = {
+  hero: {
+    duration: motionTokens.duration.cinematic,
+    delay: motionTokens.duration.instant,
+    stagger: 0.05,
+    ease: 'power4.out',
+    distance: 24
+  }
+} as const;
+
 export const spring = {
   tactile: { type: 'spring', stiffness: 400, damping: 30 } as const,
   sheet: { type: 'spring', stiffness: 300, damping: 34 } as const,
-  hero: { type: 'spring', stiffness: 220, damping: 30 } as const
+  hero: { type: 'spring', stiffness: 220, damping: 30 } as const,
+  /** Soft-focus lyrics: ~320–450ms, little/no bounce. */
+  lyrics: { type: 'spring', stiffness: 260, damping: 38, mass: 0.85 } as const,
+  /** Artwork breathe while playing (1 → 1.015). */
+  breathe: { type: 'spring', stiffness: 120, damping: 28, mass: 1 } as const
 };
 
 export const pageVariants: Variants = {

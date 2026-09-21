@@ -60,6 +60,20 @@ export class LrclibProvider {
     }
   }
 
+  /** Free-text search (`q=`), for songs whose exact track/artist pair does not match. */
+  public async searchText(query: string): Promise<LrclibEntry[]> {
+    try {
+      const response = await this.request(this.url('search', { q: query }));
+      if (!response.ok) {
+        return [];
+      }
+      const body: unknown = await response.json();
+      return Array.isArray(body) ? body.filter(isEntry) : [];
+    } catch {
+      return [];
+    }
+  }
+
   private async request(url: URL): Promise<Response> {
     return fetchWithTimeout(
       url,

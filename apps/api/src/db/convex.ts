@@ -1,10 +1,11 @@
 import { ConvexHttpClient } from 'convex/browser';
 import { anyApi } from 'convex/server';
 
-import type { LibraryRecord, RecentRecord, UserData, UserStore } from '../user/store.js';
+import type { LibraryRecord, RecentRecord, ShareRecord, TasteEntry, TasteProfile, UserData, UserStore } from '../user/store.js';
 
-/** Function references into convex/users.ts. anyApi is untyped, so name the two we use. */
-const usersApi = anyApi.users as unknown as { readonly get: unknown; readonly save: unknown };
+/** Function references into convex/users.ts and convex/shares.ts. anyApi is untyped, so name what we use. */
+const usersApi = anyApi.users as unknown as { readonly get: unknown; readonly byEmail: unknown; readonly save: unknown };
+const sharesApi = anyApi.shares as unknown as { readonly get: unknown; readonly byLibrary: unknown; readonly save: unknown; readonly remove: unknown };
 
 /** The two calls the store needs. Narrow on purpose so tests can fake it. */
 export interface ConvexClientLike {
@@ -30,13 +31,60 @@ export class ConvexUserStore implements UserStore {
   }
 
   public async get(userId: string): Promise<UserData | null> {
-    const value = await this.client.query(usersApi.get, { secret: this.secret, userId });
-    return parseUserData(value);
+    return parseUserData(await this.client.query(usersApi.get, { secret: this.secret, userId }));
+  }
+
+  public async findByEmail(email: string): Promise<UserData | null> {
+    return parseUserData(await this.client.query(usersApi.byEmail, { secret: this.secret, email }));
   }
 
   public async save(user: UserData): Promise<void> {
     await this.client.mutation(usersApi.save, { secret: this.secret, user });
   }
+
+  public async getShare(code: string): Promise<ShareRecord | null> {
+    return parseShare(await this.client.query(sharesApi.get, { secret: this.secret, code }));
+  }
+
+  public async findShare(ownerId: string, libraryId: string): Promise<ShareRecord | null> {
+    return parseShare(await this.client.query(sharesApi.byLibrary, { secret: this.secret, ownerId, libraryId }));
+  }
+
+  public async saveShare(share: ShareRecord): Promise<void> {
+    await this.client.mutation(sharesApi.save, { secret: this.secret, share });
+  }
+
+  public async deleteShare(code: string): Promise<void> {
+    await this.client.mutation(sharesApi.remove, { secret: this.secret, code });
+  }
+}
+
+function parseShare(value: unknown): ShareRecord | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.code !== 'string' || typeof record.ownerId !== 'string' || typeof record.libraryId !== 'string' || typeof record.createdAt !== 'string') return null;
+  return { code: record.code, ownerId: record.ownerId, libraryId: record.libraryId, createdAt: record.createdAt };
+}
+
+function parseEntries(value: unknown): TasteEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): TasteEntry[] => {
+    if (typeof item !== 'object' || item === null) return [];
+    const entry = item as Record<string, unknown>;
+    return typeof entry.name === 'string' && typeof entry.score === 'number' ? [{ name: entry.name, score: entry.score }] : [];
+  });
+}
+
+function parseTaste(value: unknown): TasteProfile | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  return {
+    artists: parseEntries(record.artists),
+    languages: parseEntries(record.languages),
+    signals: typeof record.signals === 'number' ? record.signals : 0,
+    onboarded: record.onboarded === true,
+    updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : new Date(0).toISOString()
+  };
 }
 
 function parseUserData(value: unknown): UserData | null {
@@ -55,6 +103,7 @@ function parseUserData(value: unknown): UserData | null {
   const settings = typeof record.settings === 'object' && record.settings !== null && !Array.isArray(record.settings)
     ? (record.settings as Record<string, unknown>)
     : {};
+  const taste = parseTaste(record.taste);
   return {
     userId: record.userId,
     isGuest: record.isGuest,
@@ -62,6 +111,10 @@ function parseUserData(value: unknown): UserData | null {
     libraries: record.libraries as LibraryRecord[],
     likedSongIds: record.likedSongIds.filter((id): id is string => typeof id === 'string'),
     recentlyPlayed: record.recentlyPlayed as RecentRecord[],
-    settings
+    settings,
+    ...(typeof record.displayName === 'string' ? { displayName: record.displayName } : {}),
+    ...(typeof record.email === 'string' ? { email: record.email } : {}),
+    ...(typeof record.passwordHash === 'string' ? { passwordHash: record.passwordHash } : {}),
+    ...(taste ? { taste } : {})
   };
 }

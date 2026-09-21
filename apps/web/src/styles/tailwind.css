@@ -1,0 +1,97 @@
+/* Layer order: legacy route CSS sits below Tailwind components/utilities and the unlayered app.css. */
+@layer theme, base, legacy, components, utilities;
+
+@import 'tailwindcss';
+
+/*
+ * Tailwind theme, mapped onto Allegra's existing tokens.css rather than a
+ * separate hardcoded palette. `@theme inline` re-reads the CSS custom
+ * property every time it's used, so editing a value in tokens.css (the
+ * live source of truth for color) updates every Tailwind utility that
+ * references it too - bg-bg, text-ink, rounded-panel, shadow-panel, etc.
+ * all stay in sync with zero duplication.
+ */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-deep: var(--bg-deep);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-sunken: var(--surface-sunken);
+
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-wash: var(--accent-wash);
+  --color-accent-line: var(--accent-line);
+
+  --color-field-start: var(--field-start);
+  --color-field-end: var(--field-end);
+  --color-glass-surface: var(--glass-surface);
+  --color-glass-strong: var(--glass-strong);
+
+  --radius-panel: var(--radius-panel);
+  --radius-control: var(--radius-control);
+  --radius-art: var(--radius-art);
+  --radius-pill: var(--radius-pill);
+
+  --shadow-panel: var(--shadow-panel);
+  --shadow-lift: var(--shadow-lift);
+
+  --text-display: var(--text-display);
+  --text-title: var(--text-title);
+  --text-heading: var(--text-heading);
+  --text-body: var(--text-body);
+  --text-small: var(--text-small);
+  --text-meta: var(--text-meta);
+
+  --tracking-display: var(--tracking-display);
+  --tracking-title: var(--tracking-title);
+  --tracking-meta: var(--tracking-meta);
+
+  --ease-standard: var(--ease-standard);
+  --ease-decelerate: var(--ease-decelerate);
+  --ease-accelerate: var(--ease-accelerate);
+  --ease-press: var(--ease-press);
+
+  --duration-instant: var(--d-instant);
+  --duration-fast: var(--d-fast);
+  --duration-base: var(--d-base);
+  --duration-panel: var(--d-panel);
+  --duration-slow: var(--d-slow);
+
+  --font-body: var(--font-body);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+}
+
+/*
+ * These are intentionally small, named material primitives. Components may
+ * combine Tailwind utilities with them, but may not invent new translucent
+ * panel recipes. The visual source of truth stays in tokens.css.
+ */
+@utility glass-panel {
+  border: 1px solid var(--border);
+  background: var(--glass-surface);
+  box-shadow: var(--shadow-panel);
+}
+
+@utility glass-control {
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lift);
+}
+
+@utility focus-ring {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}

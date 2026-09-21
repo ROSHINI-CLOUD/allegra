@@ -56,3 +56,9 @@ test('key segments are percent-encoded but the separating slashes are kept', () 
   const url = new URL(presignPutUrl({ ...base, key: 'covers/user 1/a+b(c).jpg' }));
   assert.equal(url.pathname, '/covers/user%201/a%2Bb%28c%29.jpg');
 });
+
+test('temporary session tokens are signed into the query string', () => {
+  const url = new URL(presignPutUrl({ ...base, sessionToken: 'FwoGZXIvYXdzEBYaDexample' }));
+  assert.equal(url.searchParams.get('X-Amz-Security-Token'), 'FwoGZXIvYXdzEBYaDexample');
+  assert.match(url.searchParams.get('X-Amz-Signature') ?? '', /^[0-9a-f]{64}$/);
+});

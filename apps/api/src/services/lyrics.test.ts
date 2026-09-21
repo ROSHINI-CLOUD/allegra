@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { MemoryCacheStore } from '../lib/cache.js';
+import { BetterLyricsProvider } from '../providers/betterlyrics.js';
 import { LrclibProvider } from '../providers/lrclib.js';
 import { LyricsService, cleanLyricsQuery } from './lyrics.js';
 
@@ -132,4 +133,70 @@ test('positive hits cache for 30 days and misses cache for 24 hours', async () =
 
   assert.equal(sets.some((entry) => entry.ttl === 2_592_000), true);
   assert.equal(sets.some((entry) => entry.key.includes('miss') && entry.ttl === 86_400), true);
+});
+
+const SYNCED = Array.from({ length: 10 }, (_, index) => `[00:${String(index + 1).padStart(2, '0')}.00] line ${index + 1}`).join(String.fromCharCode(10));
+
+test('catalog decorations like (From "Jawan") are stripped from the title', () => {
+  assert.deepEqual(cleanLyricsQuery('Chaleya (From "Jawan")', 'Kumaar'), { title: 'Chaleya', artist: 'Kumaar' });
+  assert.equal(cleanLyricsQuery('Yeshanagula (From "The Paradise") (Telugu)', 'A').title, 'Yeshanagula');
+  assert.equal(cleanLyricsQuery('Tera Mera Rishta - From "Awarapan 2"', 'A').title, 'Tera Mera Rishta');
+});
+
+test('a multi-artist credit is retried with the lead artist', async () => {
+  const artists: string[] = [];
+  const service = new LyricsService(
+    new LrclibProvider({
+      baseUrl: 'https://lrclib.test/api',
+      fetchImpl: async (input) => {
+        const url = new URL(String(input));
+        const artist = url.searchParams.get('artist_name') ?? '';
+        artists.push(`${url.pathname.split('/').pop()}:${artist}`);
+        if (url.pathname.endsWith('/get') && artist === 'Anirudh Ravichander') {
+          return json({ trackName: 'Chaleya', syncedLyrics: SYNCED, duration: 267 });
+        }
+        return url.pathname.endsWith('/search') ? json([]) : json({}, 404);
+      }
+    }),
+    new MemoryCacheStore()
+  );
+
+  const payload = await service.find('Chaleya (From "Jawan")', 'Anirudh Ravichander, Arijit Singh, Shilpa Rao', 267, false);
+  assert.equal(payload?.type, 'synced');
+  assert.ok(artists.includes('get:Anirudh Ravichander, Arijit Singh, Shilpa Rao'));
+  assert.ok(artists.includes('get:Anirudh Ravichander'));
+});
+
+test('a loose LRCLIB search never returns a different song', async () => {
+  // Every attempt after the exact one must still resemble the requested title.
+  const result = await new LyricsService(
+    new LrclibProvider({
+      baseUrl: 'https://lrclib.test/api',
+      fetchImpl: async (input) => {
+        const url = new URL(String(input));
+        const looseAttempt = url.searchParams.get('artist_name') !== 'Driver, Guest';
+        if (url.pathname.endsWith('/search') && looseAttempt) {
+          return json([{ trackName: 'Completely Different Song', syncedLyrics: SYNCED, duration: 200 }]);
+        }
+        return json({}, 404);
+      }
+    }),
+    new MemoryCacheStore()
+  ).find('Night Drive', 'Driver, Guest', 200, false);
+  assert.equal(result, null);
+});
+
+test('BetterLyrics answers when LRCLIB has nothing', async () => {
+  const ttml = '<tt><body><p begin="1.0">first line</p><p begin="3.5">second line</p></body></tt>';
+  const service = new LyricsService(
+    new LrclibProvider({ baseUrl: 'https://lrclib.test/api', fetchImpl: async () => json({}, 404) }),
+    new MemoryCacheStore(),
+    undefined,
+    new BetterLyricsProvider({ baseUrl: 'https://better.test', fetchImpl: async () => json({ ttml }) })
+  );
+
+  const payload = await service.find('Some Song', 'Some Artist', 180, false);
+  assert.equal(payload?.source, 'BetterLyrics');
+  assert.equal(payload?.type, 'synced');
+  assert.equal(payload?.lines.length, 2);
 });

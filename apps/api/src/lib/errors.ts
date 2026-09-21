@@ -25,3 +25,17 @@ export class PersistenceError extends Error {
     this.name = 'PersistenceError';
   }
 }
+
+export class ConflictError extends Error {
+  public constructor(message = 'Conflict') {
+    super(message);
+    this.name = 'ConflictError';
+  }
+}
+
+export class InvalidCredentialsError extends Error {
+  public constructor(message = 'Invalid credentials') {
+    super(message);
+    this.name = 'InvalidCredentialsError';
+  }
+}

@@ -1,45 +1,25 @@
-import { useEffect, useRef } from 'react';
-import { useReducedMotion } from 'motion/react';
+import { MusicFlowShader } from './shader/MusicFlowShader';
+import type { Palette } from '../lib/palette';
+import type { CSSProperties } from 'react';
 
 /**
- * One soft light source behind the page, nudged by the pointer.
- *
- * Deliberately a single blurred element: large blurred layers are the most
- * expensive thing a background can do on a phone, so there is exactly one.
- * The pointer writes CSS custom properties directly rather than React state,
- * so moving the mouse never re-renders the tree.
+ * The shared VibeRoom music-flow field. The shader owns pointer smoothing,
+ * visibility and reduced-motion handling; this wrapper only composes the
+ * flutes and scrim that keep the field legible under Allegra's content.
  */
-export function DynamicAura({ paused = false }: { readonly paused?: boolean }) {
-  const reduced = useReducedMotion();
-  const auraRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const aura = auraRef.current;
-    if (!aura || reduced || paused) return undefined;
-
-    let frame = 0;
-    const onPointerMove = (event: PointerEvent): void => {
-      if (frame) return;
-      frame = window.requestAnimationFrame(() => {
-        frame = 0;
-        const x = (event.clientX / window.innerWidth - 0.5) * 2;
-        const y = (event.clientY / window.innerHeight - 0.5) * 2;
-        aura.style.setProperty('--pointer-x', x.toFixed(3));
-        aura.style.setProperty('--pointer-y', y.toFixed(3));
-      });
-    };
-
-    window.addEventListener('pointermove', onPointerMove, { passive: true });
-    return () => {
-      window.removeEventListener('pointermove', onPointerMove);
-      if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, [paused, reduced]);
+export function DynamicAura({ paused = false, energy = 0.48, mood = 'energy', palette = null, light = false }: { readonly paused?: boolean; readonly energy?: number; readonly mood?: 'energy' | 'chill' | 'different' | 'surprise'; readonly palette?: Palette | null; readonly light?: boolean }) {
+  const auraStyle = {
+    '--aura-primary': palette?.primary ?? '#ee6b5f',
+    '--aura-secondary': palette?.secondary ?? '#7bafd4',
+    '--aura-tertiary': palette?.tertiary ?? '#c4dd74'
+  } as CSSProperties;
 
   return (
-    <div ref={auraRef} className={`dynamic-aura ${paused ? 'is-paused' : ''}`} aria-hidden="true">
-      <div className="aura-orb" />
-      <div className="aura-grain" />
+    <div className={`dynamic-aura ${paused ? 'is-paused' : ''}`} style={auraStyle} aria-hidden="true">
+      <MusicFlowShader energy={paused ? 0.12 : energy} mood={mood} palette={palette} light={light} />
+      <div className="vibe-flutes" />
+      <div className="vibe-vignette" />
+      <div className="vibe-scrim" />
     </div>
   );
 }

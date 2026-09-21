@@ -70,31 +70,37 @@ function hslToHex(hue: number, sat: number, light: number): string {
 }
 
 /**
- * Push a sampled colour to something that actually reads as colour on near-black.
- *
- * Album art is frequently a muted photograph. Returning its true average gives a
- * grey card, which looks broken rather than moody. So the art is treated as a
- * *hue source*: the hue is kept, saturation and lightness are driven up to a
- * floor. A brown mountain cover becomes a warm amber room, not a grey one.
+ * Push a sampled colour just far enough to read as colour on near-black. The hue is the cover's own;
+ * saturation and lightness are only nudged into a range, so a brown cover stays brown (not pastel).
  */
 function vivify(r: number, g: number, b: number): string {
   const { chroma, light, hue } = chromaOf(r, g, b);
   const saturation = light > 0 && light < 1 ? chroma / (1 - Math.abs(2 * light - 1)) : 0;
-  // Floors chosen so even a near-monochrome cover produces a visible tint.
-  const nextSat = Math.min(1, Math.max(0.62, saturation * 1.5));
-  const nextLight = Math.min(0.68, Math.max(0.52, light * 1.25));
+  const nextSat = Math.min(0.85, Math.max(0.45, saturation * 1.25));
+  const nextLight = Math.min(0.62, Math.max(0.42, light * 1.15));
   return hslToHex(hue, nextSat, nextLight);
 }
 
-function rotateHue(hex: string, degrees: number): string {
+/** Same hue, different lightness: the honest way to get a second and third stop from a one-colour cover. */
+function shiftLightness(hex: string, delta: number): string {
   const value = Number.parseInt(hex.slice(1), 16);
-  const r = (value >> 16) & 255;
-  const g = (value >> 8) & 255;
-  const b = value & 255;
-  const { chroma, light, hue } = chromaOf(r, g, b);
-  const nextHue = (hue + degrees + 360) % 360;
+  const { chroma, light, hue } = chromaOf((value >> 16) & 255, (value >> 8) & 255, value & 255);
   const saturation = light > 0 && light < 1 ? chroma / (1 - Math.abs(2 * light - 1)) : 0;
-  return hslToHex(nextHue, Math.max(0.6, saturation), Math.min(0.66, Math.max(0.5, light)));
+  return hslToHex(hue, Math.max(0.4, saturation), Math.min(0.68, Math.max(0.3, light + delta)));
+}
+
+function hueDistance(left: number, right: number): number {
+  const gap = Math.abs(left - right) % 360;
+  return gap > 180 ? 360 - gap : gap;
+}
+
+/** Scales every stop toward black. Used where a dark tint of the cover colour is wanted, never a bright one. */
+export function shadePalette(palette: Palette, factor: number): Palette {
+  const shade = (hex: string): string => {
+    const value = Number.parseInt(hex.slice(1), 16);
+    return toHex(((value >> 16) & 255) * factor, ((value >> 8) & 255) * factor, (value & 255) * factor);
+  };
+  return { primary: shade(palette.primary), secondary: shade(palette.secondary), tertiary: shade(palette.tertiary) };
 }
 
 /**
@@ -128,8 +134,8 @@ export async function extractPalette(src: string, signal?: AbortSignal): Promise
       const g = data[i + 1] ?? 0;
       const b = data[i + 2] ?? 0;
       const { chroma, light } = chromaOf(r, g, b);
-      // Ignore near-white and near-black: they carry no hue and would dominate.
-      if (light > 0.94 || light < 0.06) continue;
+      // Ignore near-white, near-black and greys: they carry no hue and would dominate.
+      if (light > 0.94 || light < 0.06 || chroma < 0.08) continue;
       // Quantise to 5 bits per channel so similar pixels land together.
       const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
       const bin = bins.get(key) ?? { r: 0, g: 0, b: 0, count: 0, score: 0 };
@@ -137,10 +143,9 @@ export async function extractPalette(src: string, signal?: AbortSignal): Promise
       bin.g += g;
       bin.b += b;
       bin.count += 1;
-      // Population alone returns beige backgrounds. Weighting by chroma returns
-      // the colour a person would name if you asked them about the cover.
-      // Squared so a small patch of real colour outranks a large grey field.
-      bin.score += 1 + chroma * chroma * 26;
+      // Population decides, chroma tilts it: a large muted area outranks a tiny logo, but a
+      // vivid area outranks a grey one of the same size.
+      bin.score += 0.3 + chroma;
       bins.set(key, bin);
     }
 
@@ -149,26 +154,25 @@ export async function extractPalette(src: string, signal?: AbortSignal): Promise
       .sort((a, b) => b.score - a.score)
       .map((bin) => ({
         hex: vivify(bin.r / bin.count, bin.g / bin.count, bin.b / bin.count),
-        hue: chromaOf(bin.r / bin.count, bin.g / bin.count, bin.b / bin.count).hue
+        hue: chromaOf(bin.r / bin.count, bin.g / bin.count, bin.b / bin.count).hue,
+        score: bin.score
       }));
 
-    if (ranked.length === 0) return DEFAULT_PALETTE;
+    // A black-and-white or grey cover has no hue to use: give it a quiet neutral, not an invented colour.
+    if (ranked.length === 0) return { primary: '#7d8087', secondary: '#5f6269', tertiary: '#9a9da4' };
 
     const primary = ranked[0];
-    // Prefer a genuinely different hue for the second stop so gradients have range.
-    const secondary = ranked.find((c) => Math.abs(c.hue - primary.hue) > 40) ?? ranked[1];
-    const tertiary =
-      ranked.find((c) => c !== primary && c !== secondary && Math.abs(c.hue - primary.hue) > 80) ?? null;
-
-    /*
-     * A cover with one hue would otherwise give three near-identical stops and a
-     * flat card. Rotating around the primary keeps the record's identity while
-     * giving the gradients somewhere to travel.
-     */
+    if (!primary) return DEFAULT_PALETTE;
+    // A second / third colour must be a different hue AND a real share of the cover; otherwise use
+    // lighter and darker versions of the primary so the palette never drifts off the artwork.
+    const secondary = ranked.find((c) => hueDistance(c.hue, primary.hue) > 40 && c.score >= primary.score * 0.18);
+    const tertiary = ranked.find(
+      (c) => c !== secondary && hueDistance(c.hue, primary.hue) > 40 && (!secondary || hueDistance(c.hue, secondary.hue) > 30) && c.score >= primary.score * 0.12
+    );
     return {
       primary: primary.hex,
-      secondary: secondary && secondary !== primary ? secondary.hex : rotateHue(primary.hex, 42),
-      tertiary: tertiary ? tertiary.hex : rotateHue(primary.hex, -52)
+      secondary: secondary ? secondary.hex : shiftLightness(primary.hex, 0.12),
+      tertiary: tertiary ? tertiary.hex : shiftLightness(primary.hex, -0.1)
     };
   } catch {
     return DEFAULT_PALETTE;

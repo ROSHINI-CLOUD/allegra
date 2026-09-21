@@ -29,3 +29,7 @@
 - **Rushed video** → Presentation is a quarter of the score. Filming starts T+22.
 
 All three are preventable by doing the boring thing early.
+
+- `14-HANDOFF-BACKEND.md` — where the backend stands (Convex, accounts, taste, sharing) and the paste-in prompt for the next AI.
+- `15-BACKEND-REMAINING.md` — ordered task list: AWS hosting + small AWS integrations, Convex production, tests.
+- `16-FULL-PRODUCT-PROMPT.md` — **the prompt to paste**: full-product goal, Allegra vibe, definition of 100 percent, browser self-test loop, exact AWS scope.
