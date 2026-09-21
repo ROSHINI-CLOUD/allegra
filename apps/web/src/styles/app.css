@@ -109,11 +109,41 @@ body::after,
 .vibe-scrim { background: linear-gradient(180deg, rgba(5, 5, 6, 0.3), rgba(5, 5, 6, 0.52) 100%); }
 
 /* Light theme keeps the cover hue but lowers contrast behind the light chrome. */
-.app-shell[data-theme='light'] .dynamic-aura { background: #c9ccd1; }
-.app-shell[data-theme='light'] .dynamic-aura .music-flow-canvas { filter: none; opacity: 0.32; mix-blend-mode: multiply; }
-.app-shell[data-theme='light'] .vibe-flutes,
-.app-shell[data-theme='light'] .vibe-vignette,
-.app-shell[data-theme='light'] .vibe-scrim { display: none; }
+.app-shell[data-theme='light'] .dynamic-aura {
+  background:
+    radial-gradient(66% 72% at 14% 20%, color-mix(in srgb, var(--aura-primary) 28%, #f8fbff), transparent 74%),
+    radial-gradient(58% 64% at 88% 78%, color-mix(in srgb, var(--aura-secondary) 24%, #f8fbff), transparent 76%),
+    radial-gradient(44% 46% at 58% 42%, color-mix(in srgb, var(--aura-tertiary) 20%, transparent), transparent 72%),
+    conic-gradient(from 210deg at 52% 48%, color-mix(in srgb, var(--aura-secondary) 8%, transparent), color-mix(in srgb, var(--aura-primary) 10%, transparent), color-mix(in srgb, var(--aura-tertiary) 9%, transparent), transparent 72%),
+    #f3f6f8;
+}
+
+.app-shell[data-theme='light'] .dynamic-aura .music-flow-canvas {
+  filter: saturate(1.45) contrast(0.9) brightness(1.08);
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+}
+
+.app-shell[data-theme='light'] .dynamic-aura.is-paused .music-flow-canvas { opacity: 0.28; }
+
+.app-shell[data-theme='light'] .vibe-flutes {
+  display: block;
+  background-image:
+    linear-gradient(104deg, transparent 0%, color-mix(in srgb, var(--aura-primary) 16%, transparent) 18%, transparent 34%, color-mix(in srgb, var(--aura-secondary) 14%, transparent) 58%, transparent 74%, color-mix(in srgb, var(--aura-tertiary) 18%, transparent) 94%),
+    linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.22) 50%, transparent 100%);
+  opacity: 0.42;
+  mix-blend-mode: color-burn;
+}
+
+.app-shell[data-theme='light'] .vibe-vignette {
+  display: block;
+  background: radial-gradient(ellipse 86% 82% at 50% 46%, transparent 38%, rgba(104, 113, 124, 0.12) 100%);
+}
+
+.app-shell[data-theme='light'] .vibe-scrim {
+  display: block;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(226, 232, 238, 0.2) 100%);
+}
 
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid var(--focus, #111);
@@ -125,13 +155,13 @@ body::after,
 .icon-button,
 .tactile-icon-control {
   display: inline-grid;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: 50%;
   background: transparent;
   color: var(--ink-muted);
   box-shadow: none;
@@ -186,7 +216,8 @@ body::after,
 
 .site-header-top { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 8px; height: auto; margin: 4px 6px 16px; padding: 0 0 16px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
 
-.brand { display: flex; min-width: 0; align-items: center; padding: 0; color: #fff; font-size: 21px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; text-decoration: none; }
+.brand { display: flex; min-width: 0; align-items: center; gap: 7px; padding: 0; color: #fff; font-size: 21px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; text-decoration: none; }
+.brand-mark { width: 25px; height: 25px; flex: 0 0 25px; object-fit: contain; }
 .brand i { color: var(--wave); font-style: normal; }
 .brand-mono { display: none; }
 
@@ -249,7 +280,7 @@ body::after,
 .session-copy small i { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #3ddc84; }
 
 .header-buttons { display: flex; gap: 6px; }
-.header-buttons .icon-button { width: auto; height: 30px; flex: 1 1 0; border-radius: 10px; background: rgba(255, 255, 255, 0.055); color: rgba(255, 255, 255, 0.72); }
+.header-buttons .icon-button { width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; background: rgba(255, 255, 255, 0.055); color: rgba(255, 255, 255, 0.72); }
 .header-buttons .icon-button:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 
 /* Collapsed: the rail all but disappears. A single 44px pill keeps the expand control; the
@@ -573,9 +604,9 @@ body::after,
 
 .track-row > * { min-width: 0; }
 .track-row:hover { background: var(--hover-wash); transform: none; }
-.track-row.is-current { background: var(--accent-wash); box-shadow: none; }
+.track-row.is-current { background: color-mix(in srgb, var(--wave) 14%, transparent); box-shadow: none; }
 .track-row.is-current .card-title-row h3,
-.track-row.is-current .track-index { color: var(--accent); }
+.track-row.is-current .track-index { color: var(--wave); }
 
 .track-index { color: var(--ink-faint); font-family: var(--font-mono); font-size: 12px; text-align: center; }
 
@@ -634,7 +665,7 @@ body::after,
   gap: 11px;
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 20px;
+  border-radius: 24px;
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.035)), rgba(15, 17, 22, 0.46);
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.1), 0 22px 52px -28px rgba(0, 0, 0, 0.72);
   backdrop-filter: blur(26px) saturate(145%);
@@ -643,7 +674,7 @@ body::after,
 .now-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .now-panel-head h2 { margin: 0; color: rgba(255, 255, 255, 0.7); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
 .now-panel-state { padding: 2px 8px; border-radius: 999px; background: var(--active-wash); color: var(--ink-muted); font-size: 11px; font-weight: 600; }
-.now-panel-state[data-live='true'] { background: rgba(238, 107, 95, 0.14); color: var(--accent); }
+.now-panel-state[data-live='true'] { background: color-mix(in srgb, var(--wave) 14%, transparent); color: var(--wave); }
 
 .now-panel-art { position: relative; display: block; width: 100%; aspect-ratio: 1 / 1; padding: 0; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 14px; background: var(--surface-raised); box-shadow: inset 0 1px rgba(255, 255, 255, 0.14), 0 14px 28px -18px rgba(0, 0, 0, 0.8); cursor: pointer; }
 .now-panel-art .artwork { width: 100%; height: 100%; border-radius: 0; }
@@ -671,7 +702,7 @@ body::after,
 .now-panel-info p { margin: 2px 0 0; overflow: hidden; color: var(--ink-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 
 .feature-progress { height: 3px; overflow: hidden; border-radius: 3px; background: var(--border-strong); }
-.feature-progress span { display: block; width: 100%; height: 100%; background: var(--ink); box-shadow: none; transform-origin: left center; }
+.feature-progress span { display: block; width: 100%; height: 100%; background: var(--wave); box-shadow: none; transform-origin: left center; }
 
 .now-panel-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .feature-open { padding: 0; border: 0; background: none; color: var(--ink-muted); font: inherit; cursor: pointer; }
@@ -1032,7 +1063,7 @@ body::after,
 .library-section-icon { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: var(--surface); color: var(--ink-muted); }
 
 .library-state,
-.state-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 24px; border: 0; border-radius: 18px; background: var(--surface); box-shadow: none; color: var(--ink-muted); }
+.state-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 24px; border: 0; border-radius: var(--radius-panel); background: var(--surface); box-shadow: none; color: var(--ink-muted); }
 .library-state h2,
 .library-state h3,
 .state-card h3 { margin: 0; color: var(--ink); font-size: 16px; font-weight: 700; }
@@ -1044,7 +1075,7 @@ body::after,
 .library-sync-notice { padding: 10px 14px; border-radius: 12px; background: var(--surface); color: var(--ink-muted); font-size: 13px; }
 
 .playlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
-.playlist-card { display: flex; min-width: 0; flex-direction: column; gap: 12px; padding: 16px; border: 0; border-radius: 16px; background: var(--surface); box-shadow: none; }
+.playlist-card { display: flex; min-width: 0; flex-direction: column; gap: 12px; padding: 16px; border: 0; border-radius: var(--radius-panel); background: var(--surface); box-shadow: none; }
 .playlist-card-head { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 14px; }
 .playlist-card-actions { display: flex; gap: 4px; }
 
@@ -1164,8 +1195,7 @@ body::after,
   .now-panel-play { transition: none; }
 }
 
-.hero-banner .tactile-control { background: #fff; color: #0d0d0f; }
-.hero-banner .tactile-control:hover { opacity: 0.9; }
+/* Primary/secondary variants decide color — do not force white hero CTAs. */
 
 .album-page { overflow: hidden; border-radius: 22px; }
 
@@ -1212,8 +1242,6 @@ body::after,
 .artist-hero-copy h1 { margin: 0; color: #fff; font-size: clamp(36px, 7cqw, 84px); font-weight: 800; letter-spacing: -0.04em; line-height: 0.98; overflow-wrap: anywhere; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.4); }
 .artist-hero-copy p { margin: 8px 0 0; color: rgba(255, 255, 255, 0.8); font-size: 14px; }
 .artist-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
-.artist-hero .tactile-control { background: #fff; color: #0d0d0f; }
-.artist-hero .tactile-control:hover { opacity: 0.9; }
 
 /* Top songs: art · title · artists · plays · album (narrow: art, title over artist). */
 .top-songs { display: flex; flex-direction: column; }
@@ -1332,6 +1360,51 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
  * AuraShader paints the cover's palette; the veil only softens it, and each
  * surface is real frosted glass (blur + saturate) so the colour glows through. */
 .listening-world__veil { background: rgba(8, 8, 10, 0.16); backdrop-filter: blur(56px) saturate(150%); }
+
+.app-shell[data-theme='light'] .listening-world__atmosphere .music-flow-canvas {
+  filter: saturate(1.35) contrast(0.92) brightness(1.06);
+  opacity: 0.48;
+  mix-blend-mode: multiply;
+}
+
+.app-shell[data-theme='light'] .listening-world__veil {
+  background: rgba(246, 249, 252, 0.34);
+  backdrop-filter: blur(48px) saturate(145%);
+  -webkit-backdrop-filter: blur(48px) saturate(145%);
+}
+
+.app-shell[data-theme='light'] .ytm-stage-container {
+  background: linear-gradient(145deg, rgba(248, 251, 253, 0.38), rgba(231, 237, 242, 0.2));
+}
+
+.app-shell[data-theme='light'] .ytm-stage-veil {
+  background:
+    radial-gradient(circle at 22% 34%, rgba(255, 255, 255, 0.2), transparent 62%),
+    linear-gradient(180deg, rgba(246, 249, 252, 0.2), rgba(230, 236, 242, 0.42));
+  backdrop-filter: blur(24px) saturate(125%);
+  -webkit-backdrop-filter: blur(24px) saturate(125%);
+}
+
+.ytm-stage-shader {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ytm-stage-shader canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0.72;
+}
+
+.app-shell[data-theme='light'] .ytm-stage-shader canvas {
+  opacity: 0.46;
+  filter: saturate(1.35) contrast(0.92) brightness(1.06);
+  mix-blend-mode: multiply;
+}
 
 .player-sidepanel {
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -1468,7 +1541,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 }
 
 .am-btn:hover { background: var(--hover-wash); color: #fff; }
-.am-btn.is-on { color: var(--accent-bright, #ffaaa0); background: rgba(255, 255, 255, 0.08); }
+.am-btn.is-on { color: var(--wave); background: color-mix(in srgb, var(--wave) 14%, transparent); }
 .am-btn--skip { width: 38px; height: 38px; color: #fff; }
 
 .am-play {
@@ -1479,8 +1552,8 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
   margin: 0 2px;
   border: 0;
   border-radius: 50%;
-  background: #fff;
-  color: #111;
+  background: var(--wave);
+  color: var(--wave-ink);
   cursor: pointer;
   transition: transform var(--d-fast) var(--ease-press);
 }
@@ -1513,15 +1586,15 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
   appearance: none;
 }
 
-.am-range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, #fff var(--fill, 0%), rgba(255, 255, 255, 0.24) var(--fill, 0%)); }
+.am-range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--wave) var(--fill, 0%), rgba(255, 255, 255, 0.24) var(--fill, 0%)); }
 .am-range::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.24); }
-.am-range::-moz-range-progress { height: 4px; border-radius: 2px; background: #fff; }
+.am-range::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--wave); }
 .am-range::-webkit-slider-thumb { width: 0; height: 0; margin-top: 0; border: 0; -webkit-appearance: none; }
 .am-range::-moz-range-thumb { width: 0; height: 0; border: 0; }
 .am-range:hover::-webkit-slider-thumb,
-.am-range:focus-visible::-webkit-slider-thumb { width: 11px; height: 11px; margin-top: -3.5px; border-radius: 50%; background: #fff; }
+.am-range:focus-visible::-webkit-slider-thumb { width: 11px; height: 11px; margin-top: -3.5px; border-radius: 50%; background: var(--wave); }
 .am-range:hover::-moz-range-thumb,
-.am-range:focus-visible::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; background: #fff; }
+.am-range:focus-visible::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; background: var(--wave); }
 
 .am-volume { width: 96px; }
 
@@ -1712,6 +1785,119 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 }
 
 .am-queue-empty svg { flex: 0 0 auto; margin-top: 1px; opacity: 0.7; }
+
+/* ---------- Queue refinement: quiet editorial glass ----------
+ * The active song is a state, not a second card. Let the cover palette own a
+ * single rail and dot so the queue feels like part of Allegra's player chrome. */
+.am-queue-scrim {
+  background: rgba(5, 7, 10, 0.28);
+  backdrop-filter: blur(4px) saturate(115%);
+  -webkit-backdrop-filter: blur(4px) saturate(115%);
+}
+
+.am-queue {
+  width: min(376px, calc(100vw - 28px));
+  border-color: rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.09), transparent 34%),
+    rgba(16, 17, 21, 0.88);
+  box-shadow:
+    0 30px 70px -24px rgba(0, 0, 0, 0.76),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(38px) saturate(180%);
+  -webkit-backdrop-filter: blur(38px) saturate(180%);
+}
+
+.am-queue-head {
+  padding: 15px 16px 12px;
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.am-queue-title strong { font-size: 14px; letter-spacing: -0.01em; }
+.am-queue-title span { font-size: 11px; }
+
+.am-queue-now,
+.am-queue-section { padding: 13px 12px 9px; gap: 7px; }
+.am-queue-now { border-bottom-color: rgba(255, 255, 255, 0.08); }
+.am-queue-section { padding-bottom: 13px; }
+
+.am-queue-eyebrow { padding: 0 8px; font-size: 10px; letter-spacing: 0.1em; }
+.am-queue-list { gap: 1px; max-height: min(42vh, 340px); }
+
+.am-queue-row {
+  position: relative;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  transition: background-color var(--d-fast) var(--ease-standard);
+}
+
+.am-queue-row:hover { background: rgba(255, 255, 255, 0.055); }
+.am-queue-row:active { transform: none; }
+
+.am-queue-row.is-current {
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  padding: 9px 9px 9px 12px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--art-primary, var(--accent)) 13%, transparent), transparent 76%);
+  box-shadow: none;
+  cursor: default;
+}
+
+.am-queue-row.is-current::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 2px;
+  width: 2px;
+  border-radius: 3px;
+  background: var(--art-primary, var(--accent));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--art-primary, var(--accent)) 58%, transparent);
+  content: '';
+}
+
+.am-queue-row .artwork { width: 40px; height: 40px; border-radius: 9px; }
+.am-queue-row.is-current .artwork { width: 42px; height: 42px; }
+.am-queue-copy { gap: 3px; }
+.am-queue-copy strong { font-size: 12.5px; font-weight: 620; }
+.am-queue-copy small { font-size: 10.5px; }
+.am-queue-index { color: rgba(245, 245, 247, 0.34); font-size: 10px; }
+.am-queue-time,
+.am-queue-meta { font-size: 10.5px; }
+.am-queue-row.is-current .am-queue-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--art-primary, var(--accent-bright));
+  font-size: 10px;
+  font-weight: 650;
+}
+.am-queue-row.is-current .am-queue-meta::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 9px currentColor;
+  content: '';
+}
+
+.app-shell[data-theme='light'] .am-queue-scrim { background: rgba(42, 49, 58, 0.16); }
+.app-shell[data-theme='light'] .am-queue {
+  --ink: #17191c;
+  --ink-muted: #69727b;
+  border-color: rgba(30, 38, 46, 0.14);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.82), transparent 38%),
+    rgba(246, 249, 251, 0.78);
+  box-shadow: 0 28px 64px -24px rgba(49, 60, 72, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+.app-shell[data-theme='light'] .am-queue-head { border-bottom-color: rgba(30, 38, 46, 0.1); }
+.app-shell[data-theme='light'] .am-queue-now { border-bottom-color: rgba(30, 38, 46, 0.08); }
+.app-shell[data-theme='light'] .am-queue-copy strong,
+.app-shell[data-theme='light'] .am-queue-title strong { color: #17191c; }
+.app-shell[data-theme='light'] .am-queue-index,
+.app-shell[data-theme='light'] .am-queue-time { color: rgba(45, 54, 62, 0.5); }
+.app-shell[data-theme='light'] .am-queue-row:hover { background: rgba(42, 52, 62, 0.055); }
 
 @media (max-width: 1100px) {
   .mini-player { grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; }
@@ -1966,6 +2152,27 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 
 /* Keeps the text on black while letting the glow breathe on the right. */
 .hero-banner::after { background: linear-gradient(90deg, rgba(5, 5, 6, 0.72) 0%, rgba(5, 5, 6, 0.3) 55%, rgba(5, 5, 6, 0.1) 100%); }
+
+.app-shell[data-theme='light'] .hero-banner {
+  background: linear-gradient(120deg, rgba(248, 250, 252, 0.82), rgba(238, 243, 247, 0.54));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.84), 0 20px 50px -24px rgba(72, 82, 96, 0.28);
+}
+
+.app-shell[data-theme='light'] .hero-banner::after {
+  background: linear-gradient(90deg, rgba(248, 250, 252, 0.62) 0%, rgba(248, 250, 252, 0.22) 55%, rgba(248, 250, 252, 0.04) 100%);
+}
+
+.app-shell[data-theme='light'] .hero-banner-shader canvas {
+  opacity: 0.52;
+  filter: saturate(1.35) contrast(0.9) brightness(1.08);
+  mix-blend-mode: multiply;
+}
+
+.app-shell[data-theme='light'] .hero-banner-eyebrow,
+.app-shell[data-theme='light'] .hero-banner-copy > p,
+.app-shell[data-theme='light'] .hero-banner-meta { color: var(--ink-muted); }
+
+.app-shell[data-theme='light'] .hero-banner h1 { color: var(--ink); }
 
 /* ---------- Cinematic detail pages (artist, playlist, liked) ----------
  * The photo runs to the very top and both screen edges; the controls float over it as glass; the
@@ -2613,7 +2820,13 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .shelf-link:hover { color: var(--ink); }
 
 .guest-nudge { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px 12px 18px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); box-shadow: var(--glass-edge); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); color: var(--ink-soft); font-size: 14px; }
-.guest-nudge .tactile-control { min-height: 40px; flex: 0 0 auto; }
+.guest-nudge .tactile-control {
+  min-width: 132px;
+  min-height: 40px;
+  padding-inline: 18px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 
 /* ---------- Shelves and tiles ---------- */
 .shelf { display: flex; gap: 16px; margin: 0 calc(var(--page-gutter, 36px) * -1); padding: 4px var(--page-gutter, 36px) 10px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-padding-inline: var(--page-gutter, 36px); scrollbar-width: none; }
@@ -2666,7 +2879,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .taste-overlay-backdrop .music-flow-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; opacity: 0.9; }
 .taste-overlay-backdrop-wash { position: absolute; inset: 0; background: radial-gradient(70% 70% at 20% 18%, color-mix(in srgb, var(--preview-tint, var(--wave)) 24%, transparent), transparent 72%), linear-gradient(112deg, rgba(7, 9, 12, 0.08), rgba(7, 9, 12, 0.52) 76%); mix-blend-mode: screen; opacity: 0.72; }
 .taste-overlay-backdrop-vignette { position: absolute; inset: 0; background: radial-gradient(ellipse 78% 86% at 50% 44%, transparent 30%, rgba(3, 4, 5, 0.68) 100%), linear-gradient(180deg, rgba(3, 4, 5, 0.28), rgba(3, 4, 5, 0.62)); }
-.taste-overlay-close { position: fixed; z-index: 1; top: 20px; right: 20px; display: grid; width: 36px; height: 36px; place-items: center; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.7); cursor: pointer; transition: transform var(--d-fast) var(--ease-decelerate), background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
+.taste-overlay-close { position: fixed; z-index: 1; top: 20px; right: 20px; display: grid; width: 44px; height: 44px; place-items: center; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.7); cursor: pointer; transition: transform var(--d-fast) var(--ease-decelerate), background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
 .taste-overlay-close:hover { background: rgba(255, 255, 255, 0.16); color: #fff; transform: rotate(8deg) scale(1.04); }
 .taste-shell { position: relative; z-index: 2; display: grid; grid-template-columns: minmax(0, 640px) minmax(260px, 340px); gap: 40px; align-items: center; width: min(1100px, 100%); min-height: 100dvh; margin: 0 auto; padding: 72px 32px; }
 .taste-panel { width: 100%; }
@@ -2680,7 +2893,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .taste-rule { height: 0; margin: 20px 0; border-top: 1.5px dashed var(--border-strong); }
 
 .taste-chips { display: flex; flex-wrap: wrap; gap: 10px; }
-.taste-chip { position: relative; display: inline-flex; min-height: 44px; align-items: center; gap: 10px; padding: 0 16px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface-raised); color: var(--ink-soft); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: border-color var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
+.taste-chip { position: relative; display: inline-flex; min-height: 44px; align-items: center; gap: 10px; padding: 0 16px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: var(--ink-soft); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; backdrop-filter: blur(var(--blur-sm)); -webkit-backdrop-filter: blur(var(--blur-sm)); transition: border-color var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
 .taste-chip:hover { background: var(--surface-hover); color: var(--ink); }
 .taste-chip.is-active { border-color: color-mix(in srgb, var(--wave) 65%, transparent); background: color-mix(in srgb, var(--wave) 14%, transparent); color: var(--ink); }
 .taste-chip--artist { min-height: 52px; padding: 0 16px 0 8px; }
@@ -2696,7 +2909,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 
 /* Genre bubbles (Step 1): a size-varied field, after Apple Music's tappable genre bubbles. */
 .taste-bubbles { align-items: center; }
-.taste-bubble { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface-raised); color: var(--ink-soft); font: inherit; font-weight: 600; cursor: pointer; transition: border-color var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-decelerate); }
+.taste-bubble { position: relative; display: inline-flex; min-height: 44px; align-items: center; gap: 8px; padding: 0 18px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: var(--ink-soft); font: inherit; font-weight: 600; cursor: pointer; backdrop-filter: blur(var(--blur-sm)); -webkit-backdrop-filter: blur(var(--blur-sm)); transition: border-color var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-decelerate); }
 .taste-bubble:hover { background: var(--surface-hover); color: var(--ink); transform: translateY(-1px); }
 .taste-bubble--sm { min-height: 40px; font-size: 13px; }
 .taste-bubble--md { min-height: 48px; font-size: 14px; }
@@ -2738,13 +2951,13 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 
 .auth-layer { padding-top: min(12vh, 110px); }
 .auth-sheet { width: min(440px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 28px; border-radius: 30px; }
-.sheet-close { position: absolute; top: 14px; right: 14px; display: grid; width: 32px; height: 32px; place-items: center; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.7); cursor: pointer; }
+.sheet-close { position: absolute; top: 14px; right: 14px; display: grid; width: 44px; height: 44px; place-items: center; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.7); cursor: pointer; }
 .sheet-close { transition: transform var(--d-fast) var(--ease-decelerate), background-color var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard); }
 .sheet-close:hover { background: rgba(255, 255, 255, 0.16); color: #fff; transform: rotate(8deg) scale(1.04); }
 .auth-body h2 { margin: 18px 0 8px; font-size: 26px; font-weight: 700; letter-spacing: -0.035em; }
 .auth-lede { margin: 0 0 20px; color: rgba(255, 255, 255, 0.62); font-size: 14px; line-height: 1.5; }
 .auth-form { display: flex; flex-direction: column; gap: 14px; }
-.auth-submit { width: 100%; min-height: 50px; margin-top: 4px; border-radius: 999px; font-size: 15px; transition: transform var(--d-fast) var(--ease-press), box-shadow var(--d-base) var(--ease-standard), filter var(--d-fast) var(--ease-standard), background-color var(--d-base) var(--ease-standard); }
+.auth-submit { width: 100%; min-width: min(100%, 168px); min-height: 50px; margin-top: 4px; padding-inline: 24px; border-radius: 999px; font-size: 15px; white-space: nowrap; transition: transform var(--d-fast) var(--ease-press), box-shadow var(--d-base) var(--ease-standard), filter var(--d-fast) var(--ease-standard), background-color var(--d-base) var(--ease-standard); }
 .auth-submit:not(:disabled):hover { transform: translateY(-1px); }
 .auth-submit:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .auth-submit:disabled { opacity: 0.55; }
@@ -2755,7 +2968,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .auth-avatar { display: grid; width: 60px; height: 60px; place-items: center; border-radius: 50%; background: linear-gradient(135deg, var(--wave), #7fb0ff); color: var(--wave-ink); font-size: 24px; font-weight: 700; }
 
 .auth-tabs { display: inline-flex; padding: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); }
-.auth-tab { position: relative; padding: 8px 16px; border: 0; border-radius: 999px; background: none; color: rgba(255, 255, 255, 0.62); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: color var(--d-fast) var(--ease-standard); }
+.auth-tab { position: relative; min-width: max-content; padding: 8px 16px; border: 0; border-radius: 999px; background: none; color: rgba(255, 255, 255, 0.62); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: color var(--d-fast) var(--ease-standard); }
 .auth-tab[aria-selected='true'] { color: #fff; }
 .auth-tab > span { position: relative; z-index: 1; }
 .auth-tab-pill { position: absolute; inset: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
@@ -2811,7 +3024,102 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 button.session-chip { width: 100%; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background-color var(--d-fast) var(--ease-standard); }
 button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
 
+/* ---------- Quick picks: a quiet listening filter ----------
+ * Keep the shortcuts discoverable without turning the top bar into another
+ * card. The active mood is the only surface; the surrounding row stays clear. */
+.panel-topbar .mood-pills {
+  position: relative;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 0 0 0 14px;
+  border-left: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.panel-topbar .mood-pills-label {
+  flex: 0 0 auto;
+  margin-right: 5px;
+  color: var(--ink-faint);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.panel-topbar .mood-pill,
+.panel-topbar .mood-pill:nth-child(n) {
+  position: relative;
+  isolation: isolate;
+  height: 30px;
+  min-width: 0;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: 0;
+  transition: color var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-standard);
+}
+
+.panel-topbar .mood-pill > span:not(.mood-pill-bg) { position: relative; z-index: 1; }
+
+.panel-topbar .mood-pill::after {
+  position: absolute;
+  right: 12px;
+  bottom: 1px;
+  left: 12px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+  opacity: 0;
+  transform: scaleX(0.35);
+  transform-origin: center;
+  transition: transform var(--d-fast) var(--ease-standard), opacity var(--d-fast) var(--ease-standard);
+}
+
+.panel-topbar .mood-pill:hover,
+.panel-topbar .mood-pill:focus-visible { color: var(--ink); transform: translateY(-1px); }
+.panel-topbar .mood-pill:hover { background: var(--hover-wash); }
+.panel-topbar .mood-pill:hover::after,
+.panel-topbar .mood-pill:focus-visible::after { opacity: 0.44; transform: scaleX(1); }
+.panel-topbar .mood-pill[aria-pressed='true'] { color: var(--ink); font-weight: 650; transform: none; }
+.panel-topbar .mood-pill[aria-pressed='true']::after { opacity: 0.8; transform: scaleX(1); }
+.panel-topbar .mood-pill-bg {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--art-primary, var(--accent)) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--art-primary, var(--accent)) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.app-shell[data-theme='light'] .panel-topbar .mood-pills { border-left-color: rgba(20, 28, 36, 0.14); }
+.app-shell[data-theme='light'] .panel-topbar .mood-pill:hover,
+.app-shell[data-theme='light'] .panel-topbar .mood-pill:focus-visible,
+.app-shell[data-theme='light'] .panel-topbar .mood-pill[aria-pressed='true'] { color: #17191c; }
+.app-shell[data-theme='light'] .panel-topbar .mood-pill-bg { background: color-mix(in srgb, var(--art-primary, var(--accent)) 12%, rgba(255, 255, 255, 0.52)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-topbar .mood-pill,
+  .panel-topbar .mood-pill::after { transition: none; }
+}
+
 @media (max-width: 900px) {
+  .panel-topbar .mood-pills {
+    flex: 1 1 100%;
+    order: 3;
+    overflow-x: auto;
+    padding: 8px 0 0;
+    border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-left: 0;
+    scrollbar-width: none;
+  }
+  .panel-topbar .mood-pills::-webkit-scrollbar { display: none; }
   .home-hero { flex-direction: column; align-items: stretch; }
   .home-resume { width: 100%; }
   .guest-nudge { flex-direction: column; align-items: flex-start; }

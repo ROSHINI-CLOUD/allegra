@@ -468,10 +468,21 @@ export default function App() {
     (account.taste?.topArtists?.length ?? 0) > 0 ||
     Boolean(audio.currentSong?.id);
 
+  // Taste fingerprint, not now-playing id: skipping tracks must not re-bill Bedrock.
+  const tasteFingerprint = useMemo(() => {
+    const liked = likedSongs.map((song) => song.id).slice(0, 30).join(',');
+    const recent = recentlyPlayed.map((song) => song.id).slice(0, 20).join(',');
+    const artists = (account.taste?.topArtists ?? []).slice(0, 12).join(',');
+    return `${liked}|${recent}|${artists}`;
+  }, [likedSongs, recentlyPlayed, account.taste?.topArtists]);
+  const currentSongIdRef = useRef(audio.currentSong?.id);
+  currentSongIdRef.current = audio.currentSong?.id;
+
   useEffect(() => {
     if (personalLoading || !hasTasteSignal) return undefined;
     const controller = new AbortController();
-    fetchAiRecommendations(audio.currentSong?.id, controller.signal)
+    // Snapshot now-playing for prompt colouring on a cache miss; deps stay taste-stable.
+    fetchAiRecommendations(currentSongIdRef.current, controller.signal)
       .then((response) => {
         setAiPicks(response.songs);
         setAiPicksReasoning(response.reasoning);
@@ -482,7 +493,7 @@ export default function App() {
         setAiPicks([]);
       });
     return () => controller.abort();
-  }, [audio.currentSong?.id, personalLoading, hasTasteSignal]);
+  }, [tasteFingerprint, personalLoading, hasTasteSignal]);
 
   const displaySongs = query.trim() ? songs : curatedSongs(featured);
   const activeSong = audio.currentSong ?? displaySongs[0] ?? null;
@@ -856,12 +867,12 @@ export default function App() {
   return (
     <PlaylistsContext.Provider value={playlists}>
     <div ref={shellRef} className={`app-shell ${motionPaused ? 'is-motion-paused' : ''} ${navCollapsed ? 'is-nav-collapsed' : ''}`} data-theme={theme} data-motion-paused={motionPaused ? 'true' : undefined} style={shellStyle}>
-      <DynamicAura paused={motionPaused} energy={audio.isPlaying ? 0.82 : 0.38} mood={audio.isPlaying ? 'energy' : 'chill'} palette={shaderPalette} />
+      <DynamicAura paused={motionPaused} energy={audio.isPlaying ? 0.82 : 0.38} mood={audio.isPlaying ? 'energy' : 'chill'} palette={shaderPalette} light={theme === 'light'} />
       <a className="skip-link" href="#main-content">Skip to content</a>
       <AuthDialog open={authOpen} mode={authMode} account={account} onModeChange={setAuthMode} onClose={() => setAuthOpen(false)} />
       {view !== 'words' && (
         <header className="site-header">
-          <div className="site-header-top"><a className="brand" href="#home" aria-label="Allegra home"><span className="brand-word">Allegra<i>.</i></span><span className="brand-mono" aria-hidden="true">A<i>.</i></span></a><button className="icon-button nav-collapse-toggle" type="button" aria-label={navCollapsed ? 'Expand navigation' : 'Collapse navigation'} title={navCollapsed ? 'Expand navigation' : 'Collapse navigation'} onClick={toggleNavigation}>{navCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}</button></div>
+          <div className="site-header-top"><a className="brand" href="#home" aria-label="Allegra home"><img className="brand-mark" src="/allegra-logo.png" alt="" /><span className="brand-word">Allegra<i>.</i></span><span className="brand-mono" aria-hidden="true">A<i>.</i></span></a><button className="icon-button nav-collapse-toggle" type="button" aria-label={navCollapsed ? 'Expand navigation' : 'Collapse navigation'} title={navCollapsed ? 'Expand navigation' : 'Collapse navigation'} onClick={toggleNavigation}>{navCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}</button></div>
           <nav className="desktop-nav" aria-label="Primary navigation">
             <a className={`nav-link ${view === 'home' || view === 'shared' ? 'is-active' : ''}`} aria-current={view === 'home' ? 'page' : undefined} href="#home" title="Home"><House size={22} strokeWidth={1.5} aria-hidden="true" /><span className="nav-label">Home</span></a>
             <a className={`nav-link ${view === 'discover' || view === 'album' || view === 'artist' ? 'is-active' : ''}`} aria-current={view === 'discover' ? 'page' : undefined} href="#discover" title="Browse"><Compass size={22} strokeWidth={1.5} aria-hidden="true" /><span className="nav-label">Browse</span></a>
@@ -889,7 +900,7 @@ export default function App() {
           <div className="panel-topbar">
             {isDetailView || isCollectionView ? <button type="button" className="topbar-back" onClick={() => goBack(view === 'liked' || view === 'playlist' ? '#library' : view === 'shared' ? '#home' : '#discover')} aria-label="Back"><ArrowLeft size={17} aria-hidden="true" /><span>Back</span></button> : null}
             <nav className="crumbs" aria-label="Breadcrumb"><span>{view === 'home' || view === 'shared' ? 'Home' : view === 'library' || view === 'liked' || view === 'playlist' ? 'Library' : 'Browse'}</span><ChevronRight size={14} aria-hidden="true" /><strong>{view === 'home' ? 'For you' : view === 'shared' ? 'Shared playlist' : view === 'library' ? 'Your music' : view === 'album' ? 'Album' : view === 'artist' ? 'Artist' : view === 'liked' ? 'Liked Songs' : view === 'playlist' ? 'Playlist' : query.trim() ? 'Search' : 'Made for you'}</strong></nav>
-            <div className="mood-pills" role="group" aria-label="Quick picks">{MOOD_PROMPTS.map((prompt) => <button key={prompt} type="button" className="mood-pill" aria-pressed={query === prompt} onClick={() => { if (view !== 'discover') window.location.hash = '#discover'; setQuery(query === prompt ? '' : prompt); }}>{query === prompt ? <motion.span layoutId="mood-pill-bg" className="mood-pill-bg" transition={spring.tactile} /> : null}<span>{prompt}</span></button>)}</div>
+            <div className="mood-pills" role="group" aria-label="Quick picks"><span className="mood-pills-label" aria-hidden="true">Quick picks</span>{MOOD_PROMPTS.map((prompt) => <button key={prompt} type="button" className="mood-pill" aria-pressed={query === prompt} onClick={() => { if (view !== 'discover') window.location.hash = '#discover'; setQuery(query === prompt ? '' : prompt); }}>{query === prompt ? <motion.span layoutId="mood-pill-bg" className="mood-pill-bg" transition={spring.tactile} /> : null}<span>{prompt}</span></button>)}</div>
             <CommandPalette
               open={paletteOpen}
               onOpen={() => setPaletteOpen(true)}
@@ -963,7 +974,7 @@ export default function App() {
         <div className="browse-grid">
           <div className="browse-main">
             <motion.section className="hero-banner" variants={pageVariants} initial="hidden" animate="visible" transition={pageTransition} aria-label="Featured track" data-live={audio.isPlaying ? 'true' : undefined}>
-                <div className="hero-banner-shader" aria-hidden="true"><MusicFlowShader energy={audio.isPlaying ? 0.7 : 0.4} palette={bannerPalette} /></div>
+                 <div className="hero-banner-shader" aria-hidden="true"><MusicFlowShader energy={audio.isPlaying ? 0.7 : 0.4} palette={bannerPalette} light={theme === 'light'} /></div>
               <motion.div className="hero-banner-copy" variants={itemVariants}>
                 <span className="hero-banner-eyebrow">{isCurrent ? 'Now playing' : 'Curated playlist'}</span>
                 <h1>{activeSong ? activeSong.title.replace(/\s*\([^)]*\)\s*/g, ' ').trim() : 'Good music, ready when you are'}</h1>
@@ -1138,7 +1149,7 @@ export default function App() {
 
                 <div className="am-queue-section">
                   <span className="am-queue-eyebrow">Up next</span>
-                  <div className="am-queue-list" role="list">
+                  <div className="am-queue-list">
                     {playingNext.length === 0 ? (
                       <div className="am-queue-empty">
                         <ListMusic size={18} aria-hidden="true" />
@@ -1150,7 +1161,7 @@ export default function App() {
                           key={`${song.id}-${index}`}
                           type="button"
                           className="am-queue-row"
-                          role="listitem"
+                          aria-label={`Play ${song.title} by ${song.artist}`}
                           onClick={() => {
                             playSong(song, audio.queue);
                             setQueueOpen(false);
@@ -1199,6 +1210,7 @@ export default function App() {
           onToggleTranslate: toggleTranslate
         }}
         palette={palette}
+        light={theme === 'light'}
         energy={playerEnergy}
         suggestions={suggestions.length > 0 ? suggestions : aiPicks}
         muted={audio.isMuted}

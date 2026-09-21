@@ -1,66 +1,105 @@
 /*
  * Allegra design tokens.
  *
- * One palette, one radius scale, one type scale, one motion scale.
- * Token names describe the colour they hold. If a value changes hue,
- * the name changes with it.
- *
- * Principle: the album artwork is the most saturated thing on screen.
- * Every surface here is desaturated so the music stays the subject.
+ * Ultra-premium production dark mode palette & modern glassmorphism design system.
+ * Inspired by Apple Music, YouTube Music, & Vercel typography & restraint.
  */
 
 :root {
   color-scheme: dark;
 
-  /* Surfaces: near-black with a cool cast, lifted in even steps. */
-  --bg: #0a0e14;
-  --bg-deep: #06090e;
-  --surface: #11161f;
-  --surface-raised: #161d28;
-  --surface-hover: #1c2432;
-  --surface-sunken: #080c11;
+  /* Surfaces: quiet listening-room canvas (DESIGN.md Soft Signal) */
+  --bg: #0a0b0e;
+  --bg-deep: #07080b;
+  --bg-subtle: #12141a;
+  --surface: rgba(27, 32, 36, 0.9);
+  --surface-raised: rgba(31, 37, 41, 0.94);
+  --surface-hover: rgba(43, 50, 55, 0.94);
+  --surface-sunken: #0d1012;
+  --surface-glass: rgba(24, 29, 32, 0.72);
+  --surface-glass-heavy: rgba(18, 21, 23, 0.94);
 
-  /* Text. Every value below is >= 4.5:1 on --bg. */
-  --ink: #eef2f7;        /* 16.8:1 */
-  --ink-soft: #c3ccd8;   /* 11.2:1 */
-  --ink-muted: #96a1b2;  /*  7.4:1 */
-  --ink-faint: #7d8b9c;  /*  5.5:1 */
+  /* Text: high-contrast cool white */
+  --ink: #f4f1ea;
+  --ink-soft: #d1d0c9;
+  --ink-muted: #8e9498;
+  --ink-faint: #626b70;
 
-  /* Hairlines. */
-  --border: rgba(199, 216, 238, 0.10);
-  --border-strong: rgba(199, 216, 238, 0.20);
+  /* Hairlines & glass borders */
+  --border: #2b3237;
+  --border-strong: #454d52;
+  --border-subtle: rgba(255, 255, 255, 0.06);
 
-  /* One accent. It marks what is playing, what is focused, what is next. */
-  --accent: #5b9dff;         /* 7.1:1 on --bg */
-  --accent-bright: #8fbcff;
-  --accent-deep: #2f6fd0;
-  --accent-ink: #061020;     /* text on a solid --accent fill, 6.9:1 */
-  --accent-wash: rgba(91, 157, 255, 0.10);
-  --accent-line: rgba(91, 157, 255, 0.38);
+  /* Single aqua accent — warmer highlights for focus/playback */
+  --accent: #ee6b5f;
+  --accent-bright: #ffaaa0;
+  --accent-deep: #783e44;
+  --accent-ink: #121416;
+  --accent-wash: rgba(238, 107, 95, 0.14);
+  --accent-glow: rgba(238, 107, 95, 0.32);
+  --accent-line: rgba(238, 107, 95, 0.42);
+  /* Stable action color — soft chartreuse, not neon lime */
+  --wave: #d9e66a;
+  --wave-ink: #17180d;
+  --vibe-lime: var(--wave);
+  --vibe-blue: #7bafd4;
 
-  /* Radius. Panels 20, controls 12, art 10, pills full. No other values. */
-  --radius-panel: 20px;
-  --radius-control: 12px;
-  --radius-art: 10px;
+  /* Gradients */
+  --gradient-hero: radial-gradient(circle at 68% 42%, rgba(123, 175, 212, 0.18), transparent 58%);
+  --gradient-glass: linear-gradient(135deg, rgba(37, 43, 48, 0.92) 0%, rgba(18, 21, 23, 0.96) 100%);
+  --gradient-accent: linear-gradient(145deg, #ee6b5f 0%, #9a4d4b 100%);
+  --gradient-glow: radial-gradient(circle at center, rgba(238, 107, 95, 0.22) 0%, transparent 70%);
+
+  /* Stage backdrop fields */
+  --field-start: #283039;
+  --field-end: #0c1014;
+  --glass-highlight: rgba(255, 255, 255, 0.12);
+  --glass-surface: rgba(15, 23, 42, 0.65);
+  --glass-strong: rgba(10, 15, 28, 0.85);
+  --edge-glow: rgba(255, 255, 255, 0.08);
+
+  /* Backdrop Blur tokens */
+  --blur-sm: 8px;
+  --blur-md: 16px;
+  --blur-lg: 24px;
+  --blur-xl: 40px;
+
+  /* Spacing Scale */
+  --space-3xs: 4px;
+  --space-2xs: 8px;
+  --space-xs: 12px;
+  --space-sm: 16px;
+  --space-md: 24px;
+  --space-lg: 32px;
+  --space-xl: 48px;
+  --space-2xl: 64px;
+
+  /* Radius: Ultra-modern rounded panels & pill-shaped controls */
+  --radius-panel: 24px;
+  --radius-control: 14px;
+  --radius-art: 16px;
   --radius-pill: 999px;
 
-  /* Elevation. Tinted to the background, never pure black. */
-  --shadow-panel: 0 18px 44px rgba(4, 8, 16, 0.42);
-  --shadow-lift: 0 10px 26px rgba(4, 8, 16, 0.36);
+  /* Elevation & Floating Shadows */
+  --shadow-panel: inset 0 1px 0 var(--glass-highlight), 0 20px 40px -15px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border);
+  --shadow-lift: inset 0 1px 0 var(--glass-highlight), 0 12px 32px -6px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 30px rgba(56, 189, 248, 0.25);
+  --shadow-floating-nav: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 16px 36px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1);
 
-  /* Type scale. */
-  --text-display: clamp(44px, 5.6vw, 76px);
-  --text-title: clamp(26px, 3vw, 36px);
+  /* Type scale */
+  --text-display: clamp(40px, 5vw, 68px);
+  --text-title: clamp(24px, 2.8vw, 34px);
   --text-heading: 20px;
   --text-body: 15px;
   --text-small: 13px;
   --text-meta: 11px;
 
-  --tracking-display: -0.035em;
-  --tracking-title: -0.022em;
+  /* Tracking */
+  --tracking-display: -0.03em;
+  --tracking-title: -0.02em;
   --tracking-meta: 0.08em;
 
-  /* Motion. Every duration and easing in the app comes from here. */
+  /* Motion */
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
   --ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
@@ -73,9 +112,17 @@
   --d-spin: 900ms;
   --d-shimmer: 1400ms;
 
-  /* Layout. */
-  --shell-width: 1180px;
+  /* Shorthand transitions — color/opacity/transform only (never layout props) */
+  --transition-fast: color var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard), opacity var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-standard), box-shadow var(--d-fast) var(--ease-standard);
+  --transition-base: color var(--d-base) var(--ease-standard), background-color var(--d-base) var(--ease-standard), border-color var(--d-base) var(--ease-standard), opacity var(--d-base) var(--ease-standard), transform var(--d-base) var(--ease-standard), box-shadow var(--d-base) var(--ease-standard);
+  --transition-smooth: color var(--d-panel) var(--ease-decelerate), background-color var(--d-panel) var(--ease-decelerate), opacity var(--d-panel) var(--ease-decelerate), transform var(--d-panel) var(--ease-decelerate);
+
+  /* Layout */
+  --shell-width: 1280px;
   --gutter: clamp(16px, 3.5vw, 40px);
+  --workspace-gap: clamp(20px, 2.5vw, 36px);
+  --nav-height: 64px;
+  --mini-player-height: 72px;
 
   --font-body: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
