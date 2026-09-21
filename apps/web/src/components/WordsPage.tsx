@@ -11,7 +11,7 @@ import { MusicFlowShader } from './shader/MusicFlowShader';
 import { Artwork, EmptyState, IconButton, TactileButton } from './ui';
 import type { Palette } from '../lib/palette';
 import { formatTime } from '../lib/utils';
-import { itemVariants, motionTokens, pageVariants } from '../motion';
+import { motionTokens } from '../motion';
 
 export type WordsTab = 'upnext' | 'lyrics' | 'comments' | 'related';
 
@@ -109,7 +109,6 @@ export function WordsPage({
   onToggleTranslate
 }: WordsPageProps) {
   const reduced = useReducedMotion();
-  const transition = reduced ? { duration: motionTokens.duration.instant } : undefined;
   const [activeTab, setActiveTab] = useState<WordsTab>('lyrics');
   const [comments, setComments] = useState<CommentItem[]>(INITIAL_COMMENTS);
   const [newComment, setNewComment] = useState('');
@@ -134,12 +133,12 @@ export function WordsPage({
   return (
     <motion.div
       className="words-page words-page--ytm-full"
-      variants={pageVariants}
-      initial="hidden"
-      animate="visible"
-      transition={transition}
+      initial={reduced ? { opacity: 0 } : { opacity: 0, y: '8%' }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={reduced ? { opacity: 0 } : { opacity: 0, y: '8%' }}
+      transition={reduced ? { duration: motionTokens.duration.instant } : { duration: motionTokens.duration.panel, ease: motionTokens.ease.decelerate }}
     >
-      <motion.header className="words-ytm-bar" variants={itemVariants}>
+      <header className="words-ytm-bar">
         <TactileButton variant="ghost" icon={ArrowLeft} onClick={onDiscover} aria-label="Back to discover">
           Discover
         </TactileButton>
@@ -164,13 +163,13 @@ export function WordsPage({
         <span className="words-ytm-mark" aria-hidden="true">
           <Waves size={16} />
         </span>
-      </motion.header>
+      </header>
 
       {song ? (
-        <motion.div className="ytm-stage-container" variants={itemVariants}>
+        <div className="ytm-stage-container">
           {/* Backdrop ambient blur derived from artwork */}
           <div className="ytm-stage-shader" aria-hidden="true">
-            <MusicFlowShader energy={energy} palette={palette} light={light} />
+            <MusicFlowShader energy={Math.max(0.7, energy)} mood={isPlaying ? 'energy' : 'chill'} palette={palette} light={light} />
           </div>
           <div className="ytm-stage-veil" aria-hidden="true" />
 
@@ -178,7 +177,7 @@ export function WordsPage({
             {/* Left Column: Large Hero Artwork Card & Controls */}
             <div className="ytm-stage-left">
               <div className="ytm-hero-art-card">
-                <Artwork song={song} size="large" layoutId={`art-${song.id}`} />
+                <Artwork song={song} size="large" />
                 {isPlaying ? (
                   <div className="art-playing-glow" aria-hidden="true" />
                 ) : null}
@@ -391,9 +390,9 @@ export function WordsPage({
               </div>
             </div>
           </div>
-        </motion.div>
+        </div>
       ) : (
-        <motion.section className="words-empty-state" variants={itemVariants}>
+        <section className="words-empty-state">
           <EmptyState
             title="Start with a song"
             copy="Search for an artist, title, or feeling, then come back here for the full stage."
@@ -403,7 +402,7 @@ export function WordsPage({
               </TactileButton>
             }
           />
-        </motion.section>
+        </section>
       )}
     </motion.div>
   );

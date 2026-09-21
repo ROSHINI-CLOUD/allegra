@@ -1359,7 +1359,18 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 /* ---------- Player screen: the cover's colour, frosted ----------
  * AuraShader paints the cover's palette; the veil only softens it, and each
  * surface is real frosted glass (blur + saturate) so the colour glows through. */
-.listening-world__veil { background: rgba(8, 8, 10, 0.16); backdrop-filter: blur(56px) saturate(150%); }
+.listening-world__veil {
+  background:
+    radial-gradient(65% 50% at 50% 12%, color-mix(in srgb, var(--art-primary, var(--wave)) 26%, transparent), transparent 72%),
+    rgba(8, 8, 10, 0.18);
+  backdrop-filter: blur(36px) saturate(165%);
+  -webkit-backdrop-filter: blur(36px) saturate(165%);
+}
+
+.listening-world.is-lyrics .listening-world__glow {
+  height: 48%;
+  opacity: 0.95;
+}
 
 .app-shell[data-theme='light'] .listening-world__atmosphere .music-flow-canvas {
   filter: saturate(1.35) contrast(0.92) brightness(1.06);
@@ -1393,11 +1404,13 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
   pointer-events: none;
 }
 
-.ytm-stage-shader canvas {
+.ytm-stage-shader canvas,
+.ytm-stage-shader .music-flow-canvas {
   display: block;
   width: 100%;
   height: 100%;
-  opacity: 0.72;
+  opacity: 0.95;
+  filter: saturate(1.38) contrast(1.08) brightness(1.06);
 }
 
 .app-shell[data-theme='light'] .ytm-stage-shader canvas {

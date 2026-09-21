@@ -86,7 +86,6 @@ export function PlayerPanel({
 }: PlayerPanelProps) {
   const reduced = useReducedMotion();
   const audioProgress = duration > 0 ? currentTime / duration : 0;
-  const transition = reduced ? { duration: motionTokens.duration.instant } : spring.sheet;
   const [tab, setTab] = useState<ListeningTab>(mode === 'workspace' ? 'lyrics' : 'lyrics');
   const upNext = queue.filter((item) => item.id !== song?.id).slice(0, 8);
   const related = (suggestions.length > 0 ? suggestions : upNext).slice(0, 6);
@@ -110,26 +109,40 @@ export function PlayerPanel({
     else onOpenImmersive();
   };
 
+  const sheetTransition = reduced
+    ? { duration: motionTokens.duration.instant }
+    : { type: 'spring' as const, stiffness: 280, damping: 34, mass: 0.9 };
+  const lyricsEnergy = Math.max(mode === 'workspace' ? 0.72 : 0.55, energy + 0.18);
+
   return (
     <AnimatePresence>
       {song ? (
         <motion.div
-          className="listening-world"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: motionTokens.duration.fast }}
+          key="listening-world"
+          className={`listening-world${mode === 'workspace' ? ' is-lyrics' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="player-title"
           aria-label="Now playing"
+          style={
+            {
+              '--art-primary': palette.primary,
+              '--art-secondary': palette.secondary
+            } as CSSProperties
+          }
+          initial={reduced ? { opacity: 0 } : { y: '100%' }}
+          animate={reduced ? { opacity: 1 } : { y: 0 }}
+          exit={reduced ? { opacity: 0 } : { y: '100%' }}
+          transition={sheetTransition}
         >
+          {/* Shader rides with the sheet — stays painted for the whole open session. */}
           <div className="listening-world__atmosphere" aria-hidden="true">
-            <MusicFlowShader energy={Math.max(0.4, energy)} palette={palette} light={light} />
+            <MusicFlowShader energy={lyricsEnergy} mood={isPlaying ? 'energy' : 'chill'} palette={palette} light={light} />
             <div className="listening-world__veil" />
+            <div className="listening-world__glow" />
           </div>
 
-          <motion.div
+          <div
             className="listening-world__shell"
             style={
               {
@@ -138,10 +151,6 @@ export function PlayerPanel({
                 '--art-secondary': palette.secondary
               } as CSSProperties
             }
-            initial={reduced ? { opacity: 0 } : { opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={reduced ? { opacity: 0 } : { opacity: 0, y: 16 }}
-            transition={transition}
             data-live={isPlaying ? 'true' : undefined}
           >
             <div className="listening-top">
@@ -188,7 +197,8 @@ export function PlayerPanel({
                   animate={reduced ? undefined : { scale: isPlaying ? 1.015 : 1 }}
                   transition={spring.breathe}
                 >
-                  <Artwork song={song} size="large" layoutId={`art-${song.id}`} />
+                  {/* No shared layoutId — shared morphs read as top-left; sheet rises from the bottom. */}
+                  <Artwork song={song} size="large" />
                 </motion.div>
                 <div className="np-meta">
                   <h2 id="player-title" className="np-title">{song.title}</h2>
@@ -277,7 +287,7 @@ export function PlayerPanel({
                 ) : null}
               </div>
             </div>
-          </motion.div>
+          </div>
         </motion.div>
       ) : null}
     </AnimatePresence>
