@@ -1,3 +1,4 @@
+import { paths } from '../lib/routes';
 import { ArrowRight, Clock, Compass, Disc3, Heart, House, Library, ListMusic, Moon, Search, Sun, User } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -25,7 +26,7 @@ interface CommandPaletteProps {
   readonly theme: 'dark' | 'light';
   readonly onPlaySong: (song: UnifiedSong, queue: UnifiedSong[]) => void;
   readonly onOpenArtist: (name: string) => void;
-  readonly onNavigate: (hash: string) => void;
+  readonly onNavigate: (path: string) => void;
   readonly onSearchAll: (query: string) => void;
   readonly onToggleTheme: () => void;
   readonly onClearSearch: () => void;
@@ -110,7 +111,7 @@ export function CommandPalette({ open, onOpen, onClose, activeQuery, recent, the
     };
   }, [open, trimmed]);
 
-  const go = useCallback((hash: string) => () => onNavigate(hash), [onNavigate]);
+  const go = useCallback((path: string) => () => onNavigate(path), [onNavigate]);
 
   const items = useMemo<CommandItem[]>(() => {
     const needle = trimmed.toLowerCase();
@@ -150,11 +151,11 @@ export function CommandPalette({ open, onOpen, onClose, activeQuery, recent, the
     }
 
     const destinations: CommandItem[] = [
-      { id: 'go-home', section: 'Go to', title: 'Home', icon: <House size={16} />, run: go('#home') },
-      { id: 'go-browse', section: 'Go to', title: 'Browse', icon: <Compass size={16} />, run: go('#discover') },
-      { id: 'go-library', section: 'Go to', title: 'Your library', icon: <Library size={16} />, run: go('#library') },
-      { id: 'go-liked', section: 'Go to', title: 'Favorite songs', icon: <Heart size={16} />, run: go('#liked') },
-      { id: 'go-playlists', section: 'Go to', title: 'Playlists', icon: <ListMusic size={16} />, run: go('#library') }
+      { id: 'go-home', section: 'Go to', title: 'Home', icon: <House size={16} />, run: go(paths.home) },
+      { id: 'go-browse', section: 'Go to', title: 'Browse', icon: <Compass size={16} />, run: go(paths.discover) },
+      { id: 'go-library', section: 'Go to', title: 'Your library', icon: <Library size={16} />, run: go(paths.library) },
+      { id: 'go-liked', section: 'Go to', title: 'Favorite songs', icon: <Heart size={16} />, run: go(paths.liked) },
+      { id: 'go-playlists', section: 'Go to', title: 'Playlists', icon: <ListMusic size={16} />, run: go(paths.library) }
     ];
     const actions: CommandItem[] = [
       { id: 'theme', section: 'Settings', title: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme', icon: theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />, run: onToggleTheme }

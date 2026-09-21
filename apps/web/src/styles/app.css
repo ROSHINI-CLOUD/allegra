@@ -1405,6 +1405,7 @@ body::after,
 .artist-hero {
   position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-height: var(--hero-h, clamp(260px, 32cqw, 380px));
   align-items: end;
   padding: clamp(24px, 3cqw, 40px);
@@ -1446,21 +1447,18 @@ body::after,
   content: '';
 }
 
-.artist-hero__inner { display: flex; min-width: 0; align-items: flex-end; gap: clamp(22px, 2.8cqw, 40px); }
+.artist-hero__inner { display: flex; width: 100%; min-width: 0; align-items: center; gap: clamp(22px, 2.8cqw, 40px); }
 
 /* Framed on purpose: the portrait's edge reads as a card, never as a crop. */
 .artist-portrait {
   position: relative;
   width: clamp(160px, 21cqw, 248px);
   flex: 0 0 auto;
-  /* Cancels the hero's own floor padding, so the portrait stands on the plate rather than
-   * floating in it — the frame is a deliberate edge, never an accidental crop. */
-  margin: 0 0 calc(clamp(26px, 2.6vw, 44px) * -1);
+  margin: 0;
   overflow: hidden;
   aspect-ratio: 4 / 5;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-bottom: 0;
-  border-radius: 22px 22px 0 0;
+  border-radius: 22px;
   background: rgba(255, 255, 255, 0.06);
   box-shadow: 0 34px 60px -30px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
@@ -2130,6 +2128,8 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .artist-verified--inline svg { width: 15px; height: 15px; }
 .artist-hero-copy h1 .artist-verified--inline { width: 28px; height: 28px; margin-left: 10px; vertical-align: 0.16em; }
 .artist-bio { max-width: 72ch; margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 1.7; }
+.artist-bio-block { display: flex; max-width: 72ch; flex-direction: column; align-items: flex-start; gap: 6px; }
+.artist-bio.is-clamped { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; }
 
 /* ---------- Apple Music player bar ----------
  * Floating frosted capsule: transport left, a track capsule with scrubber in the middle,
@@ -2817,7 +2817,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .is-detail .search-box:focus-within { background: rgba(14, 14, 18, 0.7); }
 
 .is-detail .artist-hero {
-  --hero-h: clamp(300px, 38vw, 420px);
+  --hero-h: auto;
   margin: 0;
   padding: clamp(26px, 2.6vw, 44px);
 }
@@ -3897,7 +3897,7 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
 }
 
 /* The artist the search was about, ahead of the supporting credits. */
-.artist-hero {
+.artist-spotlight {
   display: grid;
   grid-template-columns: 148px minmax(0, 1fr) auto;
   align-items: center;
@@ -3914,10 +3914,10 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   transition: transform var(--d-fast) var(--ease-press), background var(--d-fast) var(--ease-standard);
 }
 
-.artist-hero:hover { background: var(--surface-raised); }
-.artist-hero:active { transform: scale(0.995); }
+.artist-spotlight:hover { background: var(--surface-raised); }
+.artist-spotlight:active { transform: scale(0.995); }
 
-.artist-hero-photo {
+.artist-spotlight-photo {
   display: block;
   width: 148px;
   height: 148px;
@@ -3926,7 +3926,7 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   background: var(--surface-raised);
 }
 
-.artist-hero-photo img {
+.artist-spotlight-photo img {
   display: block;
   width: 100%;
   height: 100%;
@@ -3934,10 +3934,10 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   object-position: 50% 20%;
 }
 
-.artist-hero-photo .artist-card-initial { font-size: 48px; }
+.artist-spotlight-photo .artist-card-initial { font-size: 48px; }
 
-.artist-hero-copy { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
-.artist-hero-copy em {
+.artist-spotlight-copy { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
+.artist-spotlight-copy em {
   color: var(--ink-faint);
   font-size: 12px;
   font-style: normal;
@@ -3945,7 +3945,7 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.artist-hero-copy strong {
+.artist-spotlight-copy strong {
   overflow: hidden;
   color: var(--ink);
   font-size: clamp(26px, 3.4vw, 44px);
@@ -3954,9 +3954,9 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   line-height: 1.05;
   text-overflow: ellipsis;
 }
-.artist-hero-copy span { color: var(--ink-muted); font-size: 13px; }
+.artist-spotlight-copy span { color: var(--ink-muted); font-size: 13px; }
 
-.artist-hero-go {
+.artist-spotlight-go {
   display: flex;
   width: 44px;
   height: 44px;
@@ -3968,18 +3968,18 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   transition: transform var(--d-fast) var(--ease-press), background var(--d-fast) var(--ease-standard);
 }
 
-.artist-hero:hover .artist-hero-go { background: var(--wave, #d9e66a); color: #101014; transform: translateX(3px); }
+.artist-spotlight:hover .artist-spotlight-go { background: var(--wave, #d9e66a); color: #101014; transform: translateX(3px); }
 
 @media (max-width: 640px) {
-  .artist-hero { grid-template-columns: 84px minmax(0, 1fr); gap: 14px; padding: 14px; }
-  .artist-hero-photo { width: 84px; height: 84px; }
-  .artist-hero-photo .artist-card-initial { font-size: 30px; }
-  .artist-hero-go { display: none; }
+  .artist-spotlight { grid-template-columns: 84px minmax(0, 1fr); gap: 14px; padding: 14px; }
+  .artist-spotlight-photo { width: 84px; height: 84px; }
+  .artist-spotlight-photo .artist-card-initial { font-size: 30px; }
+  .artist-spotlight-go { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .artist-hero,
-  .artist-hero-go { transition: none; }
+  .artist-spotlight,
+  .artist-spotlight-go { transition: none; }
 }
 
 /* ---------- Player transport ----------

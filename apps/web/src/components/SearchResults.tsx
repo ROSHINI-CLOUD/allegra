@@ -178,11 +178,11 @@ export function SearchResults({
         {feature ? (
           <button
             type="button"
-            className="artist-hero"
+            className="artist-spotlight"
             onClick={() => onOpenArtist(feature.name)}
             aria-label={`Open artist ${feature.name}`}
           >
-            <span className="artist-hero-photo">
+            <span className="artist-spotlight-photo">
               {photo ? (
                 <img src={photo} alt="" loading="lazy" crossOrigin="anonymous" />
               ) : (
@@ -191,12 +191,12 @@ export function SearchResults({
                 </span>
               )}
             </span>
-            <span className="artist-hero-copy">
+            <span className="artist-spotlight-copy">
               <em>Artist</em>
               <strong>{feature.name}</strong>
               <span>Open their page</span>
             </span>
-            <span className="artist-hero-go" aria-hidden="true"><ArrowRight size={20} /></span>
+            <span className="artist-spotlight-go" aria-hidden="true"><ArrowRight size={20} /></span>
           </button>
         ) : null}
         {rest.length > 0 ? <div className="search-artist-grid">{rest.map(artistCard)}</div> : null}

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { paths } from '../lib/routes';
 import { Heart, ListMusic, Pause, Play, Plus, Sparkles } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { useMemo, useState } from 'react';
@@ -133,7 +135,7 @@ export function HomePage({
       <PlaylistsShelf playlists={playlists} songs={playlistSongs} loading={loading} onCreate={onCreatePlaylist} />
 
       {likedSongs.length > 0 ? (
-        <Shelf id="home-liked" title="Songs you love" hint={`${likedSongs.length} liked`} href="#liked" songs={likedSongs.slice(0, 14)} {...{ currentSongId, isPlaying, likedIds, onPlay, onLike }} />
+        <Shelf id="home-liked" title="Songs you love" hint={`${likedSongs.length} liked`} href={paths.liked} songs={likedSongs.slice(0, 14)} {...{ currentSongId, isPlaying, likedIds, onPlay, onLike }} />
       ) : null}
 
       {picks.length > 0 ? (
@@ -147,7 +149,7 @@ export function HomePage({
       ) : null}
 
       {trending.length > 0 ? (
-        <Shelf id="home-trending" title="Trending now" hint="Somewhere new to wander" href="#discover" songs={trending.slice(0, 14)} {...{ currentSongId, isPlaying, likedIds, onPlay, onLike }} />
+        <Shelf id="home-trending" title="Trending now" hint="Somewhere new to wander" href={paths.discover} songs={trending.slice(0, 14)} {...{ currentSongId, isPlaying, likedIds, onPlay, onLike }} />
       ) : null}
     </div>
   );
@@ -176,7 +178,7 @@ function Shelf({ id, title, hint, href, eyebrow, songs, currentSongId, isPlaying
           {eyebrow ? <span className="eyebrow eyebrow-accent">{eyebrow}</span> : null}
           <h2 id={id}>{title}</h2>
         </div>
-        {href ? <a className="shelf-link" href={href}>{hint ?? 'See all'}</a> : hint ? <span className="result-count">{hint}</span> : null}
+        {href ? <Link className="shelf-link" href={href}>{hint ?? 'See all'}</Link> : hint ? <span className="result-count">{hint}</span> : null}
       </div>
       <div className="shelf">
         {songs.map((song) => {
@@ -216,7 +218,7 @@ function PlaylistsShelf({ playlists, songs, loading, onCreate }: { readonly play
 
   return (
     <section className="home-section" aria-labelledby="home-playlists">
-      <div className="section-heading"><h2 id="home-playlists">Your playlists</h2><a className="shelf-link" href="#library">All playlists</a></div>
+      <div className="section-heading"><h2 id="home-playlists">Your playlists</h2><Link className="shelf-link" href={paths.library}>All playlists</Link></div>
       <div className="shelf shelf--playlists">
         {creating ? (
           <form className="playlist-tile playlist-tile--new is-editing" onSubmit={(event) => void submit(event)}>
@@ -234,7 +236,7 @@ function PlaylistsShelf({ playlists, songs, loading, onCreate }: { readonly play
           const covers = playlist.songIds.map((id) => songs.get(id)).filter((song): song is UnifiedSong => song !== undefined && Boolean(song.artwork));
           const unique = covers.filter((song, index, all) => all.findIndex((other) => other.artwork === song.artwork) === index).slice(0, 4);
           return (
-            <a key={playlist.id} className="playlist-tile" href={`#playlist/${encodeURIComponent(playlist.id)}`}>
+            <Link key={playlist.id} className="playlist-tile" href={paths.playlist(playlist.id)}>
               <span className={`playlist-tile-art ${playlist.coverUrl || unique.length < 4 ? 'is-sparse' : ''}`}>
                 {playlist.coverUrl
                   ? <span className="playlist-tile-custom"><img src={playlist.coverUrl} alt="" /></span>
@@ -244,7 +246,7 @@ function PlaylistsShelf({ playlists, songs, loading, onCreate }: { readonly play
               </span>
               <strong title={playlist.name}>{playlist.name}</strong>
               <small>{playlist.songIds.length} {playlist.songIds.length === 1 ? 'song' : 'songs'}{playlist.isPublic ? ' · shared' : ''}</small>
-            </a>
+            </Link>
           );
         })}
       </div>

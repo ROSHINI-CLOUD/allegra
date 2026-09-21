@@ -4,7 +4,7 @@ import { CircuitBreaker } from '../lib/circuitBreaker.js';
 import { collapseRecordings, normalizeSong, songIdentity } from '../lib/normalize.js';
 import type { GaanaProvider } from '../providers/gaana.js';
 import type { ProviderResult, SaavnAsset, SaavnProvider, SaavnSong } from '../providers/saavn.js';
-import { decodeHtml } from '../lib/decodeHtml.js';
+import { decodeHtml, repairMojibake } from '../lib/decodeHtml.js';
 import type { ArtistProfile, ArtistSummary, HomePayload, UnifiedSong } from '../types.js';
 
 export interface CatalogSearch {
@@ -154,7 +154,7 @@ export class CatalogService {
       image: pickImage(raw.image) ?? match.image,
       isVerified: raw.isVerified === true,
       followerCount: toCount(raw.followerCount),
-      bio: bio.trim() ? decodeHtml(bio.trim()) : null,
+      bio: bio.trim() ? repairMojibake(decodeHtml(bio.trim())) : null,
       songs: normalizeMany([...(raw.topSongs ?? [])], 'Saavn'),
       albums,
       similar: (raw.similarArtists ?? [])

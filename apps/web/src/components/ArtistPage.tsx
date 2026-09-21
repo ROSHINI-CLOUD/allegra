@@ -42,6 +42,7 @@ interface ArtistPageProps {
 
 const TOP_COLLAPSED = 5;
 const TOP_EXPANDED = 10;
+const BIO_CLAMP_CHARS = 280;
 
 /** 1240 -> "1.2k", 177_000_000 -> "177m". Empty when the provider gave no count. */
 function formatPlays(count: number): string {
@@ -86,6 +87,7 @@ export function ArtistPage({
   onOpenArtist
 }: ArtistPageProps) {
   const [expanded, setExpanded] = useState(false);
+  const [bioOpen, setBioOpen] = useState(false);
   const [palette, setPalette] = useState<Palette | null>(null);
   const [stuck, setStuck] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -206,7 +208,12 @@ export function ArtistPage({
       </header>
       <div ref={sentinelRef} className="detail-sentinel" aria-hidden="true" />
 
-      {profile?.bio ? <p className="artist-bio">{profile.bio}</p> : null}
+      {profile?.bio ? (
+        <div className="artist-bio-block">
+          <p className={`artist-bio ${bioOpen ? '' : 'is-clamped'}`}>{profile.bio}</p>
+          {profile.bio.length > BIO_CLAMP_CHARS ? (<button type="button" className="show-more" aria-expanded={bioOpen} onClick={() => setBioOpen((value) => !value)}>{bioOpen ? 'Show less' : 'Read more'}</button>) : null}
+        </div>
+      ) : null}
 
       {loading ? (
         <section className="artist-section-block" aria-label="Loading songs" aria-busy="true">

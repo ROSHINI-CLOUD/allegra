@@ -14,11 +14,12 @@ export interface LibraryRecord {
 }
 
 /*
- * Local dev: leave VITE_API_BASE_URL blank so requests hit same-origin `/api`
- * and Vite proxies to the API (see vite.config.ts). That avoids CORS and the
- * Windows localhost vs 127.0.0.1 trap. Production sets the Render URL explicitly.
+ * Leave NEXT_PUBLIC_API_BASE_URL blank everywhere: requests then hit same-origin
+ * `/api`. In dev Next rewrites that to the Express server (see next.config.ts); on
+ * Vercel the same path is the Express function. That avoids CORS and the Windows
+ * localhost vs 127.0.0.1 trap. Set it only to point a build at a remote API.
  */
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
 
 export class ApiError extends Error {
   public readonly status: number;
