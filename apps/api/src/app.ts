@@ -14,6 +14,7 @@ import { authRouter } from './routes/auth.js';
 import { catalogRouter } from './routes/catalog.js';
 import { sendFailure } from './routes/common.js';
 import { lyricsRouter } from './routes/lyrics.js';
+import { mcpRouter } from './mcp/server.js';
 import { sharedRouter } from './routes/shared.js';
 import { streamRouter } from './routes/stream.js';
 import { uploadsRouter } from './routes/uploads.js';
@@ -114,6 +115,7 @@ export function createApp(options: AppOptions): Express {
   app.use('/api', sharedRouter(services.auth, services.catalog, options.uploads?.publicBaseUrl));
   app.use('/api', uploadsRouter(services.auth, options.uploads));
   app.use('/api', aiRouter(services.translation, services.recommendations, services.auth, services.catalog));
+  app.use(mcpRouter(services));
 
   app.use((_request, response) => {
     response.status(404).json({ success: false, data: null, error: "We couldn't find that." });

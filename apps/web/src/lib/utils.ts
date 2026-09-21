@@ -34,3 +34,8 @@ export function readableCount(value: number): string {
   if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
   return String(value);
 }
+
+/** Credited names on a song line ("A, B & C feat. D"), in order. */
+export function creditedArtists(artist: string): string[] {
+  return artist.split(/,|&| feat\.? /i).map((part) => part.trim()).filter(Boolean);
+}

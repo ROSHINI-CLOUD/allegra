@@ -198,14 +198,6 @@ body::before { display: none; }
 
 /* Page Shell & Container -------------------------------------------------- */
 
-.content-wrap:has(.words-page--ytm-full) {
-  width: 100%;
-  max-width: none;
-  padding-left: 0;
-  padding-right: 0;
-  padding-bottom: var(--mini-player-height);
-}
-
 /* Discover Hero & Content Grid -------------------------------------------- */
 
 .hero-section {
@@ -596,56 +588,8 @@ body::before { display: none; }
   background: rgba(255, 255, 255, 0.06);
 }
 
-.queue-item:nth-child(even),
-.ytm-queue-row:nth-child(even) {
+.queue-item:nth-child(even) {
   background: rgba(255, 255, 255, 0.025);
-}
-
-/* Phase 4: Words Stage — YouTube Music / Apple Music Full-Screen Takeover ----------- */
-
-.ytm-stage-main {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 72px; /* Leave space for now-playing-bar */
-  z-index: 40;
-  background: #06070a;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.words-page--ytm-full {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-width: 100%;
-  padding: 0;
-}
-
-.words-ytm-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24px 40px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  background: transparent;
-}
-
-.words-ytm-now-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: var(--radius-pill);
-  background: var(--accent-wash);
-  border: 1px solid var(--accent-line);
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
 }
 
 .status-dot {
@@ -666,186 +610,79 @@ body::before { display: none; }
   50% { opacity: 0.5; transform: scale(0.85); }
 }
 
-.ytm-stage-container {
-  flex: 1;
-  position: relative;
-  border-radius: 0;
-  border: 0;
-  background: transparent;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.ytm-stage-backdrop {
-  position: absolute;
-  inset: -25%;
-  z-index: 0;
-  background-position: center;
-  background-size: cover;
-  opacity: 0.45;
-  filter: blur(95px) saturate(1.6);
-  transform: scale(1.2);
-  pointer-events: none;
-}
-
-.ytm-stage-veil {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background:
-    radial-gradient(70% 55% at 50% 20%, color-mix(in srgb, var(--art-primary, #d9e66a) 20%, transparent), transparent 70%),
-    linear-gradient(180deg, rgba(6, 7, 10, 0.28) 0%, rgba(6, 7, 10, 0.58) 100%);
-  pointer-events: none;
-}
-
-.ytm-stage-grid {
-  flex: 1;
-  position: relative;
-  z-index: 2;
-  display: grid;
-  grid-template-columns: minmax(360px, 460px) minmax(0, 1fr);
-  gap: clamp(40px, 6vw, 100px);
-  padding: 24px clamp(40px, 5vw, 80px) clamp(40px, 5vw, 80px);
-  align-items: center;
-  height: 100%;
-}
-
-.ytm-stage-left {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 24px;
-  text-align: left;
-}
-
-.ytm-hero-art-card {
-  position: relative;
-  width: 100%;
-  max-width: 440px;
-  aspect-ratio: 1;
-  border-radius: 24px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 32px 64px -16px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-}
-
-.ytm-hero-art-card .artwork {
-  width: 100%;
-  height: 100%;
-  border-radius: 24px;
-}
-
 .art-playing-glow {
   position: absolute;
   inset: 0;
-  border-radius: 24px;
-  box-shadow: inset 0 0 40px rgba(56, 189, 248, 0.5);
+  border-radius: 22px;
+  box-shadow: inset 0 0 40px color-mix(in srgb, var(--wave, #38bdf8) 45%, transparent);
   animation: glow-pulse 2.8s infinite alternate ease-in-out;
+  pointer-events: none;
 }
 
 @keyframes glow-pulse {
-  0% { opacity: 0.4; }
-  100% { opacity: 0.95; }
-}
-
-.ytm-stage-track-info h2 {
-  margin: 0 0 6px;
-  color: var(--ink);
-  font-size: clamp(24px, 2.8vw, 36px);
-  font-weight: 800;
-  letter-spacing: -0.025em;
-  line-height: 1.2;
-}
-
-.ytm-artist {
-  margin: 0 0 6px;
-  color: var(--ink-soft);
-  font-size: clamp(15px, 1.6vw, 18px);
-  font-weight: 500;
-}
-
-.ytm-meta {
-  margin: 0 0 18px;
-  color: var(--ink-faint);
-  font-size: 13px;
-}
-
-.ytm-stage-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.ytm-stage-right {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-
-.ytm-stage-tab-content {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+  0% { opacity: 0.35; }
+  100% { opacity: 0.85; }
 }
 
 /* Stage Navigation Tabs (Matching Image 3) */
-.ytm-stage-tabs {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 0 12px;
-  margin-bottom: 28px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 0;
-  background: transparent;
-  backdrop-filter: none;
-}
-
-.ytm-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  transition: var(--transition-fast);
-}
-
-.ytm-tab:hover {
-  color: #ffffff;
-}
-
-.ytm-tab.is-active {
-  color: #ffffff;
-  border-bottom-color: #ffffff;
-  background: transparent;
-  box-shadow: none;
-}
 
 /* Synced Karaoke Lyrics (Matching Image 3) */
 .ytm-lyrics--nobackdrop {
   background: transparent;
   box-shadow: none;
   border: 0;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Stage already owns transport + translate — drop the panel chrome. */
+.ytm-lyrics--nobackdrop .ytm-lyrics__chrome,
+.ytm-lyrics--nobackdrop .ytm-lyrics__heading {
+  display: none;
+}
+
+.ytm-lyrics--nobackdrop .ytm-lyrics__scroll {
+  flex: 1;
+  min-height: 0;
 }
 
 .ytm-lyrics__scroll {
-  padding-block: 20vh 30vh;
+  /* Symmetric padding: the active line can sit dead-centre from the first line to the last. */
+  padding-block: 42vh 46vh;
   height: 100%;
+  overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 15%, #000 80%, transparent 100%);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* No scrollbar — the lyrics follow the track, the rail was only visual noise. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /* Short edge fade: enough to stop a hard cut, not enough to read as a blur band. */
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 6%, #000 93%, transparent 100%);
+  scroll-behavior: smooth;
 }
+
+.ytm-lyrics__scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.ytm-lyrics__scroll--soft {
+  padding-block: 44vh 48vh;
+  scroll-padding-block: 50% 50%;
+}
+
+.ytm-lyrics.is-user-scrolling .ytm-lyrics__scroll {
+  scroll-behavior: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ytm-lyrics__scroll {
+    scroll-behavior: auto;
+  }}
 
 .ytm-lyrics__line {
   font-size: clamp(36px, 4.5vw, 48px);
@@ -1197,31 +1034,19 @@ body::before { display: none; }
 /* Responsive Breakdown ---------------------------------------------------- */
 
 @media (max-width: 1024px) {
-  .ytm-stage-grid {
-    grid-template-columns: 1fr;
-    gap: 32px;
-  }
 
-  .ytm-stage-left {
-    position: static;
-    align-items: center;
-    text-align: center;
-  }
-
-  .ytm-hero-art-card {
-    max-width: 320px;
+  .art-playing-glow {
+    border-radius: 16px;
   }
 
   .workspace-grid {
     grid-template-columns: 1fr;
-  }
-}
+  }}
 
 @media (max-width: 768px) {
   .now-playing-time {
     display: none;
-  }
-}
+  }}
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -1231,8 +1056,7 @@ body::before { display: none; }
     animation-iteration-count: 1;
     transition-duration: 0.01ms;
     scroll-behavior: auto;
-  }
-}
+  }}
 
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -1608,32 +1432,23 @@ body::before { display: none; }
   pointer-events: none;
 }
 
-.listening-world__atmosphere .music-flow-canvas {
-  opacity: 0.92;
-  filter: saturate(1.28) contrast(1.06) brightness(1.04);
-}
-
-.listening-world.is-lyrics .listening-world__atmosphere .music-flow-canvas {
-  opacity: 1;
-  filter: saturate(1.4) contrast(1.08) brightness(1.08);
-}
-
-.listening-world__veil {
+.listening-world__atmosphere .music-background {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(70% 55% at 50% 18%, color-mix(in srgb, var(--art-primary, #d9e66a) 22%, transparent), transparent 70%),
-    rgba(8, 8, 10, 0.28);
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
 }
 
+/* One warm lift from the floor so the transport row sits in light, not on a flat wall. */
 .listening-world__glow {
   position: absolute;
   inset: auto 0 0;
-  height: 42%;
-  background: linear-gradient(0deg, color-mix(in srgb, var(--art-primary, #d9e66a) 28%, transparent), transparent 78%);
-  opacity: 0.85;
+  height: 46%;
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--art-primary, #d9e66a) 20%, transparent) 0%,
+    color-mix(in srgb, var(--art-primary, #d9e66a) 7%, transparent) 42%,
+    transparent 82%
+  );
+  opacity: 0.6;
   pointer-events: none;
 }
 
@@ -1756,6 +1571,42 @@ body::before { display: none; }
   margin: 6px 0 0;
   font-size: 16px;
   color: var(--ink-muted);
+}
+
+/* YT Music-style tappable credits — title opens album, artist opens artist page. */
+.np-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  text-align: inherit;
+  text-decoration: none;
+}
+
+.np-link:hover,
+.np-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: from-font;
+}
+
+.np-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--panel-accent, #6cb9f5) 70%, white);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.np-link:active {
+  opacity: 0.82;
+}
+
+.np-artist-sep {
+  opacity: 0.55;
 }
 
 .np-controls {
@@ -1884,33 +1735,28 @@ body::before { display: none; }
   min-height: 360px;
 }
 
-.ytm-lyrics__stage {
-  position: relative;
-  flex: 1;
-  min-height: 320px;
-  overflow: hidden;
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 14%, #000 78%, transparent 100%);
-}
-
-.ytm-lyrics__focus-track {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15em;
-  padding: 28vh 8px 40vh;
-  will-change: transform;
-}
-
-.ytm-lyrics__line {
+/* Every line carries the same weight. A heavier active line re-wraps the text, which
+ * changes scrollHeight and drags the centred line off-centre mid-song — emphasis is
+ * opacity and scale only, neither of which touches layout. */
+.ytm-lyrics--softfocus .ytm-lyrics__line {
   font-size: clamp(22px, 2.6vw, 36px) !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
   letter-spacing: -0.02em !important;
   line-height: 1.35 !important;
+  color: #fff !important;
   text-shadow: none !important;
+  opacity: var(--lyric-fade, 0.26);
+  transform: none !important;
+  /* Opacity only — never fight the ambient compositor with per-line springs. */
+  transition: opacity 0.35s cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
-.ytm-lyrics__line.is-active {
-  transform: none !important;
-  text-shadow: none !important;
+.ytm-lyrics--softfocus .ytm-lyrics__line.is-active {
+  opacity: 1 !important;
+  transform: scale(1.025) !important;
+  transform-origin: left center;
+  /* One soft halo so the sung line lifts off the ambient wash — no filter, no layout cost. */
+  text-shadow: 0 0 26px rgba(255, 255, 255, 0.22) !important;
 }
 
 .ytm-lyrics__karaoke { position: relative; display: inline-block; max-width: 100%; }
@@ -1935,13 +1781,25 @@ body::before { display: none; }
   .listening-body {
     grid-template-columns: 1fr;
     overflow-y: auto;
-    padding: 12px 24px 32px;
+    padding: 12px 16px max(28px, env(safe-area-inset-bottom, 0px));
   }
-  .listening-top { flex-wrap: wrap; }
+  .listening-top {
+    flex-wrap: nowrap;
+    padding: 12px 16px;
+    padding-top: max(12px, env(safe-area-inset-top, 0px));
+  }
   .listening-top__spacer { display: none; }
-  .mini-player { flex-wrap: wrap; height: auto; padding: 10px 12px; gap: 8px; }
-  .mini-controls { order: 3; flex: 1 1 100%; max-width: none; }
   .related-grid { grid-template-columns: 1fr; }
+}}
+
+/* The player sheet is the lyrics surface. On Browse this is only a preview card,
+ * so it gets a fixed height instead of growing to the full lyric sheet. */
+.lyrics-teaser .ytm-lyrics--softfocus {
+  height: 340px;
+  min-height: 0;
 }
 
+.lyrics-teaser .ytm-lyrics__scroll,
+.lyrics-teaser .ytm-lyrics__scroll--soft {
+  padding-block: 150px 170px;
 }

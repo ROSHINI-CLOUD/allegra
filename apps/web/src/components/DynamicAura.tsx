@@ -3,9 +3,7 @@ import type { Palette } from '../lib/palette';
 import type { CSSProperties } from 'react';
 
 /**
- * The shared VibeRoom music-flow field. The shader owns pointer smoothing,
- * visibility and reduced-motion handling; this wrapper only composes the
- * flutes and scrim that keep the field legible under Allegra's content.
+ * Shared ambient field. Slow time-based drift only — no beat sync.
  */
 export function DynamicAura({ paused = false, energy = 0.48, mood = 'energy', palette = null, light = false }: { readonly paused?: boolean; readonly energy?: number; readonly mood?: 'energy' | 'chill' | 'different' | 'surprise'; readonly palette?: Palette | null; readonly light?: boolean }) {
   const auraStyle = {

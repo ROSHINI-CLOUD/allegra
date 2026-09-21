@@ -1,11 +1,29 @@
 // Copied from VibeRoom src/components/MusicFlowShader.tsx
 import { useEffect, useRef } from 'react'
 
+import type { AudioBands } from '../../hooks/useAudioAnalyser'
 import type { Palette } from '../../lib/palette'
 
+/** One frame's worth of what the speakers are doing. */
+export interface AudioReading extends AudioBands {
+  /** Overall loudness, 0–1. */
+  readonly level: number
+}
+
+/**
+ * Sampled once per animation frame, inside the render loop. Returning `null` means nothing is
+ * playing, and the field falls back to the constant `energy` prop rather than going dark.
+ *
+ * It is a function rather than a prop value on purpose: audio moves at 60fps and React must not
+ * re-render for it.
+ */
+export type AudioProbe = () => AudioReading | null
+
 type MusicFlowShaderProps = {
-  /** 0–1 room energy. Higher = faster pulse, brighter columns. */
+  /** 0–1 room energy. Steady ambient strength — not beat-synced. */
   energy?: number
+  /** @deprecated Ignored. Motion is timer-only; kept for old call-site types. */
+  audio?: AudioProbe
   /** Mood shifts palette and wave character. */
   mood?: 'energy' | 'chill' | 'different' | 'surprise'
   /** Album-art palette. When set it replaces the mood colours and eases between songs. */
@@ -32,6 +50,8 @@ uniform vec2 uPointer;
 uniform float uTime;
 uniform float uRibs;
 uniform float uEnergy;
+// Live band energies: x = bass, y = mid, z = treble. All zero when nothing is playing.
+uniform vec3 uBands;
 uniform float uMood;
 uniform vec3 uAccent;
 uniform vec3 uBright;
@@ -178,7 +198,10 @@ vec3 lightField(vec2 uv) {
     float harm = sin(t * (1.5 + 0.25 * fi) + fi * 2.4 + uMood);
     float pulse = 0.45 + 0.55 * (0.65 * fund + 0.35 * harm);
     pulse = mix(pulse, abs(pulse), 0.25 + uEnergy * 0.35);
-    float heightBoost = 0.7 + 0.55 * uEnergy + 0.15 * sin(t * 2.0 + fi);
+    // The nine columns read left to right as an EQ stack: the first three carry the kick,
+    // the middle three the body of the mix, the last three the air.
+    float band = fi < 3.0 ? uBands.x : (fi < 6.0 ? uBands.y : uBands.z);
+    float heightBoost = 0.7 + 0.55 * uEnergy + 0.15 * sin(t * 2.0 + fi) + band * 1.15;
     columns += bell(x, center, width) * pulse * heightBoost;
   }
 
@@ -192,9 +215,10 @@ vec3 lightField(vec2 uv) {
   color = mix(color, uBright, smoothstep(0.38, 0.95, light));
   color = mix(color, uSky, smoothstep(0.55, 1.0, light) * (0.2 + uMood * 0.08));
 
-  float poolHeight = 0.10 + 0.14 * dome + 0.06 * drift;
+  // The pool of light on the floor swells on the kick — the one place bass is felt, not seen.
+  float poolHeight = 0.10 + 0.14 * dome + 0.06 * drift + uBands.x * 0.05;
   float pool = 1.0 - smoothstep(poolHeight - 0.08, poolHeight + 0.22, y);
-  color = mix(color, mix(uBright, uSky, 0.55), pool * 0.82);
+  color = mix(color, mix(uBright, uSky, 0.55), pool * (0.82 + uBands.x * 0.14));
   float core = 1.0 - smoothstep(-0.08, poolHeight * 0.55, y);
   color = mix(color, mix(uSky, vec3(1.0), 0.28), core);
 
@@ -214,7 +238,8 @@ void main() {
   float bevel = sin(ramp * 3.14159265);
   float lens = (0.55 * ramp + 0.225 * bevel) * 0.05 * glass;
   // Extra musical shimmer along the flutes.
-  lens += 0.004 * sin(uv.y * 18.0 - uTime * (1.4 + uEnergy * 2.0)) * glass * uEnergy;
+  // Cymbals and consonants travel up the flutes as shimmer.
+  lens += 0.004 * sin(uv.y * 18.0 - uTime * (1.4 + uEnergy * 2.0)) * glass * (uEnergy + uBands.z * 0.9);
   vec2 refracted = uv + vec2(lens, ramp * 0.012 * glass);
 
   // Allegra: no orb. Behind a translucent panel it read as a stray blob, and the raymarch
@@ -231,7 +256,7 @@ void main() {
   float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
 
   vec3 rimColor = mix(mix(uSky, uBright, 0.5), uAccent, 0.45 + 0.2 * sin(uTime + uv.x * uRibs));
-  color += rimColor * catchLight * (0.03 + luminance * 0.18) * glass;
+  color += rimColor * catchLight * (0.03 + luminance * 0.18) * glass * (1.0 + uBands.z * 0.55);
 
   float grain = hash(gl_FragCoord.xy + vec2(uTime * 0.01, 0.0)) - 0.5;
   color += grain * 0.02 * (0.15 + smoothstep(0.02, 0.35, luminance));
@@ -395,6 +420,7 @@ function MusicFlowShader({ energy = 0.72, mood = 'energy', palette = null, light
       time: gl.getUniformLocation(program, 'uTime'),
       ribs: gl.getUniformLocation(program, 'uRibs'),
       energy: gl.getUniformLocation(program, 'uEnergy'),
+      bands: gl.getUniformLocation(program, 'uBands'),
       mood: gl.getUniformLocation(program, 'uMood'),
       accent: gl.getUniformLocation(program, 'uAccent'),
       bright: gl.getUniformLocation(program, 'uBright'),
@@ -414,8 +440,13 @@ function MusicFlowShader({ energy = 0.72, mood = 'energy', palette = null, light
     let lastTimestamp = 0
     let averageFrame = 16
     let framesSinceAdjust = 0
-    let startedAt = performance.now()
+    // Accumulated in clamped steps rather than read from the wall clock, so a backgrounded tab,
+    // a long main-thread stall, or a dropped-frame stretch can never make uTime leap forward —
+    // that leap is what read as the field suddenly "speeding up".
+    let clockSeconds = 0
     let displayEnergy = energyRef.current
+    // Eased toward the live reading so a band that spikes for one frame still lands as a swell.
+    const displayBands = new Float32Array([0, 0, 0])
     let shellIsLight = false
     let lastThemeCheck = 0
 
@@ -455,6 +486,9 @@ function MusicFlowShader({ energy = 0.72, mood = 'energy', palette = null, light
       frame = 0
       const frameTime = timestamp - lastTimestamp
       lastTimestamp = timestamp
+      // Clamp to a 15fps-equivalent step: the first frame after a stall or a hidden tab still
+      // advances, just no faster than normal, instead of jumping uTime forward by the whole gap.
+      if (frameTime > 0) clockSeconds += Math.min(frameTime, 66) / 1000
       if (frameTime > 0 && frameTime < 250) {
         averageFrame = averageFrame * 0.9 + frameTime * 0.1
         framesSinceAdjust += 1
@@ -473,7 +507,12 @@ function MusicFlowShader({ energy = 0.72, mood = 'energy', palette = null, light
 
       const preset = moodPalettes[moodRef.current]
       easeColors(reducedMotion.matches ? 1 : 0.05)
+
+      // Slow ambient drift only — never couple to live audio / beat energy.
       displayEnergy += (energyRef.current - displayEnergy) * 0.06
+      displayBands[0] = 0
+      displayBands[1] = 0
+      displayBands[2] = 0
 
       pointerCurrent.x += (pointerTarget.x - pointerCurrent.x) * 0.05
       pointerCurrent.y += (pointerTarget.y - pointerCurrent.y) * 0.05
@@ -481,8 +520,9 @@ function MusicFlowShader({ energy = 0.72, mood = 'energy', palette = null, light
       gl.uniform2f(uniforms.resolution, canvas.width, canvas.height)
       gl.uniform2f(uniforms.pointer, pointerCurrent.x, pointerCurrent.y)
       gl.uniform1f(uniforms.ribs, canvas.clientWidth / Math.min(64, Math.max(30, canvas.clientWidth * 0.032)))
-      gl.uniform1f(uniforms.time, reducedMotion.matches ? 1.6 : (timestamp - startedAt) / 1000)
+      gl.uniform1f(uniforms.time, reducedMotion.matches ? 1.6 : clockSeconds)
       gl.uniform1f(uniforms.energy, displayEnergy)
+      gl.uniform3fv(uniforms.bands, displayBands)
       gl.uniform1f(uniforms.mood, preset.mood)
       gl.uniform3fv(uniforms.accent, shown.accent)
       gl.uniform3fv(uniforms.bright, shown.bright)
@@ -513,7 +553,9 @@ function MusicFlowShader({ energy = 0.72, mood = 'energy', palette = null, light
     const onVisibilityChange = () => {
       isDocumentVisible = !document.hidden
       if (isDocumentVisible) {
-        startedAt = performance.now() - (reducedMotion.matches ? 1600 : 0)
+        // Forget the stale timestamp from before the tab was hidden, so the resumed frame's
+        // delta is measured from "now", not from however long the tab was away.
+        lastTimestamp = 0
         schedule()
       }
     }

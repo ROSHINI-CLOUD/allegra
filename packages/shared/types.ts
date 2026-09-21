@@ -10,6 +10,8 @@ export interface UnifiedSong {
   readonly language?: string;
   readonly playCount: number;
   readonly source: 'Saavn' | 'Gaana';
+  /** Other release rows for the same recording. Search/suggestions only; never nested. */
+  readonly variants?: readonly UnifiedSong[];
 }
 
 export interface LyricLine {

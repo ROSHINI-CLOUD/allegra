@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UnifiedSong } from '@shared/types';
 
 import { resolveApiUrl } from '../lib/api';
+import { songIdentity, uniqueByIdentity } from '../lib/songIdentity';
 import { clamp } from '../lib/utils';
 
 export type RepeatMode = 'off' | 'all' | 'one';
@@ -22,11 +23,14 @@ export interface AudioPlayerState {
   readonly repeat: RepeatMode;
   readonly error: string | null;
   readonly selectSong: (song: UnifiedSong, queue?: UnifiedSong[]) => void;
+  /** Append similar/radio tracks without interrupting the current song. */
+  readonly appendQueue: (songs: readonly UnifiedSong[]) => number;
   readonly togglePlayback: () => void;
   readonly requestPlayback: (playing: boolean) => Promise<void>;
   readonly stop: () => void;
   readonly seek: (seconds: number) => Promise<void>;
-  readonly skipNext: () => void;
+  /** The song now playing, or null when nowhere distinct to go. */
+  readonly skipNext: () => UnifiedSong | null;
   readonly skipPrevious: () => void;
   readonly toggleMute: () => void;
   readonly setVolume: (value: number) => void;
@@ -99,24 +103,43 @@ export function useAudioPlayer(): AudioPlayerState {
       return;
     }
     const source = nextQueue.length > 0 ? nextQueue : [song];
-    const seen = new Set<string>();
-    const next = (source.some((item) => item.id === song.id) ? source : [song, ...source]).filter((item) => {
-      if (seen.has(item.id)) return false;
-      seen.add(item.id);
-      return true;
-    });
+    const withCurrent = source.some((item) => item.id === song.id) ? source : [song, ...source];
+    // Collapse remasters (same title/artists, different cover/release id).
+    const next = uniqueByIdentity(withCurrent);
+    const playable = next.find((item) => item.id === song.id) ?? next.find((item) => songIdentity(item) === songIdentity(song)) ?? song;
+    const ordered = next.some((item) => item.id === playable.id) ? next : [playable, ...next];
     playbackGenerationRef.current += 1;
-    currentSongRef.current = song;
-    queueRef.current = next;
+    currentSongRef.current = playable;
+    queueRef.current = ordered;
     pendingPlaybackRef.current = true;
     playbackIntentRef.current = true;
     autoAdvancedRef.current = false;
-    setCurrentSong(song);
-    setQueue(next);
+    setCurrentSong(playable);
+    setQueue(ordered);
     setCurrentTime(0);
-    setDuration(song.duration);
+    setDuration(playable.duration);
     setError(null);
   }, [requestPlayback]);
+
+  const appendQueue = useCallback((songs: readonly UnifiedSong[]): number => {
+    if (songs.length === 0) return 0;
+    const current = queueRef.current;
+    const seenIds = new Set(current.map((item) => item.id));
+    const seenIdentities = new Set(current.map((item) => songIdentity(item)));
+    const added: UnifiedSong[] = [];
+    for (const song of songs) {
+      const identity = songIdentity(song);
+      if (seenIds.has(song.id) || seenIdentities.has(identity)) continue;
+      seenIds.add(song.id);
+      seenIdentities.add(identity);
+      added.push(song);
+    }
+    if (added.length === 0) return 0;
+    const next = [...current, ...added];
+    queueRef.current = next;
+    setQueue(next);
+    return added.length;
+  }, []);
 
   const advanceToNext = useCallback((): void => {
     const song = currentSongRef.current;
@@ -131,8 +154,8 @@ export function useAudioPlayer(): AudioPlayerState {
     }
     const index = list.findIndex((item) => item.id === song.id);
     let next: UnifiedSong | undefined;
-    if (shuffleRef.current && list.length > 1) next = pickRandom(list, song.id);
-    else if (index >= 0) next = list[index + 1] ?? (repeatRef.current === 'all' ? list[0] : undefined);
+    if (shuffleRef.current && list.length > 1) next = pickDistinct(list, song);
+    else if (index >= 0) next = nextDistinct(list, index, song, repeatRef.current === 'all');
     if (!next) {
       autoAdvancedRef.current = true;
       setIsPlaying(false);
@@ -142,14 +165,18 @@ export function useAudioPlayer(): AudioPlayerState {
     selectSong(next, list);
   }, [selectSong, requestPlayback]);
 
-  const skipNext = useCallback((): void => {
+  const skipNext = useCallback((): UnifiedSong | null => {
     const song = currentSongRef.current;
     const list = queueRef.current;
-    if (!song || list.length < 2) return;
+    if (!song) return null;
     autoAdvancedRef.current = false;
     const index = list.findIndex((item) => item.id === song.id);
-    const next = shuffleRef.current ? pickRandom(list, song.id) : list[(index + 1 + list.length) % list.length];
-    if (next) selectSong(next, list);
+    const next = shuffleRef.current
+      ? pickDistinct(list, song)
+      : nextDistinct(list, index, song, true);
+    if (!next) return null;
+    selectSong(next, list);
+    return next;
   }, [selectSong]);
 
   const skipPrevious = useCallback((): void => {
@@ -163,7 +190,7 @@ export function useAudioPlayer(): AudioPlayerState {
     }
     const index = list.findIndex((item) => item.id === song.id);
     if (list.length < 2) return;
-    const previous = list[(index - 1 + list.length) % list.length];
+    const previous = previousDistinct(list, index, song);
     if (previous) selectSong(previous, list);
   }, [selectSong]);
 
@@ -367,6 +394,7 @@ export function useAudioPlayer(): AudioPlayerState {
     repeat,
     error,
     selectSong,
+    appendQueue,
     togglePlayback: () => void requestPlayback(!isPlayingRef.current),
     requestPlayback,
     stop,
@@ -381,8 +409,54 @@ export function useAudioPlayer(): AudioPlayerState {
   };
 }
 
-/** A random song from the list that is not the one currently playing. */
-function pickRandom(list: readonly UnifiedSong[], currentId: string): UnifiedSong | undefined {
-  const others = list.filter((item) => item.id !== currentId);
+/** Next track that is not a remaster of the current song. */
+function nextDistinct(
+  list: readonly UnifiedSong[],
+  index: number,
+  current: UnifiedSong,
+  wrap: boolean
+): UnifiedSong | undefined {
+  if (list.length === 0) return undefined;
+  const seedKey = songIdentity(current);
+  const start = index >= 0 ? index : -1;
+  const limit = wrap ? list.length - 1 : list.length - start - 1;
+  for (let step = 1; step <= limit; step += 1) {
+    const candidate = list[start + step];
+    if (!candidate) break;
+    if (candidate.id === current.id) continue;
+    if (songIdentity(candidate) === seedKey) continue;
+    return candidate;
+  }
+  if (!wrap || list.length < 2) return undefined;
+  for (let i = 0; i < start; i += 1) {
+    const candidate = list[i];
+    if (!candidate || candidate.id === current.id) continue;
+    if (songIdentity(candidate) === seedKey) continue;
+    return candidate;
+  }
+  return undefined;
+}
+
+function previousDistinct(
+  list: readonly UnifiedSong[],
+  index: number,
+  current: UnifiedSong
+): UnifiedSong | undefined {
+  if (list.length < 2) return undefined;
+  const seedKey = songIdentity(current);
+  const start = index >= 0 ? index : 0;
+  for (let step = 1; step < list.length; step += 1) {
+    const candidate = list[(start - step + list.length) % list.length];
+    if (!candidate || candidate.id === current.id) continue;
+    if (songIdentity(candidate) === seedKey) continue;
+    return candidate;
+  }
+  return undefined;
+}
+
+/** A random song that is not the same recording as the one currently playing. */
+function pickDistinct(list: readonly UnifiedSong[], current: UnifiedSong): UnifiedSong | undefined {
+  const seedKey = songIdentity(current);
+  const others = list.filter((item) => item.id !== current.id && songIdentity(item) !== seedKey);
   return others[Math.floor(Math.random() * others.length)];
 }

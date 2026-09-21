@@ -158,7 +158,7 @@ export function CollectionPage({ kind, title, songs, loading, currentSongId, isP
                 index={index}
                 isCurrent={song.id === currentSongId}
                 isPlaying={song.id === currentSongId && isPlaying}
-                onPlay={() => onPlayTrack(song, queue)}
+                onPlay={(pick) => onPlayTrack(pick, queue)}
                 onLike={() => onLike(song)}
                 liked={likedIds.has(song.id)}
                 onOpenAlbum={onOpenAlbum}

@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import type { AuthService } from '../auth/auth.js';
 import type { CatalogService } from '../catalog/catalog.js';
+import { buildRecommendationInput } from '../services/recommendationContext.js';
 import type { RecommendationService } from '../services/recommendations.js';
 import type { TranslationService } from '../services/translation.js';
 import type { LyricLine } from '../types.js';
@@ -55,24 +56,9 @@ export function aiRouter(translation: TranslationService, recommendations: Recom
         sendUnauthorized(response);
         return;
       }
-      const recentIds = [...user.recentlyPlayed].sort((left, right) => right.playedAt.localeCompare(left.playedAt)).map((entry) => entry.songId).slice(0, 20);
-      const likedIds = user.likedSongIds.slice(0, 20);
       const currentId = songId(request.query.songId);
-      const allIds = [...new Set([...likedIds, ...recentIds, ...(currentId ? [currentId] : [])])];
-      const songs = allIds.length > 0 ? await catalog.getSongs(allIds) : [];
-      const byId = new Map(songs.map((song) => [song.id, song]));
-      const describe = (id: string) => {
-        const song = byId.get(id);
-        return song ? { title: song.title, artist: song.artist } : null;
-      };
-
-      const result = await recommendations.recommend({
-        likedSongs: likedIds.map(describe).filter((song): song is { title: string; artist: string } => song !== null),
-        recentSongs: recentIds.map(describe).filter((song): song is { title: string; artist: string } => song !== null),
-        ...(currentId && byId.has(currentId) ? { currentSong: describe(currentId)! } : {}),
-        ...(user.taste && user.taste.artists.length > 0 ? { favoriteArtists: user.taste.artists.map((entry) => entry.name) } : {}),
-        ...(user.taste && user.taste.languages.length > 0 ? { favoriteLanguages: user.taste.languages.map((entry) => entry.name) } : {})
-      }, new Set([...user.likedSongIds, ...user.recentlyPlayed.map((entry) => entry.songId)]), songs);
+      const { context, excludeIds, excludeSongs } = await buildRecommendationInput(catalog, user, currentId);
+      const result = await recommendations.recommend(context, excludeIds, excludeSongs);
 
       if (!result) {
         response.status(404).json({ success: false, data: null, error: 'Not enough listening history yet for a recommendation.' });

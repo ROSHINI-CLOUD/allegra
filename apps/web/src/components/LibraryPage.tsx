@@ -74,7 +74,7 @@ function LibrarySection({ eyebrow, title, icon, children }: { readonly eyebrow: 
 }
 
 function SongGrid({ songs, currentSongId, isPlaying, likedIds, onPlay, onLike }: { readonly songs: UnifiedSong[]; readonly currentSongId?: string; readonly isPlaying: boolean; readonly likedIds: Set<string>; readonly onPlay: (song: UnifiedSong, queue?: UnifiedSong[]) => void; readonly onLike: (song: UnifiedSong) => void }) {
-  return <div className="library-track-list">{songs.map((song, index) => <SongCard key={song.id} song={song} index={index} isCurrent={song.id === currentSongId} isPlaying={song.id === currentSongId && isPlaying} onPlay={() => onPlay(song, songs)} onLike={() => onLike(song)} liked={likedIds.has(song.id)} />)}</div>;
+  return <div className="library-track-list">{songs.map((song, index) => <SongCard key={song.id} song={song} index={index} isCurrent={song.id === currentSongId} isPlaying={song.id === currentSongId && isPlaying} onPlay={(pick) => onPlay(pick, songs)} onLike={() => onLike(song)} liked={likedIds.has(song.id)} />)}</div>;
 }
 
 function PlaylistsSection({ likedIds, currentSongId, isPlaying, onPlay, onLike, onDiscover }: { readonly likedIds: Set<string>; readonly currentSongId?: string; readonly isPlaying: boolean; readonly onPlay: (song: UnifiedSong, queue?: UnifiedSong[]) => void; readonly onLike: (song: UnifiedSong) => void; readonly onDiscover: () => void }) {

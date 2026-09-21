@@ -20,8 +20,9 @@ interface ArtistPreviewCardProps {
   readonly name: string;
   /** Real artist photo when the provider has one. */
   readonly image?: string | null;
-  /** Artwork to fall back on when there is no photo. */
-  readonly fallbackSong?: UnifiedSong;
+  /** The photo lookup is still in flight. Hold a neutral placeholder rather than
+   *  showing a song cover that will visibly flip to a face a few seconds later. */
+  readonly photoPending?: boolean;
   readonly currentSongId: string | null;
   readonly isPlaying: boolean;
   readonly onPlayTrack: (song: UnifiedSong, queue: UnifiedSong[]) => void;
@@ -35,7 +36,7 @@ function formatFollowers(count: number): string {
   return `${count} followers`;
 }
 
-export function ArtistPreviewCard({ name, image = null, fallbackSong, currentSongId, isPlaying, onPlayTrack, onOpenArtist }: ArtistPreviewCardProps) {
+export function ArtistPreviewCard({ name, image = null, photoPending = false, currentSongId, isPlaying, onPlayTrack, onOpenArtist }: ArtistPreviewCardProps) {
   const reduced = useReducedMotion();
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<ArtistProfile | null>(null);
@@ -93,11 +94,19 @@ export function ArtistPreviewCard({ name, image = null, fallbackSong, currentSon
   const songs = profile?.songs ?? [];
   const playing = songs.some((song) => song.id === currentSongId) && isPlaying;
 
-  const media = (className: string) => (
-    <span className={className}>
-      {photo ? <img src={photo} alt="" loading="lazy" crossOrigin="anonymous" /> : fallbackSong ? <Artwork song={fallbackSong} size="large" /> : null}
+  // A song cover is not a face. It used to stand in while the photo lookup ran, which
+  // meant every card visibly flipped from album art to a portrait seconds after load —
+  // and for artists with no photo at all, the cover just stayed there pretending.
+  // An initial holds the slot instead, and only a real photo replaces it.
+  const faceContent = photo ? (
+    <img src={photo} alt="" loading="lazy" crossOrigin="anonymous" />
+  ) : (
+    <span className={`artist-card-initial${photoPending ? ' is-pending' : ''}`} aria-hidden="true">
+      {name.trim().slice(0, 1).toLocaleUpperCase()}
     </span>
   );
+
+  const media = (className: string) => <span className={className}>{faceContent}</span>;
 
   return (
     <>
@@ -112,7 +121,7 @@ export function ArtistPreviewCard({ name, image = null, fallbackSong, currentSon
         transition={transition}
       >
         <motion.span layoutId={`${layoutId}-photo`} className="artist-card-photo" transition={transition}>
-          {photo ? <img src={photo} alt="" loading="lazy" crossOrigin="anonymous" /> : fallbackSong ? <Artwork song={fallbackSong} size="large" /> : null}
+          {faceContent}
         </motion.span>
         <span className="artist-card-shade" aria-hidden="true" />
         <span className="artist-card-copy">

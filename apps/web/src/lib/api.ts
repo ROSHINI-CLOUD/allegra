@@ -158,8 +158,8 @@ export async function fetchRecentlyPlayed(signal?: AbortSignal): Promise<Unified
   return request('/api/me/recently-played', { signal });
 }
 
-export async function fetchSuggestions(songId: string, signal?: AbortSignal): Promise<UnifiedSong[]> {
-  return request(`/api/songs/${encodeURIComponent(songId)}/suggestions?limit=6`, { signal });
+export async function fetchSuggestions(songId: string, signal?: AbortSignal, limit = 20): Promise<UnifiedSong[]> {
+  return request(`/api/songs/${encodeURIComponent(songId)}/suggestions?limit=${Math.min(30, Math.max(1, limit))}`, { signal });
 }
 
 export async function recordRecentlyPlayed(songId: string, playDuration: number): Promise<void> {

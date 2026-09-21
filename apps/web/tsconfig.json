@@ -20,5 +20,6 @@
       "@shared/*": ["../../packages/shared/*"]
     }
   },
-  "include": ["src", "../../packages/shared/types.ts"]
+  "include": ["src", "../../packages/shared/types.ts"],
+  "exclude": ["src/**/*.test.ts"]
 }

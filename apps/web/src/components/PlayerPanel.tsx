@@ -11,16 +11,17 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import type { CSSProperties } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { UnifiedSong } from '@shared/types';
 
-import { MusicFlowShader } from './shader/MusicFlowShader';
+import { DynamicLyricsBackground } from './DynamicLyricsBackground';
 import { LyricsPanel } from './LyricsPanel';
 import { PlaylistMenu } from './PlaylistMenu';
 import { Artwork, IconButton } from './ui';
 import type { Palette } from '../lib/palette';
-import { formatTime, clamp } from '../lib/utils';
+import { tapHaptic } from '../lib/haptics';
+import { creditedArtists, formatTime, clamp } from '../lib/utils';
 import { motionTokens, spring } from '../motion';
 
 export type ImmersivePlayerMode = 'immersive' | 'workspace';
@@ -33,11 +34,13 @@ interface PlayerPanelProps {
   readonly currentTime: number;
   readonly duration: number;
   readonly isPlaying: boolean;
+  readonly isBuffering?: boolean;
   readonly playbackError: string | null;
   readonly liked: boolean;
   readonly lyrics: React.ComponentProps<typeof LyricsPanel>;
   readonly palette: Palette;
   readonly light?: boolean;
+  /** @deprecated Kept for call-site compatibility; atmosphere is CSS artwork now. */
   readonly energy?: number;
   readonly suggestions?: UnifiedSong[];
   readonly onCollapse: () => void;
@@ -49,6 +52,10 @@ interface PlayerPanelProps {
   readonly onSeek: (seconds: number) => void;
   readonly onLike: () => void;
   readonly onPlayQueueSong?: (song: UnifiedSong) => void;
+  /** Song title → official album / track list. Sheet slides away first. */
+  readonly onOpenAlbum?: (song: UnifiedSong) => void;
+  /** Artist credit → artist page. Sheet slides away first. */
+  readonly onOpenArtist?: (name: string) => void;
   readonly muted: boolean;
   readonly onMute: () => void;
 }
@@ -56,7 +63,7 @@ interface PlayerPanelProps {
 /**
  * Listening World — shell from allegra-v2-immersive-shell:
  * left now-playing (real artwork), right Lyrics / Up Next / Related.
- * Atmosphere comes from artwork palette + WebGL, not decorative gradient fills.
+ * Atmosphere is a lightweight CSS cover wash (no WebGL).
  */
 export function PlayerPanel({
   mode,
@@ -65,12 +72,12 @@ export function PlayerPanel({
   currentTime,
   duration,
   isPlaying,
+  isBuffering = false,
   playbackError,
   liked,
   lyrics,
   palette,
   light = false,
-  energy = 0,
   suggestions = [],
   onCollapse,
   onOpenWorkspace,
@@ -81,6 +88,8 @@ export function PlayerPanel({
   onSeek,
   onLike,
   onPlayQueueSong,
+  onOpenAlbum,
+  onOpenArtist,
   muted,
   onMute
 }: PlayerPanelProps) {
@@ -89,6 +98,7 @@ export function PlayerPanel({
   const [tab, setTab] = useState<ListeningTab>(mode === 'workspace' ? 'lyrics' : 'lyrics');
   const upNext = queue.filter((item) => item.id !== song?.id).slice(0, 8);
   const related = (suggestions.length > 0 ? suggestions : upNext).slice(0, 6);
+  const artists = song ? creditedArtists(song.artist) : [];
 
   useEffect(() => {
     if (mode === 'workspace') setTab('lyrics');
@@ -97,11 +107,25 @@ export function PlayerPanel({
   useEffect(() => {
     if (!song) return undefined;
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onCollapse();
+      if (event.key === 'Escape') {
+        onCollapse();
+        return;
+      }
+      // Space is the universal play/pause, but not while the listener is typing a
+      // comment or tabbing through controls that use it themselves.
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable === true;
+      if (event.code === 'Space' && !typing && target?.tagName !== 'BUTTON') {
+        event.preventDefault();
+        onToggle();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onCollapse, song]);
+  }, [onCollapse, onToggle, song]);
 
   const selectTab = (next: ListeningTab): void => {
     setTab(next);
@@ -109,10 +133,10 @@ export function PlayerPanel({
     else onOpenImmersive();
   };
 
+  // Rise from bottom on open; sink fully off-screen on close (YT Music reveal).
   const sheetTransition = reduced
     ? { duration: motionTokens.duration.instant }
-    : { type: 'spring' as const, stiffness: 280, damping: 34, mass: 0.9 };
-  const lyricsEnergy = Math.max(mode === 'workspace' ? 0.72 : 0.55, energy + 0.18);
+    : { type: 'spring' as const, stiffness: 260, damping: 36, mass: 0.95 };
 
   return (
     <AnimatePresence>
@@ -135,10 +159,10 @@ export function PlayerPanel({
           exit={reduced ? { opacity: 0 } : { y: '100vh' }}
           transition={sheetTransition}
         >
-          {/* Shader rides with the sheet — stays painted for the whole open session. */}
           <div className="listening-world__atmosphere" aria-hidden="true">
-            <MusicFlowShader energy={lyricsEnergy} mood={isPlaying ? 'energy' : 'chill'} palette={palette} light={light} />
-            <div className="listening-world__veil" />
+            {/* Gradient atmosphere, not a blurred cover: two composited layers instead of
+                stacked filter:blur passes, so it stays smooth on a phone. */}
+            <DynamicLyricsBackground artworkUrl={song.artwork} palette={palette} light={light} />
             <div className="listening-world__glow" />
           </div>
 
@@ -164,6 +188,7 @@ export function PlayerPanel({
                   className="ptab"
                   role="tab"
                   aria-selected={tab === 'lyrics'}
+                  aria-label="Lyrics"
                   onClick={() => selectTab('lyrics')}
                 >
                   <Waves size={14} aria-hidden="true" /> Lyrics
@@ -173,6 +198,7 @@ export function PlayerPanel({
                   className="ptab"
                   role="tab"
                   aria-selected={tab === 'queue'}
+                  aria-label="Up next"
                   onClick={() => selectTab('queue')}
                 >
                   <ListMusic size={14} aria-hidden="true" /> Up Next
@@ -182,6 +208,7 @@ export function PlayerPanel({
                   className="ptab"
                   role="tab"
                   aria-selected={tab === 'related'}
+                  aria-label="Related"
                   onClick={() => selectTab('related')}
                 >
                   <Sparkles size={14} aria-hidden="true" /> Related
@@ -201,16 +228,53 @@ export function PlayerPanel({
                   <Artwork song={song} size="large" />
                 </motion.div>
                 <div className="np-meta">
-                  <h2 id="player-title" className="np-title">{song.title}</h2>
-                  <p className="np-artist">{song.artist}</p>
+                  <h2 id="player-title" className="np-title">
+                    {onOpenAlbum ? (
+                      <button
+                        type="button"
+                        className="np-link np-link--title"
+                        title={song.album ? `Open album ${song.album}` : `Open ${song.title}`}
+                        onClick={() => onOpenAlbum(song)}
+                      >
+                        {song.title}
+                      </button>
+                    ) : (
+                      song.title
+                    )}
+                  </h2>
+                  <p className="np-artist">
+                    {onOpenArtist && artists.length > 0
+                      ? artists.map((name, index) => (
+                          <span key={`${name}-${index}`}>
+                            {index > 0 ? <span className="np-artist-sep">, </span> : null}
+                            <button
+                              type="button"
+                              className="np-link np-link--artist"
+                              title={`Open artist ${name}`}
+                              onClick={() => onOpenArtist(name)}
+                            >
+                              {name}
+                            </button>
+                          </span>
+                        ))
+                      : song.artist}
+                  </p>
                 </div>
                 <div className="np-controls">
                   <Scrubber currentTime={currentTime} duration={duration} progress={audioProgress} onSeek={onSeek} />
                   {playbackError ? <p className="playback-error" role="alert">{playbackError}</p> : null}
                   <div className="np-btns">
                     <IconButton icon={SkipBack} label="Previous track" onClick={onPrevious} />
-                    <button className="ctrl-play" onClick={onToggle} aria-label={isPlaying ? 'Pause' : 'Play'}>
+                    <button
+                      className={`ctrl-play${isBuffering ? ' is-buffering' : ''}`}
+                      onClick={onToggle}
+                      aria-label={isPlaying ? 'Pause' : 'Play'}
+                      aria-busy={isBuffering || undefined}
+                    >
                       <PlayPauseGlyph isPlaying={isPlaying} />
+                      {/* A ring around the button, not a swapped glyph: the control keeps
+                          its shape and stays pressable while the track loads. */}
+                      {isBuffering ? <span className="ctrl-play-wait" aria-hidden="true" /> : null}
                     </button>
                     <IconButton icon={SkipForward} label="Next track" onClick={onNext} />
                   </div>
@@ -302,8 +366,30 @@ function PlayPauseGlyph({ isPlaying }: { readonly isPlaying: boolean }) {
   );
 }
 
+/** "1 Minute and 19 Seconds" — what Apple Music reads out for its timers. */
+function spokenTime(seconds: number): string {
+  const whole = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(whole / 60);
+  const rest = whole % 60;
+  const minutePart = minutes > 0 ? `${minutes} ${minutes === 1 ? 'Minute' : 'Minutes'}` : '';
+  const secondPart = rest > 0 || minutes === 0 ? `${rest} ${rest === 1 ? 'Second' : 'Seconds'}` : '';
+  return [minutePart, secondPart].filter(Boolean).join(' and ');
+}
+
+/**
+ * Playback position, built the way Apple Music's web player builds it.
+ *
+ * A native `<input type="range">` rather than a hand-rolled pointer dance: dragging past
+ * the edge of the bar, releasing off-screen, arrow and Page keys, and screen-reader
+ * semantics all come for free and all behaved badly in the custom version.
+ *
+ * The visual is only the track — a 7px bar whose fill edge is the playhead. The thumb is
+ * an 18px transparent circle that exists purely to be grabbed, which is exactly what
+ * Apple does: no knob appears, even on hover.
+ *
+ * The right-hand label counts down (-1:19), it does not show the track length.
+ */
 function Scrubber({
-  currentTime,
   duration,
   progress,
   onSeek
@@ -313,57 +399,58 @@ function Scrubber({
   readonly progress: number;
   readonly onSeek: (seconds: number) => void;
 }) {
-  const trackRef = useRef<HTMLDivElement | null>(null);
   const [dragValue, setDragValue] = useState<number | null>(null);
-  const value = dragValue ?? progress;
+  const span = Math.max(duration, 1);
+  // While dragging, the labels and fill follow the finger; the audio only moves on release
+  // so a drag across a long track is one range request instead of a hundred.
+  const value = clamp(dragValue ?? progress * duration, 0, span);
+  const remaining = Math.max(0, duration - value);
 
-  const pointToProgress = (clientX: number): number => {
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect || duration <= 0) return 0;
-    return clamp((clientX - rect.left) / rect.width, 0, 1);
-  };
-
-  const commit = (clientX: number): void => {
-    const next = pointToProgress(clientX);
+  const commit = (): void => {
+    if (dragValue === null) return;
+    const next = dragValue;
     setDragValue(null);
-    onSeek(next * duration);
+    onSeek(next);
   };
 
   return (
     <div className="progress listening-progress">
-      <time>{formatTime((dragValue ?? progress) * duration)}</time>
-      <div
-        className={`bar ${dragValue !== null ? 'is-dragging' : ''}`}
-        ref={trackRef}
-        role="slider"
-        aria-label="Track position"
-        aria-valuemin={0}
-        aria-valuemax={Math.round(duration)}
-        aria-valuenow={Math.round((dragValue ?? progress) * duration)}
-        tabIndex={0}
-        onPointerDown={(event) => {
-          event.currentTarget.setPointerCapture(event.pointerId);
-          setDragValue(pointToProgress(event.clientX));
-        }}
-        onPointerMove={(event) => {
-          if (dragValue !== null) setDragValue(pointToProgress(event.clientX));
-        }}
-        onPointerUp={(event) => commit(event.clientX)}
-        onPointerCancel={() => setDragValue(null)}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowRight') {
-            event.preventDefault();
-            onSeek(currentTime + 5);
-          }
-          if (event.key === 'ArrowLeft') {
-            event.preventDefault();
-            onSeek(currentTime - 5);
-          }
-        }}
+      <time
+        className="progress-time"
+        role="timer"
+        dateTime={`PT${Math.floor(value)}S`}
+        aria-label={`Elapsed ${spokenTime(value)}`}
       >
-        <span className="bar-fill" style={{ transform: `scaleX(${value})` }} />
-      </div>
-      <time>{formatTime(duration)}</time>
+        {formatTime(value)}
+      </time>
+      <input
+        type="range"
+        className={`progress-range${dragValue !== null ? ' is-dragging' : ''}`}
+        min={0}
+        max={span}
+        step={1}
+        value={value}
+        disabled={duration <= 0}
+        aria-label="Playback progress"
+        aria-valuetext={`${spokenTime(value)} of ${spokenTime(duration)}`}
+        style={{ '--progress': `${(value / span) * 100}%` } as CSSProperties}
+        onChange={(event) => setDragValue(Number(event.target.value))}
+        onPointerDown={() => tapHaptic()}
+        onPointerUp={commit}
+        onPointerCancel={() => setDragValue(null)}
+        onKeyUp={commit}
+        onBlur={commit}
+      />
+      <time
+        className="progress-time"
+        role="timer"
+        dateTime={`PT${Math.floor(remaining)}S`}
+        aria-label={`Remaining ${spokenTime(remaining)}`}
+      >
+        -{formatTime(remaining)}
+      </time>
     </div>
   );
 }
+
+

@@ -1,7 +1,7 @@
 import { ProviderUnavailableError, NotFoundError, TimeoutError } from '../lib/errors.js';
 import { cacheKey, type CacheStore } from '../lib/cache.js';
 import { CircuitBreaker } from '../lib/circuitBreaker.js';
-import { normalizeSong, songIdentity } from '../lib/normalize.js';
+import { collapseRecordings, normalizeSong, songIdentity } from '../lib/normalize.js';
 import type { GaanaProvider } from '../providers/gaana.js';
 import type { ProviderResult, SaavnAsset, SaavnProvider, SaavnSong } from '../providers/saavn.js';
 import { decodeHtml } from '../lib/decodeHtml.js';
@@ -32,13 +32,16 @@ export class CatalogService {
   }
 
   public async search(query: string, limit: number, page: number): Promise<CatalogSearch> {
-    const key = cacheKey('search', query, String(limit), String(page));
+    // v3: near-tie playCount + title≈album election — bump so playlist covers miss.
+    const key = cacheKey('search', 'v3', query, String(limit), String(page));
     const cached = await this.cache.get<CatalogSearch>(key);
     if (cached) {
       return cached;
     }
 
-    const saavn = await this.call(this.saavnBreaker, () => this.saavn.search(query, limit, page));
+    // Over-fetch so collapse still fills `limit` when the provider repeats releases.
+    const fetchLimit = Math.min(Math.max(limit * 3, limit), 50);
+    const saavn = await this.call(this.saavnBreaker, () => this.saavn.search(query, fetchLimit, page));
     if (!saavn.ok) {
       throw unavailable(saavn.reason);
     }
@@ -46,7 +49,7 @@ export class CatalogService {
     let raw = saavn.data;
     let source: 'Saavn' | 'Gaana' = 'Saavn';
     if (raw.length === 0) {
-      const gaana = await this.tryGaana(query, limit, page);
+      const gaana = await this.tryGaana(query, fetchLimit, page);
       if (gaana) {
         raw = gaana;
         source = 'Gaana';
@@ -54,7 +57,7 @@ export class CatalogService {
     }
 
     const value = {
-      results: normalizeMany(raw, source),
+      results: collapseRecordings(normalizeMany(raw, source)).slice(0, limit),
       source
     } satisfies CatalogSearch;
     await this.cache.set(key, value, 3600);
@@ -95,17 +98,18 @@ export class CatalogService {
   }
 
   public async getSuggestions(id: string, limit: number): Promise<UnifiedSong[]> {
-    const key = cacheKey('suggestions', id, String(limit));
+    const key = cacheKey('suggestions', 'v3', id, String(limit));
     const cached = await this.cache.get<UnifiedSong[]>(key);
     if (cached) {
       return cached;
     }
 
-    const result = await this.call(this.saavnBreaker, () => this.saavn.getSuggestions(id, limit));
+    const fetchLimit = Math.min(Math.max(limit * 3, limit), 50);
+    const result = await this.call(this.saavnBreaker, () => this.saavn.getSuggestions(id, fetchLimit));
     if (!result.ok) {
       throw unavailable(result.reason);
     }
-    const songs = normalizeMany(result.data, 'Saavn');
+    const songs = collapseRecordings(normalizeMany(result.data, 'Saavn')).slice(0, limit);
     await this.cache.set(key, songs, 86_400);
     return songs;
   }
@@ -196,7 +200,8 @@ export class CatalogService {
   }
 
   public async getHome(): Promise<HomePayload> {
-    const cached = await this.cache.get<HomePayload>('home:default');
+    // v2: electCanonical near-tie + official-single preference (same as search v3).
+    const cached = await this.cache.get<HomePayload>('home:default:v2');
     if (cached) {
       return cached;
     }
@@ -235,7 +240,7 @@ export class CatalogService {
       madeForYou: shelf(loved.results, true),
       recommended: shelf(upbeat.results, true)
     } satisfies HomePayload;
-    await this.cache.set('home:default', home, 3600);
+    await this.cache.set('home:default:v2', home, 3600);
     return home;
   }
 

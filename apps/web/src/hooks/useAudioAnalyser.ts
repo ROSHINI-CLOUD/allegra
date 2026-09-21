@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
+import { createBandTracker } from '../lib/bands';
+import type { AudioBands } from '../lib/bands';
+
 /**
  * Reads the real output of the <audio> element through a Web Audio AnalyserNode.
  *
@@ -15,11 +18,20 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
  * inside their own animation frame, so audio never re-renders the tree.
  */
 
-interface AnalyserHandle {
+export type { AudioBands };
+
+export interface AnalyserHandle {
   /** Fills `target` with the current spectrum (0..255). Returns false when there is no live graph. */
   readonly readSpectrum: (target: Uint8Array) => boolean;
   /** Smoothed overall loudness, 0..1. Returns 0 when nothing is audible. */
   readonly readLevel: () => number;
+  /**
+   * Band energies for the current frame, or `null` when nothing is playing.
+   *
+   * `null` means "no data", never "silence": a caller must hold its last look rather than
+   * collapsing to zero, or a muted tab would read as the song having stopped.
+   */
+  readonly readBands: () => AudioBands | null;
   /** How many spectrum bins `readSpectrum` expects. */
   readonly binCount: () => number;
 }
@@ -46,6 +58,7 @@ export function useAudioAnalyser(
   const contextRef = useRef<AudioContext | null>(null);
   const levelRef = useRef(0);
   const scratchRef = useRef<Uint8Array | null>(null);
+  const trackerRef = useRef(createBandTracker());
 
   useEffect(() => {
     const audio = audioRef.current as ElementWithGraph | null;
@@ -129,11 +142,40 @@ export function useAudioAnalyser(
     return levelRef.current;
   }, [audioRef]);
 
+  const readBands = useCallback((): AudioBands | null => {
+    const analyser = analyserRef.current;
+    const audio = audioRef.current;
+    if (!analyser || !audio || audio.paused || audio.muted) return null;
+    let scratch = scratchRef.current;
+    if (!scratch || scratch.length !== analyser.frequencyBinCount) {
+      scratch = new Uint8Array(analyser.frequencyBinCount);
+      scratchRef.current = scratch;
+    }
+    analyser.getByteFrequencyData(scratch as Uint8Array<ArrayBuffer>);
+    const bins = scratch.length;
+    if (bins === 0) return null;
+
+    const mean = (from: number, to: number): number => {
+      const start = Math.max(0, Math.floor(bins * from));
+      const end = Math.min(bins, Math.max(start + 1, Math.floor(bins * to)));
+      let sum = 0;
+      for (let i = start; i < end; i += 1) sum += scratch[i] ?? 0;
+      return sum / (end - start) / 255;
+    };
+
+    // Band edges as fractions of the spectrum rather than bin indices, so a different fftSize
+    // still splits the same way.
+    return trackerRef.current.next(mean(0, 0.05), mean(0.05, 0.25), mean(0.25, 0.6));
+  }, [audioRef]);
+
   /*
    * The handle is memoised because callers put it in effect dependency arrays.
    * Returning a fresh object each render tore down and restarted the aura's
    * animation frame on every timeupdate, which flashed the light back to rest
    * several times a second.
    */
-  return useMemo(() => ({ readSpectrum, readLevel, binCount }), [binCount, readLevel, readSpectrum]);
+  return useMemo(
+    () => ({ readSpectrum, readLevel, readBands, binCount }),
+    [binCount, readBands, readLevel, readSpectrum]
+  );
 }

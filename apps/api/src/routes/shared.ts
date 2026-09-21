@@ -11,7 +11,7 @@ import { sendFailure, sendSuccess } from './common.js';
 /** Six url-safe characters ~ 2 billion codes; long enough not to guess, short enough to read out loud. */
 const CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 
-function newCode(): string {
+export function newCode(): string {
   return Array.from(crypto.randomBytes(8), (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join('').slice(0, 8);
 }
 

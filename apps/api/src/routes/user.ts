@@ -306,7 +306,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService, coversPub
 }
 
 /** The slice of taste the browser needs: who they love, in what language, and whether to ask them to pick favourites. */
-function tasteSummary(taste: TasteProfile | undefined): { topArtists: { name: string; score: number }[]; languages: { name: string; score: number }[]; signals: number; onboarded: boolean } {
+export function tasteSummary(taste: TasteProfile | undefined): { topArtists: { name: string; score: number }[]; languages: { name: string; score: number }[]; signals: number; onboarded: boolean } {
   const value = taste ?? emptyTaste();
   return {
     topArtists: value.artists.slice(0, 12).map((entry) => ({ name: entry.name, score: entry.score })),
@@ -325,7 +325,7 @@ function stringList(value: unknown, max: number): string[] {
  * Folds one behaviour on one song into the user's taste. Looking the song up can fail (provider down); that must
  * never fail the action the listener took, so on any trouble the user is returned untouched.
  */
-async function learn(catalog: CatalogService, user: UserData, id: string, weightFor: (song: { duration: number }) => number): Promise<UserData> {
+export async function learn(catalog: CatalogService, user: UserData, id: string, weightFor: (song: { duration: number }) => number): Promise<UserData> {
   try {
     const [song] = await catalog.getSongs([id]);
     if (!song) return user;

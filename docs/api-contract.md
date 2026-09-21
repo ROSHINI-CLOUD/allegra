@@ -31,6 +31,8 @@ export interface UnifiedSong {
   language?: string;
   playCount: number;      // 0 for Gaana-sourced
   source: 'Saavn' | 'Gaana';
+  /** Other release rows for the same recording (search / suggestions only). Never nested. */
+  variants?: UnifiedSong[];
 }
 
 export interface LyricLine {
@@ -59,9 +61,25 @@ export interface LyricsPayload {
 Empty results → `success: true` with `results: []`, **not** an error.
 Cache 1 h. Budget: <800 ms cold, <200 ms cached.
 
+**Recording collapse (2026-09-21):** the provider lists one row per release, so the
+same song can appear ~20 times with different compilation covers. Search groups by
+recording identity (title without bracketed trailers + sorted artists), elects one
+canonical row per group, and attaches the rest as `variants`. Election order:
+1. **Meaningful** `playCount` lead (near-ties within 2% / 2 000 plays count as equal —
+   Saavn often stamps the same count on every compilation placement).
+2. Prefer album name matching the song title (the official single) over editorial
+   playlist placements.
+3. Prefer a real primary artist over "Various Artists".
+4. Prefer albums that are not shared across many different artists in the same
+   result set.
+Over-fetches from the provider so `limit` is filled after collapse when possible.
+The UI may expose `variants` behind a small "N other versions" control — they are
+never listed as separate top-level search hits.
+
 ### `GET /api/songs/:id` → `ApiResponse<UnifiedSong>` · cache 6 h
 ### `GET /api/songs?ids=a,b,c` → `ApiResponse<UnifiedSong[]>` · batch hydrate
 ### `GET /api/songs/:id/suggestions?limit=15` → `ApiResponse<UnifiedSong[]>` · cache 24 h
+Same recording collapse as search — suggestions never return twenty copies of one song.
 
 ### `GET /api/home`
 `→ ApiResponse<{ trending: UnifiedSong[]; madeForYou: UnifiedSong[]; recommended: UnifiedSong[] }>`

@@ -1,13 +1,21 @@
 import { Languages, LoaderCircle, Music, RefreshCw } from 'lucide-react';
-import { motion, useReducedMotion } from 'motion/react';
-import type { MutableRefObject } from 'react';
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useReducedMotion } from 'motion/react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MutableRefObject
+} from 'react';
 
 import type { LyricLine } from '@shared/types';
 
 import { EmptyState, TactileButton } from './ui';
 import { clamp } from '../lib/utils';
-import { motionTokens, spring } from '../motion';
 
 interface LyricsPanelProps {
   readonly lines: LyricLine[];
@@ -16,6 +24,8 @@ interface LyricsPanelProps {
   readonly error: string | null;
   readonly onRetry: () => void;
   readonly onSeek: (timestamp: number) => void;
+  /** When set, tapping a line seeks and requests playback. */
+  readonly onActivateLine?: (timestamp: number) => void;
   readonly compact?: boolean;
   readonly artworkUrl?: string | null;
   readonly translating?: boolean;
@@ -24,15 +34,16 @@ interface LyricsPanelProps {
   readonly translateProvider?: string | null;
   readonly onToggleTranslate?: () => void;
   readonly hideBackdrop?: boolean;
-  /** Soft-focus stage: active line stays optically anchored (default true). */
+  /** Soft-focus stage: active line stays near the optical center (default true). */
   readonly softFocus?: boolean;
-  /** Optional sub-line (letter/word sweep) fill. Off by default: lyrics highlight line by line. */
   readonly karaokeProgress?: boolean;
 }
 
+const FOLLOW_RESUME_MS = 2200;
+
 /**
- * Full-screen quality synced lyrics: soft focus zone, spring line changes,
- * optional karaoke progress mask. No continuous page shove.
+ * Synced lyrics with native smooth scrolling.
+ * Soft-focus uses overflow scroll (not transform lock) so past/future lines stay reachable.
  */
 export function LyricsPanel({
   lines,
@@ -41,6 +52,7 @@ export function LyricsPanel({
   error,
   onRetry,
   onSeek,
+  onActivateLine,
   compact = false,
   artworkUrl = null,
   translating = false,
@@ -55,46 +67,132 @@ export function LyricsPanel({
   const reduced = useReducedMotion();
   const lineRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const [focusOffset, setFocusOffset] = useState(0);
+  const followPausedRef = useRef(false);
+  const resumeTimerRef = useRef(0);
+  /** Scroll position our own smooth animation is heading for, or null when idle. */
+  const pendingScrollRef = useRef<number | null>(null);
+  const pendingTimerRef = useRef(0);
+  const lastSongKeyRef = useRef('');
+  const [followPaused, setFollowPaused] = useState(false);
+
   const activeIndex = useMemo(() => findActiveLine(lines, currentTime), [currentTime, lines]);
   const lineProgress = useMemo(
-    () => activeLineProgress(lines, activeIndex, currentTime),
-    [lines, activeIndex, currentTime]
+    () => (karaokeProgress ? activeLineProgress(lines, activeIndex, currentTime) : 0),
+    [lines, activeIndex, currentTime, karaokeProgress]
   );
 
-  useLayoutEffect(() => {
-    if (!softFocus || compact) return;
-    const stage = stageRef.current;
-    const active = lineRefs.current[activeIndex];
-    if (!stage || !active) return;
-    const stageBox = stage.getBoundingClientRect();
-    const lineBox = active.getBoundingClientRect();
-    const targetCenter = stageBox.top + stageBox.height * 0.42;
-    const lineCenter = lineBox.top + lineBox.height / 2;
-    setFocusOffset((current) => current + (targetCenter - lineCenter));
-  }, [activeIndex, softFocus, compact, lines.length]);
+  const songKey = useMemo(
+    () => (lines.length > 0 ? `${lines[0]?.timestamp ?? 0}:${lines.length}:${lines[lines.length - 1]?.timestamp ?? 0}` : ''),
+    [lines]
+  );
 
-  // Compact / fallback: classic center scroll without shoving the whole page.
+  const pauseFollow = useCallback(() => {
+    pendingScrollRef.current = null;
+    followPausedRef.current = true;
+    setFollowPaused(true);
+    if (resumeTimerRef.current) window.clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = window.setTimeout(() => {
+      followPausedRef.current = false;
+      setFollowPaused(false);
+    }, FOLLOW_RESUME_MS);
+  }, []);
+
+  const resumeFollowNow = useCallback(() => {
+    if (resumeTimerRef.current) window.clearTimeout(resumeTimerRef.current);
+    followPausedRef.current = false;
+    setFollowPaused(false);
+  }, []);
+
+  useEffect(() => () => {
+    if (resumeTimerRef.current) window.clearTimeout(resumeTimerRef.current);
+    if (pendingTimerRef.current) window.clearTimeout(pendingTimerRef.current);
+  }, []);
+
+  // New lyric set (song change / reopen after load): reset scroll + follow.
   useLayoutEffect(() => {
-    if (softFocus && !compact) return;
+    if (!songKey || songKey === lastSongKeyRef.current) return;
+    lastSongKeyRef.current = songKey;
+    resumeFollowNow();
     const container = scrollRef.current;
-    const active = lineRefs.current[activeIndex];
-    if (!container || !active) return;
-    const target = active.offsetTop - container.clientHeight / 2 + active.offsetHeight / 2;
-    container.scrollTo({
-      top: Math.max(0, target),
-      behavior: reduced ? 'auto' : 'smooth'
-    });
-  }, [activeIndex, softFocus, compact, reduced]);
+    if (container) {
+      pendingScrollRef.current = 0;
+      container.scrollTop = 0;
+      window.requestAnimationFrame(() => {
+        pendingScrollRef.current = null;
+      });
+    }
+  }, [songKey, resumeFollowNow]);
 
-  const transition = reduced
-    ? { duration: motionTokens.duration.instant }
-    : spring.lyrics;
+  const scrollActiveIntoView = useCallback(
+    (behavior: ScrollBehavior) => {
+      const container = scrollRef.current;
+      const active = lineRefs.current[activeIndex];
+      if (!container || !active) return;
+
+      // Dead-centre in every mode — the sung line is the focal point, not a heading.
+      // Measured against the container's own box: offsetTop is relative to the nearest
+      // positioned ancestor, which is the section, so it silently adds the chrome height
+      // and parks the active line above centre.
+      const offsetInScroll =
+        container.scrollTop + (active.getBoundingClientRect().top - container.getBoundingClientRect().top);
+      const target = offsetInScroll - container.clientHeight * 0.5 + active.offsetHeight / 2;
+      const nextTop = Math.max(0, target);
+      if (Math.abs(container.scrollTop - nextTop) < 2) return;
+
+      // A smooth scroll emits scroll events for as long as it runs, and a fixed timer
+      // regularly expired mid-animation — the tail of our own scroll then looked like a
+      // user gesture, follow paused, and the active line drifted off centre for the rest
+      // of the song. Track the destination instead and ignore events until we arrive.
+      pendingScrollRef.current = nextTop;
+      if (pendingTimerRef.current) window.clearTimeout(pendingTimerRef.current);
+      pendingTimerRef.current = window.setTimeout(() => {
+        pendingScrollRef.current = null;
+      }, 1600);
+      container.scrollTo({ top: nextTop, behavior });
+    },
+    [activeIndex]
+  );
+
+  // Auto-follow active line unless the user is freely scrolling.
+  useLayoutEffect(() => {
+    if (followPausedRef.current) return;
+    if (loading || lines.length === 0) return;
+    scrollActiveIntoView(reduced ? 'auto' : 'smooth');
+  }, [activeIndex, loading, lines.length, reduced, scrollActiveIntoView, followPaused, songKey]);
+
+  const handleScroll = useCallback(() => {
+    const pending = pendingScrollRef.current;
+    if (pending === null) {
+      pauseFollow();
+      return;
+    }
+    const container = scrollRef.current;
+    const settled =
+      !container ||
+      Math.abs(container.scrollTop - pending) < 4 ||
+      container.scrollTop >= container.scrollHeight - container.clientHeight - 1;
+    if (settled) {
+      pendingScrollRef.current = null;
+      if (pendingTimerRef.current) window.clearTimeout(pendingTimerRef.current);
+    }
+  }, [pauseFollow]);
+
+  const handleLineActivate = useCallback(
+    (timestamp: number) => {
+      resumeFollowNow();
+      if (onActivateLine) onActivateLine(timestamp);
+      else onSeek(timestamp);
+      // Snap after seek so the tapped line is centered immediately.
+      window.requestAnimationFrame(() => {
+        scrollActiveIntoView(reduced ? 'auto' : 'smooth');
+      });
+    },
+    [onActivateLine, onSeek, reduced, resumeFollowNow, scrollActiveIntoView]
+  );
 
   return (
     <section
-      className={`ytm-lyrics ${compact ? 'ytm-lyrics--compact' : ''} ${hideBackdrop ? 'ytm-lyrics--nobackdrop' : ''} ${softFocus && !compact ? 'ytm-lyrics--softfocus' : ''}`}
+      className={`ytm-lyrics ${compact ? 'ytm-lyrics--compact' : ''} ${hideBackdrop ? 'ytm-lyrics--nobackdrop' : ''} ${softFocus && !compact ? 'ytm-lyrics--softfocus' : ''}${followPaused ? ' is-user-scrolling' : ''}`}
       aria-labelledby="lyrics-heading"
     >
       {!hideBackdrop && (
@@ -146,13 +244,7 @@ export function LyricsPanel({
               <span>Finding the beat and lining up every word.</span>
             </div>
             <div className="lyrics-loading-wave" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
+              <span /><span /><span /><span /><span /><span /><span />
             </div>
           </div>
         </div>
@@ -165,30 +257,16 @@ export function LyricsPanel({
         <div className="ytm-lyrics__state">
           <EmptyState title="No lyrics found" copy="We could not locate synchronized lyrics for this track." />
         </div>
-      ) : softFocus && !compact ? (
-        <div ref={stageRef} className="ytm-lyrics__stage" role="list" aria-label="Song lyrics">
-          <motion.div
-            className="ytm-lyrics__focus-track"
-            animate={{ y: focusOffset }}
-            transition={transition}
-          >
-            {lines.map((line, index) => (
-              <LyricLineButton
-                key={`${line.lineOrder}-${line.timestamp}`}
-                line={line}
-                index={index}
-                activeIndex={activeIndex}
-                progress={index === activeIndex ? lineProgress : 0}
-                karaoke={karaokeProgress && index === activeIndex}
-                onSeek={onSeek}
-                lineRefs={lineRefs}
-                transition={transition}
-              />
-            ))}
-          </motion.div>
-        </div>
       ) : (
-        <div ref={scrollRef} className="ytm-lyrics__scroll" role="list" aria-label="Song lyrics">
+        <div
+          ref={scrollRef}
+          className={`ytm-lyrics__scroll${softFocus && !compact ? ' ytm-lyrics__scroll--soft' : ''}`}
+          role="list"
+          aria-label="Song lyrics"
+          onScroll={handleScroll}
+          onWheel={pauseFollow}
+          onTouchStart={pauseFollow}
+        >
           {lines.map((line, index) => (
             <LyricLineButton
               key={`${line.lineOrder}-${line.timestamp}`}
@@ -197,9 +275,8 @@ export function LyricsPanel({
               activeIndex={activeIndex}
               progress={index === activeIndex ? lineProgress : 0}
               karaoke={karaokeProgress && index === activeIndex}
-              onSeek={onSeek}
+              onActivate={handleLineActivate}
               lineRefs={lineRefs}
-              transition={transition}
             />
           ))}
         </div>
@@ -208,24 +285,22 @@ export function LyricsPanel({
   );
 }
 
-function LyricLineButton({
+const LyricLineButton = memo(function LyricLineButton({
   line,
   index,
   activeIndex,
   progress,
   karaoke,
-  onSeek,
-  lineRefs,
-  transition
+  onActivate,
+  lineRefs
 }: {
   readonly line: LyricLine;
   readonly index: number;
   readonly activeIndex: number;
   readonly progress: number;
   readonly karaoke: boolean;
-  readonly onSeek: (timestamp: number) => void;
+  readonly onActivate: (timestamp: number) => void;
   readonly lineRefs: MutableRefObject<Record<number, HTMLButtonElement | null>>;
-  readonly transition: object;
 }) {
   const distance = Math.abs(index - activeIndex);
   const state =
@@ -239,21 +314,19 @@ function LyricLineButton({
           ? 'is-future is-distant'
           : 'is-future';
 
-  const opacity = index === activeIndex ? 1 : distance === 1 ? 0.5 : distance === 2 ? 0.32 : distance === 3 ? 0.2 : 0.12;
   const instrumental = line.text === '[INSTRUMENTAL]' || line.text === '🎵';
 
   return (
-    <motion.button
+    <button
       className={`ytm-lyrics__line ${state}`}
       type="button"
       ref={(element) => {
         lineRefs.current[index] = element;
       }}
-      onClick={() => onSeek(line.timestamp)}
+      onClick={() => onActivate(line.timestamp)}
       role="listitem"
       aria-current={index === activeIndex ? 'true' : undefined}
-      animate={{ opacity }}
-      transition={transition}
+      style={{ '--lyric-fade': lineOpacity(distance, index === activeIndex) } as CSSProperties}
     >
       {instrumental ? (
         <span className="ytm-lyrics__instrumental" aria-label="Instrumental break">
@@ -264,11 +337,18 @@ function LyricLineButton({
       ) : (
         line.text
       )}
-    </motion.button>
+    </button>
   );
+});
+
+function lineOpacity(distance: number, active: boolean): number {
+  if (active) return 1;
+  if (distance === 1) return 0.56;
+  if (distance === 2) return 0.36;
+  if (distance === 3) return 0.27;
+  return 0.2;
 }
 
-/** Transform-only karaoke reveal: played words full ink, future words dimmed. */
 function KaraokeLine({ text, progress }: { readonly text: string; readonly progress: number }) {
   const amount = clamp(progress, 0, 1);
   const inverse = amount <= 0.001 ? 1 : 1 / amount;

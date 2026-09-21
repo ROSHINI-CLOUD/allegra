@@ -134,8 +134,14 @@ export async function extractPalette(src: string, signal?: AbortSignal): Promise
       const g = data[i + 1] ?? 0;
       const b = data[i + 2] ?? 0;
       const { chroma, light } = chromaOf(r, g, b);
-      // Ignore near-white, near-black and greys: they carry no hue and would dominate.
-      if (light > 0.94 || light < 0.06 || chroma < 0.08) continue;
+      // Ignore greys, and ignore washed-out highlights and murky shadows. A blown-out
+      // headlight is a large pale-yellow region on plenty of covers; counted as a colour
+      // it wins on area alone and then gets dragged to mid-lightness, which is how a warm
+      // amber sleeve came out olive green.
+      if (chroma < 0.08) continue;
+      if (light > 0.78 && chroma < 0.4) continue;
+      if (light < 0.16 && chroma < 0.3) continue;
+      if (light > 0.94 || light < 0.06) continue;
       // Quantise to 5 bits per channel so similar pixels land together.
       const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
       const bin = bins.get(key) ?? { r: 0, g: 0, b: 0, count: 0, score: 0 };
@@ -143,9 +149,11 @@ export async function extractPalette(src: string, signal?: AbortSignal): Promise
       bin.g += g;
       bin.b += b;
       bin.count += 1;
-      // Population decides, chroma tilts it: a large muted area outranks a tiny logo, but a
-      // vivid area outranks a grey one of the same size.
-      bin.score += 0.3 + chroma;
+      // Vividness squared, weighted toward mid-lightness. Area still counts — every pixel
+      // adds — but a saturated region now beats a larger, paler one, which is what the eye
+      // reads as "the colour of this cover".
+      const balance = Math.max(0.05, 1 - Math.abs(light - 0.5) * 1.4);
+      bin.score += chroma * chroma * balance;
       bins.set(key, bin);
     }
 
@@ -165,9 +173,9 @@ export async function extractPalette(src: string, signal?: AbortSignal): Promise
     if (!primary) return DEFAULT_PALETTE;
     // A second / third colour must be a different hue AND a real share of the cover; otherwise use
     // lighter and darker versions of the primary so the palette never drifts off the artwork.
-    const secondary = ranked.find((c) => hueDistance(c.hue, primary.hue) > 40 && c.score >= primary.score * 0.18);
+    const secondary = ranked.find((c) => hueDistance(c.hue, primary.hue) > 40 && c.score >= primary.score * 0.08);
     const tertiary = ranked.find(
-      (c) => c !== secondary && hueDistance(c.hue, primary.hue) > 40 && (!secondary || hueDistance(c.hue, secondary.hue) > 30) && c.score >= primary.score * 0.12
+      (c) => c !== secondary && hueDistance(c.hue, primary.hue) > 40 && (!secondary || hueDistance(c.hue, secondary.hue) > 30) && c.score >= primary.score * 0.05
     );
     return {
       primary: primary.hex,

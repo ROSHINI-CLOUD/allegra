@@ -94,6 +94,7 @@ body::after,
   display: block;
   overflow: hidden;
   pointer-events: none;
+  transition: --aura-primary 900ms var(--ease-standard), --aura-secondary 900ms var(--ease-standard), --aura-tertiary 900ms var(--ease-standard);
   background:
     radial-gradient(72% 58% at 72% 18%, color-mix(in srgb, var(--aura-primary) 18%, transparent), transparent 72%),
     radial-gradient(58% 48% at 18% 76%, color-mix(in srgb, var(--aura-secondary) 12%, transparent), transparent 76%),
@@ -145,7 +146,7 @@ body::after,
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(226, 232, 238, 0.2) 100%);
 }
 
-:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+:where(a, button, input, select, textarea, [tabindex]:not([tabindex='-1'])):focus-visible {
   outline: 2px solid var(--focus, #111);
   outline-offset: 2px;
 }
@@ -299,8 +300,7 @@ body::after,
   .is-nav-collapsed .brand,
   .is-nav-collapsed .desktop-nav,
   .is-nav-collapsed .header-actions { display: none; }
-  .is-nav-collapsed .nav-collapse-toggle { width: 44px; height: 44px; flex-basis: 44px; border-radius: 50%; background: transparent; }
-}
+  .is-nav-collapsed .nav-collapse-toggle { width: 44px; height: 44px; flex-basis: 44px; border-radius: 50%; background: transparent; }}
 
 /* ---------- White panel ---------- */
 
@@ -446,6 +446,14 @@ body::after,
 @property --art-primary { syntax: '<color>'; inherits: true; initial-value: #4a4f5c; }
 @property --art-secondary { syntax: '<color>'; inherits: true; initial-value: #3d4350; }
 @property --art-tertiary { syntax: '<color>'; inherits: true; initial-value: #5a5f6b; }
+
+/* --aura-* feed the same song palette into the background field (see .dynamic-aura below). Without
+ * @property here they're untyped, so the browser treats a change as a discrete flip instead of an
+ * interpolatable value — the field would snap to the new hue instantly while --art-* above cross-fades
+ * over 900ms, reading as the "vibe" and the rest of the chrome falling out of sync on every song change. */
+@property --aura-primary { syntax: '<color>'; inherits: true; initial-value: #ee6b5f; }
+@property --aura-secondary { syntax: '<color>'; inherits: true; initial-value: #7bafd4; }
+@property --aura-tertiary { syntax: '<color>'; inherits: true; initial-value: #c4dd74; }
 
 .app-shell { transition: --art-primary 900ms var(--ease-standard), --art-secondary 900ms var(--ease-standard), --art-tertiary 900ms var(--ease-standard); }
 
@@ -636,6 +644,90 @@ body::after,
 
 .card-copy p { margin: 0; overflow: hidden; color: var(--ink-muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 
+.song-versions-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.song-versions-toggle:hover,
+.song-versions-toggle:focus-visible {
+  color: var(--ink-muted);
+}
+
+.song-versions-toggle.is-open svg {
+  transform: rotate(180deg);
+}
+
+.song-versions-toggle svg {
+  transition: transform var(--d-fast) var(--ease-standard);
+}
+
+.song-versions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 2px 76px;
+}
+
+.song-version-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.song-version-row:hover,
+.song-version-row:focus-visible {
+  background: var(--hover-wash);
+}
+
+.song-version-row .artwork {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  flex: 0 0 auto;
+}
+
+.song-version-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.song-version-copy strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.song-version-copy small {
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 .track-album { display: none; padding: 0; overflow: hidden; border: 0; background: none; color: var(--ink-muted); font: inherit; font-size: 13px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .track-album--link { cursor: pointer; }
 .track-album--link:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
@@ -644,6 +736,57 @@ body::after,
 .card-meta .meta-dot,
 .card-meta span:not(:first-child) { display: none; }
 
+/* Release variants belong to the row's second line, never in the first implicit grid cell.
+ * Without an explicit full-width placement, a large variant set becomes a tall one-column
+ * stack under the track number and makes the browse list read like a broken table. */
+.song-versions {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+  max-height: 176px;
+  padding: 8px;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--wave) 18%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--wave) 5%, rgba(7, 10, 14, 0.72));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--wave) 42%, transparent) transparent;
+}
+
+.song-version-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-press);
+}
+
+.song-version-row:hover,
+.song-version-row:focus-visible {
+  border-color: color-mix(in srgb, var(--wave) 36%, transparent);
+  background: color-mix(in srgb, var(--wave) 10%, rgba(255, 255, 255, 0.06));
+  transform: translateY(-1px);
+}
+
+.song-version-row .artwork { width: 34px; height: 34px; border-radius: 7px; }
+.song-version-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.song-version-copy strong,
+.song-version-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.song-version-copy strong { color: var(--ink-soft); font-size: 11px; font-weight: 600; }
+.song-version-copy small { color: var(--ink-faint); font-family: var(--font-mono); font-size: 10px; }
+
 .skeleton-card { display: grid; min-height: 64px; grid-template-columns: 48px minmax(0, 1fr); gap: 12px; padding: 8px 12px; align-items: center; }
 
 /* After the base rules so the wider layout wins: album column appears once the column is wide enough. */
@@ -651,8 +794,13 @@ body::after,
   .track-head,
   .track-row { --cols: 28px 48px minmax(0, 1fr) minmax(0, 0.7fr) 56px; }
   .track-album { display: block; }
-  .track-head span:nth-child(2) { display: block; }
-}
+  .track-head span:nth-child(2) { display: block; }}
+
+@media (max-width: 900px) {
+  .song-versions { grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+
+@media (max-width: 560px) {
+  .song-versions { grid-template-columns: 1fr; max-height: 204px; }}
 
 /* ---------- Now Playing column ---------- */
 
@@ -961,8 +1109,7 @@ body::after,
   .lyrics-loading-ring,
   .lyrics-loading-wave span { animation: none; }
   .lyrics-loading-card::after { transform: scaleX(0.6); }
-  .lyrics-loading-wave span { transform: scaleY(0.8); }
-}
+  .lyrics-loading-wave span { transform: scaleY(0.8); }}
 
 /* ---------- Pill player ---------- */
 
@@ -1109,23 +1256,22 @@ body::after,
   .now-playing-time { display: none; }
   .now-playing-bar { grid-template-columns: minmax(0, 200px) auto minmax(40px, 1fr) auto; }
   .mini-action-pill span { display: none; }
-  .mini-action-pill { width: 34px; padding: 0; justify-content: center; }
-}
+  .mini-action-pill { width: 34px; padding: 0; justify-content: center; }}
 
 @media (max-width: 900px) {
   :root { --rail-w: 0px; }
 
   .site-header {
     position: sticky;
-    inset: 12px auto auto 12px;
-    top: 12px;
+    inset: max(12px, env(safe-area-inset-top, 0px)) auto auto 12px;
+    top: max(12px, env(safe-area-inset-top, 0px));
     width: calc(100% - 24px);
     height: 52px;
     flex-direction: row;
     align-items: center;
     gap: 6px;
-    margin: 12px 12px 0;
-    padding: 0 12px 0 16px;
+    margin: max(12px, env(safe-area-inset-top, 0px)) 12px 0;
+    padding: 0 10px 0 14px;
     overflow: visible;
     border-radius: 999px;
   }
@@ -1135,17 +1281,25 @@ body::after,
   .session-chip,
   .nav-divider,
   .nav-collapse-toggle,
-  .desktop-nav .nav-link:nth-of-type(n+3) { display: none; }
+  /* Keep Home / Browse / Library; hide the deeper library shortcuts. */
+  .desktop-nav .nav-link:nth-of-type(n+4) { display: none; }
   .desktop-nav { width: auto; flex-direction: row; align-items: center; gap: 2px; margin: 0 0 0 auto; }
   .nav-link { width: auto; min-height: 34px; margin: 0; padding: 0 12px; border-radius: 999px; font-size: 14px; }
   .nav-link svg,
   .nav-link.is-active::before { display: none; }
   .nav-link.is-active { background: rgba(255, 255, 255, 0.14); }
   .header-actions { flex-direction: row; align-items: center; margin: 0; padding: 0; border: 0; }
-  .header-buttons .icon-button { width: 36px; flex: 0 0 36px; background: transparent; }
+  .header-buttons .icon-button { width: 36px; height: 36px; flex: 0 0 36px; background: transparent; }
 
   .content-wrap,
-  .content-wrap.inner-page-wrap { min-height: 0; gap: 22px; margin: 12px 12px var(--dock); padding: 18px 16px 28px; border-radius: 24px; }
+  .content-wrap.inner-page-wrap {
+    --page-gutter: 16px;
+    min-height: 0;
+    gap: 22px;
+    margin: 12px 12px max(12px, var(--dock));
+    padding: 18px 16px max(28px, calc(28px + env(safe-area-inset-bottom, 0px)));
+    border-radius: 24px;
+  }
 
   .panel-topbar { flex-wrap: wrap; gap: 10px 14px; }
   .crumbs { order: 1; }
@@ -1165,25 +1319,66 @@ body::after,
   .light-scene-grid { grid-template-columns: 100px minmax(0, 1fr); gap: 18px; }
   .light-scene-art > button { width: 100px; height: 100px; }
 
-  .app-shell:has(.now-playing-bar, .mini-player) { --dock: 84px; }
-  .now-playing-bar { bottom: 12px; width: calc(100% - 24px); height: 60px; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 0 10px; border-radius: 20px; }
+  .app-shell:has(.now-playing-bar, .mini-player) {
+    --dock: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+  .now-playing-bar {
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    width: calc(100% - 24px);
+    height: 60px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 0 10px;
+    border-radius: 20px;
+  }
   .now-playing-wave,
   .now-playing-actions,
   .now-playing-controls > :not(.play-orb-sm) { display: none; }
+
+  .panel-topbar .mood-pills-label { display: none; }
+  .home-page { gap: 28px; }
+  .home-hero-copy h1 { font-size: clamp(28px, 8vw, 40px); }
+  .tile { flex-basis: 148px; }
+  .artist-card { flex: 0 0 140px; height: 184px; }
+  .now-panel { grid-template-columns: 96px minmax(0, 1fr); }
+  .now-panel-art { width: 96px; }
 }
 
 @media (max-width: 520px) {
-  .brand { font-size: 18px; }
+  .brand { font-size: 17px; }
+  .brand-mark { width: 22px; height: 22px; flex-basis: 22px; }
   .motion-toggle { display: none; }
-  .hero-banner { padding: 20px; }
-  .hero-banner-copy { max-width: 66%; }
-  .hero-banner-art { top: auto; right: 16px; bottom: 16px; width: 96px; height: 96px; }
+
+  /* Icons alone reclaim enough width for Home + Browse + Library without
+   * spilling past the pill's rounded edge. */
+  .site-header .desktop-nav .nav-link { width: 36px; min-height: 36px; padding: 0; justify-content: center; }
+  .site-header .desktop-nav .nav-link svg { display: block; width: 18px; height: 18px; }
+  .site-header .desktop-nav .nav-label { position: absolute; overflow: hidden; width: 1px; height: 1px; padding: 0; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+
+  .hero-banner { min-height: 176px; padding: 18px; }
+  .hero-banner-copy { max-width: calc(100% - 112px); }
+  .hero-banner-copy > h1 { font-size: clamp(22px, 6.4vw, 30px); }
+  .hero-banner-art { top: auto; right: 14px; bottom: 14px; width: 88px; height: 88px; }
+
+  .crumbs { font-size: 12px; }
+  .content-wrap,
+  .content-wrap.inner-page-wrap {
+    --page-gutter: 14px;
+    margin-inline: 10px;
+    padding-inline: 14px;
+    border-radius: 20px;
+  }
+  .site-header { width: calc(100% - 20px); margin-inline: 10px; }
+
+  .track-row { min-height: 56px; }
+  .card-title-row .tactile-icon-control { opacity: 1; }
+  .search-top-card { padding: 12px; }
+  .library-stat { min-width: 0; flex: 1 1 calc(50% - 8px); }
 }
 
 @media (hover: none) {
   .card-title-row .icon-button,
-  .card-title-row .tactile-icon-control { opacity: 1; }
-}
+  .card-title-row .tactile-icon-control { opacity: 1; }}
 
 @media (prefers-reduced-motion: reduce) {
   .app-shell { transition: none; }
@@ -1192,8 +1387,7 @@ body::after,
   .track-row,
   .nav-link,
   .artist-avatar,
-  .now-panel-play { transition: none; }
-}
+  .now-panel-play { transition: none; }}
 
 /* Primary/secondary variants decide color — do not force white hero CTAs. */
 
@@ -1205,20 +1399,81 @@ body::after,
 
 .artist-page { display: flex; flex-direction: column; gap: 32px; container: browse / inline-size; }
 
+/* Artist hero: one contained frosted plate. The photo lives in its own portrait card, so the
+ * person is never sliced by a page edge; the colour behind it is that same photo blurred past
+ * recognition, which keeps the tint honest without showing a cropped body. */
 .artist-hero {
   position: relative;
-  display: flex;
-  min-height: clamp(300px, 44cqw, 460px);
-  align-items: flex-end;
-  padding: 32px;
+  display: grid;
+  min-height: var(--hero-h, clamp(260px, 32cqw, 380px));
+  align-items: end;
+  padding: clamp(24px, 3cqw, 40px);
   overflow: hidden;
-  border-radius: 24px;
+  border-radius: 28px;
   background:
-    radial-gradient(90% 150% at 0% 0%, color-mix(in oklab, var(--art-primary) 70%, #000) 0%, transparent 66%),
-    radial-gradient(80% 130% at 100% 100%, color-mix(in oklab, var(--art-secondary) 52%, #000) 0%, transparent 70%),
-    linear-gradient(180deg, color-mix(in oklab, var(--art-primary) 30%, #0b0b0d) 0%, #0b0b0d 100%);
+    radial-gradient(90% 120% at 88% 4%, color-mix(in oklab, var(--art-tertiary, var(--art-primary)) 58%, #0a0a0c) 0%, transparent 64%),
+    radial-gradient(110% 130% at 100% 100%, color-mix(in oklab, var(--art-secondary) 40%, #0a0a0c) 0%, transparent 72%),
+    color-mix(in oklab, var(--art-primary) 12%, #08080a);
+  box-shadow: 0 34px 70px -40px rgba(0, 0, 0, 0.9);
   color: #fff;
   isolation: isolate;
+}
+
+/* The photo blurred past recognition: all of its colour, none of its edges. */
+.artist-hero__field {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  background-image: var(--cover);
+  background-position: 50% 28%;
+  background-size: cover;
+  opacity: 0.34;
+  filter: blur(58px) saturate(160%);
+  transform: scale(1.3);
+}
+
+/* Rim light plus a floor shade, so the name keeps contrast on any palette. */
+.artist-hero::after {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: inherit;
+  background:
+    linear-gradient(90deg, rgba(5, 5, 6, 0.62) 0%, rgba(5, 5, 6, 0.24) 48%, transparent 76%),
+    linear-gradient(0deg, rgba(5, 5, 6, 0.44) 0%, rgba(5, 5, 6, 0.1) 44%, transparent 72%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  content: '';
+}
+
+.artist-hero__inner { display: flex; min-width: 0; align-items: flex-end; gap: clamp(22px, 2.8cqw, 40px); }
+
+/* Framed on purpose: the portrait's edge reads as a card, never as a crop. */
+.artist-portrait {
+  position: relative;
+  width: clamp(160px, 21cqw, 248px);
+  flex: 0 0 auto;
+  /* Cancels the hero's own floor padding, so the portrait stands on the plate rather than
+   * floating in it — the frame is a deliberate edge, never an accidental crop. */
+  margin: 0 0 calc(clamp(26px, 2.6vw, 44px) * -1);
+  overflow: hidden;
+  aspect-ratio: 4 / 5;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom: 0;
+  border-radius: 22px 22px 0 0;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 34px 60px -30px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.artist-portrait img,
+.artist-portrait .artwork {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  background: transparent;
+  object-fit: cover;
+  object-position: 50% 16%;
 }
 
 .artist-cover { position: absolute; z-index: -2; inset: 0; }
@@ -1226,21 +1481,27 @@ body::after,
 .artist-cover img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 22%; transform: scale(1.06); }
 .artist-cover .artwork-fallback { display: none; }
 
-/* Fade the cover into the page at the foot, like the reference. */
-.artist-hero::after {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, transparent 30%, rgba(11, 11, 13, 0.7) 72%, var(--bg) 100%), linear-gradient(90deg, rgba(0, 0, 0, 0.4), transparent 55%);
-  content: '';
-}
-
 .artist-back { position: absolute; top: 16px; left: 16px; background: rgba(0, 0, 0, 0.35); color: #fff; backdrop-filter: blur(8px); }
 .artist-back:hover { background: rgba(0, 0, 0, 0.55); }
 
 .artist-hero-copy { min-width: 0; }
-.artist-hero-copy h1 { margin: 0; color: #fff; font-size: clamp(36px, 7cqw, 84px); font-weight: 800; letter-spacing: -0.04em; line-height: 0.98; overflow-wrap: anywhere; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.4); }
+.artist-hero-eyebrow { display: block; margin-bottom: 10px; color: rgba(255, 255, 255, 0.55); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; }
+.artist-hero-copy h1 { margin: 0; color: #fff; font-size: clamp(36px, 7cqw, 84px); font-weight: 800; letter-spacing: -0.04em; line-height: 0.98; overflow-wrap: break-word; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.4); }
 .artist-hero-copy p { margin: 8px 0 0; color: rgba(255, 255, 255, 0.8); font-size: 14px; }
+
+/* Stats as frosted pills rather than one grey dot-joined line. */
+.artist-stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; padding: 0; list-style: none; }
+.artist-stats li {
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  font-weight: 500;
+  backdrop-filter: blur(16px) saturate(150%);
+}
+
 .artist-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 
 /* Top songs: art · title · artists · plays · album (narrow: art, title over artist). */
@@ -1292,8 +1553,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
   .top-song-title,
   .top-song-artist { align-self: center; }
   .top-song-plays,
-  .top-song-album { display: block; }
-}
+  .top-song-album { display: block; }}
 
 .artist-section-block { min-width: 0; }
 
@@ -1348,76 +1608,427 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 
 @media (max-width: 900px) {
   .artist-hero { padding: 20px; }
-  .media-card-play { opacity: 1; transform: none; }
-}
+  .media-card-play { opacity: 1; transform: none; }}
 
 @media (prefers-reduced-motion: reduce) {
   .media-card,
-  .media-card-play { transition: none; }
-}
+  .media-card-play { transition: none; }}
 
-/* ---------- Player screen: the cover's colour, frosted ----------
- * AuraShader paints the cover's palette; the veil only softens it, and each
- * surface is real frosted glass (blur + saturate) so the colour glows through. */
-.listening-world__veil {
-  background:
-    radial-gradient(65% 50% at 50% 12%, color-mix(in srgb, var(--art-primary, var(--wave)) 26%, transparent), transparent 72%),
-    rgba(8, 8, 10, 0.18);
-  backdrop-filter: blur(36px) saturate(165%);
-  -webkit-backdrop-filter: blur(36px) saturate(165%);
-}
-
+/* Reading lyrics: pull the floor glow back so the words keep the contrast. */
 .listening-world.is-lyrics .listening-world__glow {
-  height: 48%;
-  opacity: 0.95;
+  height: 40%;
+  opacity: 0.42;
 }
 
-.app-shell[data-theme='light'] .listening-world__atmosphere .music-flow-canvas {
-  filter: saturate(1.35) contrast(0.92) brightness(1.06);
-  opacity: 0.48;
-  mix-blend-mode: multiply;
-}
-
-.app-shell[data-theme='light'] .listening-world__veil {
-  background: rgba(246, 249, 252, 0.34);
-  backdrop-filter: blur(48px) saturate(145%);
-  -webkit-backdrop-filter: blur(48px) saturate(145%);
-}
-
-.app-shell[data-theme='light'] .ytm-stage-container {
-  background: linear-gradient(145deg, rgba(248, 251, 253, 0.38), rgba(231, 237, 242, 0.2));
-}
-
-.app-shell[data-theme='light'] .ytm-stage-veil {
-  background:
-    radial-gradient(circle at 22% 34%, rgba(255, 255, 255, 0.2), transparent 62%),
-    linear-gradient(180deg, rgba(246, 249, 252, 0.2), rgba(230, 236, 242, 0.42));
-  backdrop-filter: blur(24px) saturate(125%);
-  -webkit-backdrop-filter: blur(24px) saturate(125%);
-}
-
-.ytm-stage-shader {
+/* ---------- Words stage: Apple-style ambient layers (no blur, no WebGL) ----------
+ * One-shot palette → 2 composite layers (multi radial-gradients each).
+ * Softness is inside the gradients. Only transform/opacity animate (compositor). */
+.music-background {
   position: absolute;
-  inset: 0;
   z-index: 0;
+  inset: 0;
   overflow: hidden;
   pointer-events: none;
+  isolation: isolate;
+  contain: paint;
+}
+.music-bg-scene {
+  position: absolute;
+  inset: 0;
+  opacity: 1;
+  transition: opacity 1.1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.music-bg-scene.is-incoming {
+  opacity: 0;
+  animation: music-bg-fade-in 1.1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.music-bg-scene.is-fading { opacity: 0; }
+.music-bg-base {
+  position: absolute;
+  inset: 0;
+  /* Not near-black. The Apple backdrop is colour edge to edge — its darkness lives in how
+   * deep the colours are, not in a scrim laid over them. This is the darkest of the
+   * cover's own colours, so the fields above sit on family rather than on ink. */
+  background:
+    linear-gradient(
+      152deg,
+      color-mix(in srgb, var(--music-deep, #0a0b10) 72%, var(--music-primary, #5b9dff)) 0%,
+      color-mix(in srgb, var(--music-deep, #0a0b10) 80%, var(--music-secondary, #7f6bff)) 46%,
+      color-mix(in srgb, var(--music-deep, #0a0b10) 88%, #05060a) 100%
+    );
 }
 
-.ytm-stage-shader canvas,
-.ytm-stage-shader .music-flow-canvas {
-  display: block;
+/* One soft colour field.
+ *
+ * Cost control: blurring a screen-sized element every frame is the expensive way to do
+ * this. Instead the gradient is painted and blurred at a fraction of its final size on
+ * ::before, then upscaled by the compositor — roughly a ninth of the fill rate, and the
+ * upscale adds softness for free. The wrapper only ever animates transform, so the
+ * blurred texture is rasterised once and reused.
+ *
+ * Each field is wider than the frame and they overlap heavily: there is never a gap for
+ * the base to show through, which is what makes it read as one moving field rather than
+ * as five circles.
+ */
+.ambient-blob {
+  position: absolute;
+  width: 30vmax;
+  height: 30vmax;
+  margin: -15vmax 0 0 -15vmax;
+  mix-blend-mode: screen;
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  /* Linear, and every path is a closed circuit: with `alternate` each field reversed at
+   * the end of its cycle, and a reversal reads as a bounce however gently it is eased.
+   * A loop that returns to its own start has no seam to see. */
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.ambient-blob::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  filter: blur(18px);
+  transform: scale(var(--blob-spread, 3.4));
+}
+
+.blob-1 {
+  left: 24%;
+  top: 22%;
+  opacity: 0.9;
+  --blob-spread: 3.6;
+  animation-name: blob-drift-1;
+  animation-duration: 34s;
+}
+.blob-1::before {
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(var(--music-primary-rgb, 91, 157, 255), 0.85) 0%,
+    rgba(var(--music-primary-rgb, 91, 157, 255), 0.58) 30%,
+    rgba(var(--music-primary-rgb, 91, 157, 255), 0.26) 54%,
+    transparent 78%
+  );
+}
+
+.blob-2 {
+  left: 78%;
+  top: 76%;
+  opacity: 0.85;
+  --blob-spread: 3.4;
+  animation-name: blob-drift-2;
+  animation-duration: 43s;
+}
+.blob-2::before {
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(var(--music-secondary-rgb, 127, 107, 255), 0.82) 0%,
+    rgba(var(--music-secondary-rgb, 127, 107, 255), 0.54) 32%,
+    rgba(var(--music-secondary-rgb, 127, 107, 255), 0.22) 56%,
+    transparent 80%
+  );
+}
+
+.blob-3 {
+  left: 82%;
+  top: 18%;
+  opacity: 0.78;
+  --blob-spread: 3.1;
+  animation-name: blob-drift-3;
+  animation-duration: 51s;
+}
+.blob-3::before {
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(var(--music-accent-rgb, 65, 216, 255), 0.76) 0%,
+    rgba(var(--music-accent-rgb, 65, 216, 255), 0.46) 32%,
+    rgba(var(--music-accent-rgb, 65, 216, 255), 0.18) 58%,
+    transparent 80%
+  );
+}
+
+.blob-4 {
+  left: 16%;
+  top: 80%;
+  opacity: 0.8;
+  --blob-spread: 3.3;
+  animation-name: blob-drift-4;
+  animation-duration: 61s;
+}
+.blob-4::before {
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(var(--music-primary-rgb, 91, 157, 255), 0.7) 0%,
+    rgba(var(--music-secondary-rgb, 127, 107, 255), 0.42) 36%,
+    rgba(var(--music-secondary-rgb, 127, 107, 255), 0.16) 60%,
+    transparent 82%
+  );
+}
+
+/* A slow deep field: where it passes, colour recedes. This is what makes the others read
+ * as separating rather than just sliding past each other. */
+.blob-5 {
+  left: 50%;
+  top: 46%;
+  opacity: 0.5;
+  --blob-spread: 3.2;
+  mix-blend-mode: multiply;
+  animation-name: blob-drift-5;
+  animation-duration: 73s;
+}
+.blob-5::before {
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(var(--music-deep-rgb, 8, 9, 11), 0.8) 0%,
+    rgba(var(--music-deep-rgb, 8, 9, 11), 0.4) 42%,
+    transparent 76%
+  );
+}
+
+/* Closed circuits — every path ends where it started, so the loop has no seam. The
+ * periods share no common factor, so the five together never repeat a pose inside a
+ * track. Percentages are of the small wrapper, so the numbers are large while the drift
+ * on screen stays wide and unhurried. */
+@keyframes blob-drift-1 {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  25%  { transform: translate3d(62%, 30%, 0) scale(1.14); }
+  50%  { transform: translate3d(26%, 78%, 0) scale(0.94); }
+  75%  { transform: translate3d(-44%, 44%, 0) scale(1.1); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes blob-drift-2 {
+  0%   { transform: translate3d(0, 0, 0) scale(1.06); }
+  25%  { transform: translate3d(-58%, -36%, 0) scale(0.92); }
+  50%  { transform: translate3d(-92%, 24%, 0) scale(1.16); }
+  75%  { transform: translate3d(-24%, 56%, 0) scale(1); }
+  100% { transform: translate3d(0, 0, 0) scale(1.06); }
+}
+@keyframes blob-drift-3 {
+  0%   { transform: translate3d(0, 0, 0) scale(0.96); }
+  25%  { transform: translate3d(-70%, 46%, 0) scale(1.18); }
+  50%  { transform: translate3d(-104%, -18%, 0) scale(0.98); }
+  75%  { transform: translate3d(-32%, -52%, 0) scale(1.12); }
+  100% { transform: translate3d(0, 0, 0) scale(0.96); }
+}
+@keyframes blob-drift-4 {
+  0%   { transform: translate3d(0, 0, 0) scale(1.1); }
+  25%  { transform: translate3d(74%, -40%, 0) scale(0.9); }
+  50%  { transform: translate3d(108%, 20%, 0) scale(1.18); }
+  75%  { transform: translate3d(36%, 62%, 0) scale(1); }
+  100% { transform: translate3d(0, 0, 0) scale(1.1); }
+}
+@keyframes blob-drift-5 {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  25%  { transform: translate3d(-52%, 44%, 0) scale(1.2); }
+  50%  { transform: translate3d(38%, 72%, 0) scale(0.96); }
+  75%  { transform: translate3d(66%, -30%, 0) scale(1.14); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+.music-background__darkness,
+.music-background__lyric-field {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* Only enough to seat the lyrics. The old pass laid a heavy scrim over everything, which
+ * is why the middle of the frame read as dark grey instead of as colour. */
+.music-background__darkness {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(3, 4, 7, 0.3) 0%,
+      rgba(3, 4, 7, 0.02) 22%,
+      rgba(3, 4, 7, 0.02) 62%,
+      rgba(3, 4, 7, 0.22) 86%,
+      rgba(3, 4, 7, 0.42) 100%
+    ),
+    radial-gradient(
+      ellipse 96% 88% at 50% 48%,
+      rgba(3, 4, 7, 0) 0%,
+      rgba(3, 4, 7, 0.06) 62%,
+      rgba(3, 4, 7, 0.3) 100%
+    );
+}
+.music-background__lyric-field {
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(3, 4, 7, 0.04) 48%,
+    rgba(3, 4, 7, 0.16) 100%
+  );
+}
+/* Fine grain kills the banding that big blurred fields otherwise show as flat rings.
+ * One tiled 160px texture — painted once, no animation, no filter. */
+.music-background::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+@keyframes music-bg-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  /* Smaller fields and a smaller blur radius: the raster is the only real cost here,
+   * and on a phone it is the one worth cutting. The fifth (dark) field goes entirely. */
+  /* Phones get a smaller raster still, and lose the dark field — four layers of blend
+   * is the ceiling worth paying for on a weak GPU. */
+  .ambient-blob { width: 40vmax; height: 40vmax; margin: -20vmax 0 0 -20vmax; }
+  .ambient-blob::before { filter: blur(15px); }
+  .blob-1 { --blob-spread: 3.3; }
+  .blob-2 { --blob-spread: 3.1; }
+  .blob-3 { --blob-spread: 2.9; }
+  .blob-4 { --blob-spread: 3; }
+  .blob-5 { display: none; }
+  .music-background__lyric-field {
+    background: linear-gradient(to bottom, transparent 24%, rgba(3, 4, 7, 0.18) 100%);
+  }
+  /* Grain is a per-pixel tile — cheapest thing to drop on small GPUs. */
+  .music-background::after { opacity: 0.035; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-blob { animation: none !important; }
+  .music-bg-scene.is-incoming { animation: none !important; opacity: 1; }
+  .music-bg-scene { transition: opacity 0.45s ease; }
+}
+
+.music-background.is-tab-hidden .ambient-blob,
+.app-shell[data-motion-paused='true'] .ambient-blob {
+  animation-play-state: paused;
+}
+
+.app-shell[data-theme='light'] .music-bg-base {
+  background:
+    radial-gradient(
+      135% 100% at 50% -12%,
+      color-mix(in srgb, var(--music-primary, #9aa3ad) 26%, #f3f6f9) 0%,
+      color-mix(in srgb, var(--music-primary, #9aa3ad) 10%, #f3f6f9) 48%,
+      transparent 82%
+    ),
+    linear-gradient(
+      168deg,
+      color-mix(in srgb, var(--music-secondary, #7d8793) 16%, #f1f4f8) 0%,
+      color-mix(in srgb, var(--music-deep, #c9ccd1) 28%, #eef1f5) 54%,
+      #e8edf2 100%
+    );
+}
+.app-shell[data-theme='light'] .ambient-blob { opacity: 0.42; mix-blend-mode: multiply; }
+.app-shell[data-theme='light'] .blob-5 { display: none; }
+.app-shell[data-theme='light'] .music-background::after { opacity: 0.03; }
+.app-shell[data-theme='light'] .music-background__darkness {
+  background:
+    linear-gradient(180deg, rgba(226, 232, 238, 0.3) 0%, rgba(226, 232, 238, 0.04) 30%, rgba(200, 208, 218, 0.24) 100%),
+    radial-gradient(
+      ellipse 90% 80% at 50% 46%,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(210, 218, 226, 0.2) 62%,
+      rgba(186, 195, 206, 0.34) 100%
+    );
+}
+.app-shell[data-theme='light'] .music-background__lyric-field {
+  background: linear-gradient(to right, transparent, rgba(246, 249, 252, 0.12) 35%, rgba(230, 236, 242, 0.28));
+}
+
+/* ---------- Player atmosphere: cover wash (CSS only; not the lyrics stage) ---------- */
+.artwork-bg { position: absolute; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; contain: paint; }
+.artwork-bg-fallback { position: absolute; inset: 0; background: color-mix(in srgb, var(--artwork-bg-fallback, #0b0b0d) 45%, #05060a); }
+.artwork-bg-stack {
+  position: absolute;
+  inset: -12%;
+  opacity: 1;
+  transition: opacity 0.7s var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1));
+  will-change: opacity;
+}
+.artwork-bg-stack.is-incoming { opacity: 0; animation: artwork-fade-in 0.7s var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)) forwards; }
+.artwork-bg-stack.is-fading { opacity: 0; }
+.artwork-bg-layer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  border-radius: 32%;
+  /* One shared blur budget — avoid stacking four different heavy blurs. */
+  filter: blur(40px) saturate(2.15) contrast(1.06) brightness(1.05);
+  opacity: 0.85;
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+.artwork-bg-layer--xl {
+  width: 135%;
+  height: 135%;
+  opacity: 0.5;
+  animation: artwork-spin-cw 80s linear infinite;
+}
+.artwork-bg-layer--lg {
   width: 100%;
   height: 100%;
-  opacity: 0.95;
-  filter: saturate(1.38) contrast(1.08) brightness(1.06);
+  opacity: 0.65;
+  animation: artwork-spin-ccw 60s linear infinite;
+}
+.artwork-bg-layer--md {
+  width: 70%;
+  height: 70%;
+  opacity: 0.8;
+  animation: artwork-orbit-a 42s linear infinite;
+}
+.artwork-bg-layer--sm {
+  width: 46%;
+  height: 46%;
+  opacity: 0.7;
+  animation: artwork-orbit-b 50s linear infinite;
 }
 
-.app-shell[data-theme='light'] .ytm-stage-shader canvas {
-  opacity: 0.46;
-  filter: saturate(1.35) contrast(0.92) brightness(1.06);
-  mix-blend-mode: multiply;
+@media (max-width: 768px) {
+  .artwork-bg-layer { filter: blur(28px) saturate(2) contrast(1.05); }
+  .artwork-bg-layer--sm { display: none; }}
+.artwork-bg-veil { position: absolute; inset: 0; background: rgba(4, 4, 6, var(--artwork-bg-veil, 0.24)); }
+.artwork-bg-vignette { position: absolute; inset: 0; background: radial-gradient(ellipse 82% 86% at 50% 44%, transparent 42%, rgba(2, 2, 4, 0.5) 100%); }
+
+@keyframes artwork-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
+@keyframes artwork-spin-cw {
+  from { transform: translate(-50%, -50%) rotate(0deg) scale(1.08); }
+  to { transform: translate(-50%, -50%) rotate(360deg) scale(1.08); }
+}
+@keyframes artwork-spin-ccw {
+  from { transform: translate(-50%, -50%) rotate(0deg) scale(1.12); }
+  to { transform: translate(-50%, -50%) rotate(-360deg) scale(1.12); }
+}
+@keyframes artwork-orbit-a {
+  from { transform: translate(-50%, -50%) rotate(0deg) translateX(5%) rotate(0deg) scale(1.15); }
+  to { transform: translate(-50%, -50%) rotate(360deg) translateX(5%) rotate(-360deg) scale(1.15); }
+}
+@keyframes artwork-orbit-b {
+  from { transform: translate(-50%, -50%) rotate(0deg) translateX(-7%) rotate(0deg) scale(1.2); }
+  to { transform: translate(-50%, -50%) rotate(-360deg) translateX(-7%) rotate(360deg) scale(1.2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artwork-bg-layer,
+  .artwork-bg-stack.is-incoming { animation: none !important; }
+  .artwork-bg-stack { transition: none; }}
+.app-shell[data-motion-paused='true'] .artwork-bg-layer { animation-play-state: paused; }
+
+.app-shell[data-theme='light'] .artwork-bg-fallback { background: color-mix(in srgb, var(--artwork-bg-fallback, #c9ccd1) 40%, #f3f6f8); }
+.app-shell[data-theme='light'] .artwork-bg-layer { filter: blur(52px) saturate(1.85) contrast(0.96) brightness(1.12); opacity: 0.72; }
+.app-shell[data-theme='light'] .artwork-bg-veil { background: rgba(246, 249, 252, calc(var(--artwork-bg-veil, 0.24) * 1.3)); }
+.app-shell[data-theme='light'] .artwork-bg-vignette { background: radial-gradient(ellipse 82% 86% at 50% 44%, transparent 46%, rgba(190, 198, 208, 0.4) 100%); }
 
 .player-sidepanel {
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -1449,15 +2060,33 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .player-sidepanel.is-lyrics .ytm-lyrics__chrome .tactile-control { min-height: 32px; padding: 0 12px; font-size: 12px; opacity: 0.6; transition: opacity var(--d-fast) var(--ease-standard); }
 .player-sidepanel.is-lyrics .ytm-lyrics__chrome .tactile-control:hover { opacity: 1; }
 
-/* Lines dissolve into the shader above and below instead of being clipped by a card edge. */
-.player-sidepanel.is-lyrics .ytm-lyrics__stage,
-.player-sidepanel.is-lyrics .ytm-lyrics__scroll {
-  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 76%, transparent 100%);
-  mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 76%, transparent 100%);
+/* No scroll rails anywhere in the player: the lyrics follow the track, and on a phone the
+ * body itself scrolls, which put a bright thumb down the edge of the lyrics.
+ * The global `*` scrollbar rule is unlayered, so this has to be unlayered too to win. */
+.listening-world,
+.listening-world *,
+.ytm-lyrics__scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.listening-world,
-.ytm-stage-main { overscroll-behavior: none; }
+.listening-world::-webkit-scrollbar,
+.listening-world *::-webkit-scrollbar,
+.ytm-lyrics__scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* Lines dissolve into the atmosphere above and below instead of being clipped by a card
+ * edge — a short ramp only, so the words never read as blurred out. */
+.player-sidepanel.is-lyrics .ytm-lyrics__stage,
+.player-sidepanel.is-lyrics .ytm-lyrics__scroll {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 5%, #000 94%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 5%, #000 94%, transparent 100%);
+}
+
+.listening-world { overscroll-behavior: none; }
 
 /* ---------- Real artist photos ---------- */
 .artist-avatar img,
@@ -1465,8 +2094,6 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .media-card--round .media-card-art img { object-position: 50% 20%; }
 .artist-avatar img { object-position: 50% 20%; }
 
-/* Photo hero: portrait framing keeps the face, and a heavier fade seats the name. */
-.artist-cover--photo img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 18%; transform: none; }
 .artist-verified {
   display: inline-flex;
   width: fit-content;
@@ -1912,15 +2539,43 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .app-shell[data-theme='light'] .am-queue-time { color: rgba(45, 54, 62, 0.5); }
 .app-shell[data-theme='light'] .am-queue-row:hover { background: rgba(42, 52, 62, 0.055); }
 
+/* ---------- Player controls: quiet studio chrome ---------- */
+
+.am-btn:focus-visible,
+.am-play:focus-visible,
+.am-range:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--wave) 72%, white);
+  outline-offset: 3px;
+}
+
+.mini-player {
+  border-color: rgba(255, 255, 255, 0.16);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.015) 46%),
+    rgba(15, 18, 23, 0.78);
+  box-shadow: 0 26px 70px -24px rgba(0, 0, 0, 0.82), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.am-transport,
+.am-right { padding: 4px; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 999px; background: rgba(0, 0, 0, 0.18); }
+.am-now { border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.055); }
+.am-btn { width: 38px; height: 38px; }
+.am-btn--skip { width: 40px; height: 40px; }
+.am-play { width: 46px; height: 46px; box-shadow: 0 8px 24px color-mix(in srgb, var(--wave) 28%, transparent); }
+.am-play:hover { box-shadow: 0 10px 30px color-mix(in srgb, var(--wave) 38%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .am-btn,
+  .am-play { transition: none; }}
+
 @media (max-width: 1100px) {
   .mini-player { grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; }
   .am-volume,
-  .am-btn--mute { display: none; }
-}
+  .am-btn--mute { display: none; }}
 
 @media (max-width: 900px) {
   .mini-player {
-    bottom: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
     width: calc(100% - 24px);
     height: 64px;
     grid-template-columns: minmax(0, 1fr) auto auto;
@@ -1955,15 +2610,13 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
     transform-origin: bottom center;
   }
 
-  .am-queue-list { max-height: min(48vh, 380px); }
-}
+  .am-queue-list { max-height: min(48vh, 380px); }}
 
 @media (prefers-reduced-motion: reduce) {
   .am-play,
   .am-btn,
   .am-queue-row { transition: none; }
-  .am-queue-scrim { backdrop-filter: none; }
-}
+  .am-queue-scrim { backdrop-filter: none; }}
 
 /* ---------- Artist portrait cards + expandable sheet (Watermelon "Expandable Profile Card" pattern) ---------- */
 .artist-list { gap: 14px; padding: 4px 2px 8px; }
@@ -1985,6 +2638,32 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 }
 
 .artist-card-photo { position: absolute; inset: 0; display: block; }
+/* Placeholder while the face lookup runs: a quiet initial, never a song cover. */
+.artist-card-initial {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.app-shell[data-theme='light'] .artist-card-initial {
+  background: linear-gradient(150deg, rgba(20, 24, 30, 0.08), rgba(20, 24, 30, 0.03));
+  color: rgba(20, 24, 30, 0.3);
+}
+/* Still looking for a photo: a slow breath, so the slot reads as loading rather than empty. */
+.artist-card-initial.is-pending { animation: artist-face-pulse 1.8s var(--ease-standard) infinite; }
+@keyframes artist-face-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .artist-card-initial.is-pending { animation: none; }
+}
 .artist-card-photo img,
 .artist-card-photo .artwork { display: block; width: 100%; height: 100%; border-radius: 0; object-fit: cover; object-position: 50% 20%; transition: transform 500ms var(--ease-standard); }
 .artist-card:hover .artist-card-photo img,
@@ -2063,46 +2742,12 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 @media (max-width: 720px) {
   .artist-sheet { grid-template-columns: 1fr; grid-template-rows: 38% 1fr; }
   .artist-sheet-photo::after { background: linear-gradient(180deg, transparent 55%, rgba(20, 20, 24, 0.92) 100%); }
-  .artist-sheet-body { padding: 18px 20px 20px; }
-}
+  .artist-sheet-body { padding: 18px 20px 20px; }}
 
 @media (prefers-reduced-motion: reduce) {
   .artist-card-photo img,
   .artist-card-photo .artwork,
-  .artist-card-copy { transition: none; }
-}
-
-/* ---------- Detail hero: the photo dissolves into the shader ----------
- * Artist, playlist and Liked Songs pages. The top half is the photo; it fades out on its left and
- * bottom edges with a mask (not a dark overlay), so the background shader shows through the lower
- * half and the two read as one surface. */
-.artist-hero {
-  --hero-h: clamp(440px, 64vh, 620px);
-  --page-gutter: clamp(20px, 2.6vw, 36px);
-  min-height: var(--hero-h);
-  margin-inline: calc(var(--page-gutter) * -1);
-  padding: 32px var(--page-gutter);
-  border-radius: 0;
-  background: none;
-  overflow: hidden;
-}
-
-.artist-cover {
-  inset: 0 0 0 auto;
-  width: min(80%, calc(var(--hero-h) * 1.25));
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 42%), linear-gradient(180deg, #000 42%, transparent 90%);
-  mask-image: linear-gradient(90deg, transparent 0, #000 42%), linear-gradient(180deg, #000 42%, transparent 90%);
-  -webkit-mask-composite: source-in;
-  mask-composite: intersect;
-}
-
-.artist-cover img { object-position: 50% 16%; }
-
-/* Only a soft shade behind the text, so it stays legible without boxing the photo in. */
-.artist-hero::after {
-  /* A pool of shade behind the text that fades to nothing before any edge, so no slab is visible. */
-  background: radial-gradient(ellipse 62% 55% at 26% 74%, rgba(5, 5, 6, 0.62) 0%, rgba(5, 5, 6, 0.28) 45%, transparent 75%);
-}
+  .artist-card-copy { transition: none; }}
 
 /* Collections: a 2x2 mosaic of covers stands in for the photo. */
 .artist-cover--mosaic { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
@@ -2116,41 +2761,6 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .playlist-card-head h3 a { color: inherit; text-decoration: none; }
 .playlist-card-head h3 a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .collection-page .artist-hero-copy p { margin-bottom: 0; }
-
-@media (max-width: 900px) {
-  .artist-hero { --hero-h: clamp(380px, 58vh, 500px); }
-  .artist-cover { width: 100%; }
-}
-
-/* ---------- Immersive detail hero (final) ----------
- * Solid at the top, easing to translucent toward the bottom, edge to edge with no side fade, and
- * rounded bottom corners. The artist photo is shown once on the right; the left stays palette-led
- * so the hero does not repeat the same artwork as a blurred backdrop. */
-.artist-hero {
-  border-radius: 0 0 36px 36px;
-  isolation: isolate;
-  background-color: color-mix(in oklab, var(--art-primary) 18%, transparent);
-}
-
-.artist-hero::before {
-  display: none;
-}
-
-.artist-cover {
-  width: min(64%, calc(var(--hero-h) * 1.08));
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 26%), linear-gradient(180deg, #000 0, #000 42%, rgba(0, 0, 0, 0.32) 100%);
-  mask-image: linear-gradient(90deg, transparent 0, #000 26%), linear-gradient(180deg, #000 0, #000 42%, rgba(0, 0, 0, 0.32) 100%);
-  -webkit-mask-composite: source-in;
-  mask-composite: intersect;
-}
-
-/* Collections have a mosaic, not a photo: keep it sharp and inside the same fade. */
-.artist-cover--mosaic { width: min(52%, calc(var(--hero-h) * 0.95)); }
-
-@media (max-width: 900px) {
-  .artist-hero { border-radius: 0 0 28px 28px; }
-  .artist-cover { width: 100%; }
-}
 
 /* ---------- Banner: black base, dark cover-coloured shader glow ---------- */
 .hero-banner {
@@ -2191,28 +2801,25 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
  * The photo runs to the very top and both screen edges; the controls float over it as glass; the
  * name is the headline. On scroll the photo drifts and the name lifts away (CSS scroll-driven, transform
  * + opacity only), and a compact bar takes over so Play stays in reach. */
-.content-wrap.is-detail { margin-top: 0; padding-top: 0; }
+.content-wrap.is-detail { margin-top: 0; padding-top: 18px; }
 
 .is-detail .crumbs,
 .is-detail .mood-pills { display: none; }
 
 .is-detail .panel-topbar {
+  position: static;
   width: auto;
-  position: absolute;
-  z-index: 6;
-  top: 20px;
-  right: var(--page-gutter, 36px);
-  left: var(--page-gutter, 36px);
-  justify-content: flex-end;
+  margin-bottom: clamp(14px, 1.6vw, 22px);
+  justify-content: space-between;
 }
 
 .is-detail .search-box { background: rgba(14, 14, 18, 0.42); border-color: rgba(255, 255, 255, 0.14); backdrop-filter: blur(22px) saturate(160%); }
 .is-detail .search-box:focus-within { background: rgba(14, 14, 18, 0.7); }
 
 .is-detail .artist-hero {
-  --hero-h: clamp(540px, 76vh, 760px);
-  margin: 0 calc((16px + var(--page-gutter)) * -1) -28px calc((var(--rail-w) + 32px + var(--page-gutter)) * -1);
-  padding: 0 calc(16px + var(--page-gutter)) 52px calc(var(--rail-w) + 32px + var(--page-gutter));
+  --hero-h: clamp(300px, 38vw, 420px);
+  margin: 0;
+  padding: clamp(26px, 2.6vw, 44px);
 }
 
 /* Back sits where the content column starts, clear of the floating rail. */
@@ -2226,7 +2833,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
   backdrop-filter: blur(22px) saturate(160%);
 }
 
-.is-detail .artist-hero-copy h1 { font-size: clamp(56px, 9.5cqw, 136px); letter-spacing: -0.055em; line-height: 0.9; text-shadow: 0 4px 40px rgba(0, 0, 0, 0.45); }
+.is-detail .artist-hero-copy h1 { font-size: clamp(44px, 6.4cqw, 92px); letter-spacing: -0.05em; line-height: 0.92; text-shadow: 0 4px 40px rgba(0, 0, 0, 0.45); }
 .is-detail .artist-hero-copy p { margin-top: 14px; font-size: 15px; }
 .is-detail .artist-actions { gap: 12px; margin-top: 26px; }
 
@@ -2268,11 +2875,8 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 
 @supports (animation-timeline: scroll()) {
   @media (prefers-reduced-motion: no-preference) {
-    .is-detail .artist-cover,
-    .is-detail .artist-hero::before { animation: hero-drift linear both; animation-timeline: scroll(root); animation-range: 0 70vh; }
-    .is-detail .artist-hero-copy { animation: hero-lift linear both; animation-timeline: scroll(root); animation-range: 0 42vh; }
-  }
-}
+    .is-detail .artist-hero__field { animation: hero-drift linear both; animation-timeline: scroll(root); animation-range: 0 70vh; }
+    .is-detail .artist-hero-copy { animation: hero-lift linear both; animation-timeline: scroll(root); animation-range: 0 42vh; }}}
 
 @keyframes hero-drift { to { transform: translateY(84px) scale(1.05); } }
 @keyframes hero-lift { to { opacity: 0; transform: translateY(-34px); } }
@@ -2281,54 +2885,15 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
   /* Phone: the rail is a top pill, so the hero stays inside the page column. */
   .content-wrap.is-detail { margin-top: 12px; padding-top: 18px; }
   .is-detail .panel-topbar { position: static; margin-bottom: 4px; }
-  .is-detail .artist-hero { --hero-h: clamp(420px, 66vh, 560px); margin: 0 -16px -20px; padding: 0 16px 36px; }
+  .is-detail .artist-hero { --hero-h: auto; margin: 0; padding: 22px; border-radius: 22px; }
+  .artist-hero__inner { flex-direction: column; align-items: flex-start; gap: 18px; }
+  .artist-portrait { width: clamp(132px, 38vw, 168px); margin-bottom: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.16); border-radius: 18px; }
   .is-detail .artist-back { top: 14px; left: 16px; }
-  .is-detail .artist-hero-copy h1 { font-size: clamp(44px, 14vw, 72px); }
-  .detail-bar { left: 12px; right: 12px; top: 72px; }
-}
+  .is-detail .artist-hero-copy h1 { font-size: clamp(32px, 9.4vw, 56px); }
+  .detail-bar { left: 12px; right: 12px; top: 72px; }}
 
 @media (prefers-reduced-motion: reduce) {
-  .detail-bar { transition: none; }
-}
-
-/* ---------- Detail pages, round 2: opaque hero, one aligned glass top row ---------- */
-
-/* The hero is a solid surface: no fade to the shader, the photo simply ends at its rounded foot. */
-.artist-hero {
-  background: color-mix(in oklab, var(--art-primary) 20%, #0a0a0c);
-  box-shadow: 0 30px 60px -34px rgba(0, 0, 0, 0.8);
-}
-
-.artist-hero::before {
-  display: none;
-}
-
-.artist-cover {
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 26%);
-  mask-image: linear-gradient(90deg, transparent 0, #000 26%);
-  -webkit-mask-composite: source-over;
-  mask-composite: add;
-}
-
-/* Blend the single sharp cover into the artist palette instead of leaving a hard vertical seam. */
-.is-detail .artist-page .artist-hero {
-  background:
-    linear-gradient(90deg, color-mix(in oklab, var(--art-primary) 36%, #0a0a0c) 0%, color-mix(in oklab, var(--art-primary) 30%, #0a0a0c) 34%, rgba(10, 10, 12, 0.82) 56%, transparent 82%),
-    linear-gradient(180deg, color-mix(in oklab, var(--art-primary) 20%, #0a0a0c), #0a0a0c);
-}
-
-.is-detail .artist-page .artist-cover {
-  width: min(72%, calc(var(--hero-h) * 1.16));
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 44%), linear-gradient(180deg, #000 0, #000 42%, rgba(0, 0, 0, 0.32) 100%);
-  mask-image: linear-gradient(90deg, transparent 0%, #000 44%), linear-gradient(180deg, #000 0, #000 42%, rgba(0, 0, 0, 0.32) 100%);
-  -webkit-mask-composite: source-in;
-  mask-composite: intersect;
-}
-
-/* Text sits on a soft shade at the foot so it stays readable on any photo. */
-.artist-hero::after {
-  background: linear-gradient(0deg, rgba(5, 5, 6, 0.72) 0%, rgba(5, 5, 6, 0.28) 42%, transparent 70%);
-}
+  .detail-bar { transition: none; }}
 
 /* One frosted material for everything floating over the hero and the search field. */
 .panel-topbar { --glass-ink: var(--ink); }
@@ -2392,27 +2957,17 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .topbar-back:hover { border-color: rgba(255, 255, 255, 0.3); background-color: rgba(255, 255, 255, 0.1); }
 .topbar-back:focus-visible { outline: 2px solid var(--art-primary, #fff); outline-offset: 3px; }
 
-/* Detail pages: the top row floats over the hero, back on the left, search on the right. Only the
- * controls take clicks, so the row never swallows taps meant for what is underneath. */
+/* Detail pages: back on the left, search on the right, one row above the hero plate. */
 .content-wrap.is-detail { --page-gutter: clamp(20px, 2.6vw, 36px); }
 
-.is-detail .panel-topbar {
-  --glass-ink: #fff;
-  top: 20px;
-  right: var(--page-gutter);
-  left: var(--page-gutter);
-  justify-content: space-between;
-  pointer-events: none;
-}
-
-.is-detail .panel-topbar > * { pointer-events: auto; }
+.is-detail .panel-topbar { --glass-ink: #fff; }
 .is-detail .search-box,
 .is-detail .search-box:focus-within { background-color: transparent; }
 
 @media (max-width: 900px) {
-  .is-detail .panel-topbar { position: static; justify-content: flex-start; pointer-events: auto; }
-  .is-detail .panel-topbar .search-box { order: 3; margin-left: 0; flex: 1 1 100%; width: 100%; }
-}
+  .is-detail .panel-topbar { flex-wrap: nowrap; gap: 10px; justify-content: flex-start; }
+  .is-detail .panel-topbar .search-box { order: 0; min-width: 0; margin-left: 0; flex: 1 1 auto; width: auto; }
+  .is-detail .topbar-back { padding: 0 14px; }}
 
 /* =====================================================================
  * Round 3: one material (glass), one primary action, one motion language
@@ -2461,8 +3016,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .media-card:hover { border-color: var(--border-strong); }
 @media (hover: hover) {
   .playlist-card:hover,
-  .media-card:hover { transform: translateY(-2px); }
-}
+  .media-card:hover { transform: translateY(-2px); }}
 
 .playlist-new-inline input,
 .playlist-new input { height: 44px; padding: 0 18px; border-radius: 999px; }
@@ -2530,8 +3084,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
   .collection-page,
   .artist-page,
   .album-page,
-  .browse-grid { animation: page-in 0.4s var(--ease-decelerate) both; }
-}
+  .browse-grid { animation: page-in 0.4s var(--ease-decelerate) both; }}
 
 @keyframes page-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
@@ -2603,8 +3156,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 
 @media (max-width: 900px) {
   .album-hero { --hero-pad-l: 16px; --hero-pad-r: 16px; flex-direction: column; align-items: flex-start; padding-top: 28px; border-radius: 0 0 28px 28px; }
-  .album-hero__art { width: min(62vw, 260px); }
-}
+  .album-hero__art { width: min(62vw, 260px); }}
 
 /* ---------- Search pill = command palette trigger ---------- */
 .cmdk-slot { position: relative; display: block; width: min(300px, 100%); height: 44px; flex: 0 1 300px; }
@@ -2614,8 +3166,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .cmdk-slot .search-clear { display: grid; place-items: center; font-size: 17px; line-height: 1; }
 
 @media (max-width: 900px) {
-  .cmdk-slot { order: 3; flex: 1 1 100%; width: 100%; margin-left: 0; }
-}
+  .cmdk-slot { order: 3; flex: 1 1 100%; width: 100%; margin-left: 0; }}
 
 /* ---------- Command palette sheet (portalled, so it carries its own dark glass tokens) ---------- */
 .cmdk-layer { position: fixed; z-index: 120; inset: 0; display: grid; place-items: start center; padding: min(14vh, 120px) 16px 16px; font-family: var(--font-sans, system-ui, sans-serif); }
@@ -2666,12 +3217,10 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 
 @media (max-width: 600px) {
   .cmdk-layer { padding-top: 12px; }
-  .cmdk-foot { display: none; }
-}
+  .cmdk-foot { display: none; }}
 
 @media (prefers-reduced-motion: reduce) {
-  .cmdk-spinner { animation-duration: 1.6s; }
-}
+  .cmdk-spinner { animation-duration: 1.6s; }}
 
 /* ---------- Lists sit on a pane of glass, so rows read as part of the same surface ---------- */
 .track-list,
@@ -2760,8 +3309,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
   .album-hero { flex-direction: column; align-items: flex-start; padding-top: 4px; }
   .collection-hero .artist-cover,
   .collection-hero .artist-cover--mosaic,
-  .album-hero__art { width: min(62vw, 240px); }
-}
+  .album-hero__art { width: min(62vw, 240px); }}
 
 .collection-hero .collection-empty-cover { width: 100%; height: 100%; background: linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); }
 .collection-hero .artist-cover--mosaic > .collection-empty-cover { display: grid; place-items: center; }
@@ -2787,8 +3335,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
   .app-shell:not(.is-nav-collapsed) .mini-player {
     left: calc(50% + var(--rail-w) / 2);
     width: min(1120px, calc(100% - var(--rail-w) - 48px));
-  }
-}
+  }}
 
 /* =====================================================================
  * Round 4: Home (the personal dashboard), accounts, taste onboarding, sharing
@@ -2854,7 +3401,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .tile-art:hover .tile-play,
 .tile-art:focus-visible .tile-play,
 .tile.is-current .tile-play { opacity: 1; transform: none; }
-@media (hover: hover) { .tile-art:hover { transform: translateY(-3px); border-color: var(--border-strong); } }
+@media (hover: hover) { .tile-art:hover { transform: translateY(-3px); border-color: var(--border-strong); }}
 .tile.is-current .tile-art { border-color: color-mix(in srgb, var(--wave) 60%, transparent); }
 
 .tile-meta { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: 4px; }
@@ -2874,7 +3421,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .playlist-tile-art .artwork { width: 100%; height: 100%; border-radius: 0; }
 .playlist-tile-art.is-sparse { grid-template-columns: 1fr; grid-template-rows: 1fr; }
 .playlist-tile-art.is-sparse > span:nth-child(n+2) { display: none; }
-@media (hover: hover) { .playlist-tile:hover .playlist-tile-art { transform: translateY(-3px); border-color: var(--border-strong); } }
+@media (hover: hover) { .playlist-tile:hover .playlist-tile-art { transform: translateY(-3px); border-color: var(--border-strong); }}
 
 .playlist-tile--new { align-items: flex-start; justify-content: flex-start; padding: 0; border: 0; background: none; font: inherit; text-align: left; }
 .playlist-tile--new .playlist-tile-plus { display: grid; width: 100%; aspect-ratio: 1; place-items: center; border: 1.5px dashed var(--border-strong); border-radius: 18px; background: transparent; color: var(--ink-muted); transition: background-color var(--d-base) var(--ease-standard), color var(--d-base) var(--ease-standard); }
@@ -2945,8 +3492,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 
 @media (max-width: 900px) {
   .taste-shell { grid-template-columns: 1fr; padding: 88px 20px 40px; min-height: auto; }
-  .taste-preview { display: none; }
-}
+  .taste-preview { display: none; }}
 
 /* ---------- Glass sheets (dialogs and popovers, dark in both themes) ---------- */
 .glass-sheet {
@@ -3119,8 +3665,7 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
 
 @media (prefers-reduced-motion: reduce) {
   .panel-topbar .mood-pill,
-  .panel-topbar .mood-pill::after { transition: none; }
-}
+  .panel-topbar .mood-pill::after { transition: none; }}
 
 @media (max-width: 900px) {
   .panel-topbar .mood-pills {
@@ -3137,5 +3682,523 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   .home-resume { width: 100%; }
   .guest-nudge { flex-direction: column; align-items: flex-start; }
   .taste-card { padding: 20px; }
-  .taste-foot { flex-wrap: wrap; }
+  .taste-foot { flex-wrap: wrap; }}
+
+/* ---------- Search results: one surface, tabbed by result type ---------- */
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.search-results-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.search-results-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(20px, 2vw, 26px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.search-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.search-tabs::-webkit-scrollbar { display: none; }
+
+.search-tab {
+  position: relative;
+  isolation: isolate;
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  /* Colour only: the moving pill behind it carries the motion. */
+  transition: color var(--d-fast) var(--ease-standard);
+}
+
+.search-tab:hover { color: var(--ink-soft); }
+.search-tab.is-active { color: var(--bg); }
+
+.search-tab-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 999px;
+  background: var(--ink);
+}
+
+.search-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.search-tab-count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  will-change: transform, opacity;
+}
+
+.search-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.search-block h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.search-block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.search-more {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color var(--d-fast) var(--ease-standard);
+}
+
+.search-more:hover { color: var(--ink); }
+
+.search-top-card {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--d-fast) var(--ease-press), background var(--d-fast) var(--ease-standard);
+}
+
+.search-top-card:hover { background: var(--surface-raised); }
+.search-top-card:active { transform: scale(0.994); }
+
+.search-top-art { display: block; width: 104px; height: 104px; overflow: hidden; border-radius: 12px; }
+.search-top-art .artwork { width: 100%; height: 100%; border-radius: 0; }
+
+.search-top-copy { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.search-top-copy strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: clamp(19px, 2.2vw, 26px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-top-copy span { color: var(--ink-muted); font-size: 14px; }
+.search-top-copy em {
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.search-top-play {
+  display: flex;
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--wave, #d9e66a);
+  color: #101014;
+  opacity: 0;
+  transition: opacity var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-press);
+}
+
+.search-top-card:hover .search-top-play { opacity: 1; }
+.search-top-card:hover .search-top-play:hover { transform: scale(1.06); }
+
+.search-artist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+.search-artist-grid .artist-card {
+  width: auto;
+  min-width: 0;
+  flex: initial;
+}
+
+.media-card-glyph {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 640px) {
+  .search-top-card { grid-template-columns: 76px minmax(0, 1fr); gap: 14px; padding: 12px; }
+  .search-top-art { width: 76px; height: 76px; }
+  .search-top-play { display: none; }
+  .search-artist-grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-panel,
+  .search-tab,
+  .search-top-card,
+  .search-top-play { transition: none; }
+}
+
+/* The artist the search was about, ahead of the supporting credits. */
+.artist-hero {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 22px;
+  width: 100%;
+  margin-bottom: 22px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--d-fast) var(--ease-press), background var(--d-fast) var(--ease-standard);
+}
+
+.artist-hero:hover { background: var(--surface-raised); }
+.artist-hero:active { transform: scale(0.995); }
+
+.artist-hero-photo {
+  display: block;
+  width: 148px;
+  height: 148px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-raised);
+}
+
+.artist-hero-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 20%;
+}
+
+.artist-hero-photo .artist-card-initial { font-size: 48px; }
+
+.artist-hero-copy { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
+.artist-hero-copy em {
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.artist-hero-copy strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: clamp(26px, 3.4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+}
+.artist-hero-copy span { color: var(--ink-muted); font-size: 13px; }
+
+.artist-hero-go {
+  display: flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--hover-wash);
+  color: var(--ink-soft);
+  transition: transform var(--d-fast) var(--ease-press), background var(--d-fast) var(--ease-standard);
+}
+
+.artist-hero:hover .artist-hero-go { background: var(--wave, #d9e66a); color: #101014; transform: translateX(3px); }
+
+@media (max-width: 640px) {
+  .artist-hero { grid-template-columns: 84px minmax(0, 1fr); gap: 14px; padding: 14px; }
+  .artist-hero-photo { width: 84px; height: 84px; }
+  .artist-hero-photo .artist-card-initial { font-size: 30px; }
+  .artist-hero-go { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artist-hero,
+  .artist-hero-go { transition: none; }
+}
+
+/* ---------- Player transport ----------
+ * Laid out the way the Apple Music expanded player lays it out: the bar spans the full
+ * width on its own row, the two times sit underneath it at the outer edges, and the right
+ * one counts down rather than showing the track length.
+ */
+
+.listening-progress {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+}
+
+.listening-progress .progress-range {
+  grid-column: 1 / -1;
+  --progress: 0%;
+  /* Apple's own values: a 7px track carrying the fill, with the elapsed side near-opaque
+   * and the remainder at a quarter. */
+  --track-height: 7px;
+  --thumb-size: 13px;
+  --track-rest: rgba(255, 255, 255, 0.26);
+  --track-done: rgba(255, 255, 255, 0.92);
+  width: 100%;
+  height: var(--thumb-size);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.listening-progress .progress-range:disabled { cursor: default; opacity: 0.5; }
+
+.listening-progress .progress-range::-webkit-slider-runnable-track {
+  height: var(--track-height);
+  border-radius: var(--track-height);
+  background-image: linear-gradient(
+    90deg,
+    var(--track-done) var(--progress),
+    var(--track-rest) var(--progress)
+  );
+}
+
+.listening-progress .progress-range::-moz-range-track {
+  height: var(--track-height);
+  border-radius: var(--track-height);
+  background-image: linear-gradient(
+    90deg,
+    var(--track-done) var(--progress),
+    var(--track-rest) var(--progress)
+  );
+}
+
+.listening-progress .progress-range::-webkit-slider-thumb {
+  width: var(--thumb-size);
+  height: var(--thumb-size);
+  margin-top: calc((var(--track-height) - var(--thumb-size)) / 2);
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+  appearance: none;
+  -webkit-appearance: none;
+  transition: transform 100ms ease-in-out;
+}
+
+.listening-progress .progress-range::-moz-range-thumb {
+  width: var(--thumb-size);
+  height: var(--thumb-size);
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+  transition: transform 100ms ease-in-out;
+}
+
+.listening-progress .progress-range:hover::-webkit-slider-thumb,
+.listening-progress .progress-range.is-dragging::-webkit-slider-thumb { transform: scale(1.18); }
+.listening-progress .progress-range:hover::-moz-range-thumb,
+.listening-progress .progress-range.is-dragging::-moz-range-thumb { transform: scale(1.18); }
+
+.listening-progress .progress-range:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--wave, #d9e66a) 72%, white);
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
+.listening-progress .progress-time {
+  width: auto;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.listening-progress .progress-time:last-of-type { grid-column: 2; text-align: right; }
+
+/* The play control keeps its shape under the finger and while the track loads. */
+.ctrl-play {
+  position: relative;
+  transition: transform var(--d-fast) var(--ease-press), opacity var(--d-fast) var(--ease-standard);
+}
+
+.ctrl-play:active { transform: scale(0.94); }
+
+.ctrl-play:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--wave, #d9e66a) 72%, white);
+  outline-offset: 4px;
+}
+
+.ctrl-play-wait {
+  position: absolute;
+  inset: -5px;
+  border: 2px solid transparent;
+  border-top-color: var(--wave, #d9e66a);
+  border-radius: 50%;
+  animation: ctrl-play-wait-spin 760ms linear infinite;
+}
+
+@keyframes ctrl-play-wait-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .listening-progress .progress-range::-webkit-slider-thumb,
+  .listening-progress .progress-range::-moz-range-thumb,
+  .ctrl-play { transition: none; }
+  .ctrl-play-wait { animation-duration: 2s; }
+}
+
+/* ---------- Phone polish (full-app mobile) ---------- */
+@media (max-width: 900px) {
+  .listening-world__shell {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .listening-top {
+    padding: 12px 16px;
+    gap: 10px;
+  }
+  .listening-collapse { padding-inline: 12px; }
+  .player-tabs { flex: 1 1 auto; justify-content: center; max-width: 100%; }
+  .ptab {
+    flex: 1 1 0;
+    justify-content: center;
+    gap: 0;
+    padding-inline: 8px;
+    font-size: 0;
+  }
+  .ptab svg { width: 16px; height: 16px; }
+
+  .cmdk-layer {
+    padding:
+      max(12px, env(safe-area-inset-top, 0px))
+      12px
+      max(12px, env(safe-area-inset-bottom, 0px));
+    align-items: stretch;
+  }
+  .cmdk-sheet {
+    width: 100%;
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    border-radius: 22px;
+  }
+
+  .auth-layer {
+    padding:
+      max(24px, env(safe-area-inset-top, 0px))
+      16px
+      max(16px, env(safe-area-inset-bottom, 0px));
+    align-items: end;
+  }
+  .auth-sheet {
+    width: 100%;
+    max-height: calc(100dvh - 40px - env(safe-area-inset-top, 0px));
+    border-radius: 24px 24px 18px 18px;
+    padding: 24px 20px max(24px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .am-queue {
+    max-height: min(70dvh, 560px);
+  }
+
+  .library-page .inner-hero,
+  .inner-hero { gap: 14px; }
+  .playlist-new-inline { flex-wrap: wrap; }
+  .playlist-new-inline input { flex: 1 1 100%; }
+
+  .share-pop {
+    left: 0;
+    right: 0;
+    width: min(100%, 360px);
+  }
+}
+
+@media (max-width: 520px) {
+  .listening-body { padding: 8px 16px max(24px, env(safe-area-inset-bottom, 0px)); }
+  .now-playing { padding-inline: 4px; }
+  .ytm-lyrics__scroll,
+  .ytm-lyrics__scroll--soft { padding-inline: 8px; }
+
+  .search-tabs { gap: 4px; }
+  .search-tab { padding-inline: 12px; font-size: 13px; }
+
+  .taste-shell { padding: 72px 16px 32px; }
+  .taste-head h1 { font-size: clamp(26px, 8vw, 34px); }
+
+  .coverflow-stage { min-height: 220px; }
+}
+
+@media (max-width: 360px) {
+  .brand-word { letter-spacing: -0.05em; }
+  .site-header .desktop-nav .nav-link { width: 32px; min-height: 32px; }
+  .header-buttons .icon-button { width: 32px; height: 32px; flex-basis: 32px; }
+  .hero-banner-copy { max-width: calc(100% - 96px); }
+  .hero-banner-art { width: 76px; height: 76px; }
+  .tile { flex-basis: 132px; }
 }

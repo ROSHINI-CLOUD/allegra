@@ -62,9 +62,9 @@ function formatFollowers(count: number): string {
 }
 
 /**
- * Artist surface: the artist's own photo as a tall hero that fades into the page, their name,
- * followers and Play / Shuffle, then Top songs (plays + album columns), albums as cards, and
- * similar artists.
+ * Artist surface: a contained hero plate — the photo framed as a portrait card beside the name,
+ * over the same photo blurred past recognition — then Top songs (plays + album columns), albums
+ * as cards, and similar artists.
  */
 export function ArtistPage({
   name,
@@ -155,12 +155,13 @@ export function ArtistPage({
   }, [profile, songs]);
 
   const topSongs = songs.slice(0, expanded ? TOP_EXPANDED : TOP_COLLAPSED);
-  const summary = [
+  // Each fact is its own frosted pill in the hero, so the line never reads as one grey run-on.
+  const stats = [
     profile?.followerCount ? formatFollowers(profile.followerCount) : '',
     loading ? 'Finding their songs…' : songs.length > 0 ? `${songs.length} top songs` : 'No songs found yet',
     !loading && !profile?.followerCount && totalPlays > 0 ? formatPlays(totalPlays) : '',
     !loading && songs.length > 0 ? formatAlbumDuration(totalSeconds) : ''
-  ].filter(Boolean).join(' · ');
+  ].filter(Boolean);
 
   return (
     <div className="artist-page">
@@ -174,25 +175,33 @@ export function ArtistPage({
         ) : null}
       </div>
       <header className="artist-hero" style={heroStyle}>
-        {photo ? (
-          <div className="artist-cover artist-cover--photo" aria-hidden="true"><img src={photo} alt="" crossOrigin="anonymous" /></div>
-        ) : lead ? (
-          <div className="artist-cover" aria-hidden="true"><Artwork song={lead} size="large" /></div>
-        ) : null}
-        <div className="artist-hero-copy">
-          <h1>
-            {displayName}
-            {profile?.isVerified ? <span className="artist-verified artist-verified--inline" aria-label="Verified artist" title="Verified artist"><BadgeCheck size={15} aria-hidden="true" /></span> : null}
-          </h1>
-          <p>{summary}</p>
-          {songs.length > 0 ? (
-            <div className="artist-actions">
-              <TactileButton variant="primary" icon={artistPlaying ? Pause : Play} onClick={() => { if (artistIsCurrent) onToggle(); else onPlayAll(false); }}>
-                {artistPlaying ? 'Pause' : 'Play'}
-              </TactileButton>
-              <TactileButton variant="primary" icon={Shuffle} onClick={() => onPlayAll(true)}>Shuffle</TactileButton>
-            </div>
+        {heroImage ? <div className="artist-hero__field" aria-hidden="true" /> : null}
+        <div className="artist-hero__inner">
+          {photo ? (
+            <figure className="artist-portrait"><img src={photo} alt="" crossOrigin="anonymous" /></figure>
+          ) : lead ? (
+            <figure className="artist-portrait"><Artwork song={lead} size="large" /></figure>
           ) : null}
+          <div className="artist-hero-copy">
+            <span className="artist-hero-eyebrow">{profile?.isVerified ? 'Verified artist' : 'Artist'}</span>
+            <h1>
+              {displayName}
+              {profile?.isVerified ? <span className="artist-verified artist-verified--inline" aria-label="Verified artist" title="Verified artist"><BadgeCheck size={15} aria-hidden="true" /></span> : null}
+            </h1>
+            {stats.length > 0 ? (
+              <ul className="artist-stats">
+                {stats.map((stat) => <li key={stat}>{stat}</li>)}
+              </ul>
+            ) : null}
+            {songs.length > 0 ? (
+              <div className="artist-actions">
+                <TactileButton variant="primary" icon={artistPlaying ? Pause : Play} onClick={() => { if (artistIsCurrent) onToggle(); else onPlayAll(false); }}>
+                  {artistPlaying ? 'Pause' : 'Play'}
+                </TactileButton>
+                <TactileButton variant="primary" icon={Shuffle} onClick={() => onPlayAll(true)}>Shuffle</TactileButton>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
       <div ref={sentinelRef} className="detail-sentinel" aria-hidden="true" />
