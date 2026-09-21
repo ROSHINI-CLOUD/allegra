@@ -36,6 +36,11 @@ export interface AudioPlayerState {
   readonly setVolume: (value: number) => void;
   readonly toggleShuffle: () => void;
   readonly cycleRepeat: () => void;
+  /**
+   * Swap the element source (e.g. original ↔ karaoke instrumental) while keeping
+   * the same song identity, timestamp, and play/pause intent.
+   */
+  readonly swapAudioSource: (streamUrl: string) => Promise<void>;
   readonly audioRef: React.RefObject<HTMLAudioElement | null>;
 }
 
@@ -51,6 +56,8 @@ export function useAudioPlayer(): AudioPlayerState {
   const autoAdvancedRef = useRef(false);
   const shuffleRef = useRef(false);
   const repeatRef = useRef<RepeatMode>('off');
+  /** When set, the element plays this URL instead of currentSong.streamUrl. */
+  const sourceOverrideRef = useRef<string | null>(null);
   const [currentSong, setCurrentSong] = useState<UnifiedSong | null>(null);
   const [queue, setQueue] = useState<UnifiedSong[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -102,6 +109,7 @@ export function useAudioPlayer(): AudioPlayerState {
       void requestPlayback(true);
       return;
     }
+    sourceOverrideRef.current = null;
     const source = nextQueue.length > 0 ? nextQueue : [song];
     const withCurrent = source.some((item) => item.id === song.id) ? source : [song, ...source];
     // Collapse remasters (same title/artists, different cover/release id).
@@ -196,6 +204,7 @@ export function useAudioPlayer(): AudioPlayerState {
 
   const stop = useCallback((): void => {
     playbackGenerationRef.current += 1;
+    sourceOverrideRef.current = null;
     playbackIntentRef.current = false;
     pendingPlaybackRef.current = false;
     autoAdvancedRef.current = true;
@@ -233,6 +242,41 @@ export function useAudioPlayer(): AudioPlayerState {
     setCurrentTime(nextTime);
     if (wasPlaying) await requestPlayback(true);
   }, [duration, requestPlayback]);
+
+  const swapAudioSource = useCallback(async (streamUrl: string): Promise<void> => {
+    const audio = audioRef.current;
+    const song = currentSongRef.current;
+    if (!audio || !song) return;
+    const nextSrc = resolveApiUrl(streamUrl);
+    if (audio.src === nextSrc) return;
+
+    const wasPlaying = playbackIntentRef.current;
+    const resumeAt = audio.currentTime;
+    sourceOverrideRef.current = streamUrl;
+    playbackGenerationRef.current += 1;
+    const generation = playbackGenerationRef.current;
+
+    audio.pause();
+    setIsBuffering(true);
+    audio.src = nextSrc;
+    audio.load();
+
+    await new Promise<void>((resolve) => {
+      const onReady = (): void => {
+        audio.removeEventListener('loadedmetadata', onReady);
+        audio.removeEventListener('error', onReady);
+        resolve();
+      };
+      audio.addEventListener('loadedmetadata', onReady, { once: true });
+      audio.addEventListener('error', onReady, { once: true });
+    });
+
+    if (generation !== playbackGenerationRef.current || currentSongRef.current?.id !== song.id) return;
+    audio.currentTime = resumeAt;
+    setCurrentTime(resumeAt);
+    setIsBuffering(false);
+    if (wasPlaying) await requestPlayback(true);
+  }, [requestPlayback]);
 
   const setVolume = useCallback((value: number): void => {
     const audio = audioRef.current;
@@ -330,7 +374,7 @@ export function useAudioPlayer(): AudioPlayerState {
     const songId = currentSong.id;
     let onCanPlay: (() => void) | null = null;
     audio.pause();
-    audio.src = resolveApiUrl(currentSong.streamUrl);
+    audio.src = resolveApiUrl(sourceOverrideRef.current ?? currentSong.streamUrl);
     audio.load();
     const shouldPlay = pendingPlaybackRef.current;
     pendingPlaybackRef.current = false;
@@ -405,6 +449,7 @@ export function useAudioPlayer(): AudioPlayerState {
     setVolume,
     toggleShuffle,
     cycleRepeat,
+    swapAudioSource,
     audioRef
   };
 }

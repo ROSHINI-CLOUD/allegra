@@ -62,6 +62,17 @@ export type ApiResponse<T> =
   | { readonly success: true; readonly data: T }
   | { readonly success: false; readonly data: null; readonly error: string };
 
+/** Lazy Scarleta vocal-removal cache state for one song+source fingerprint. */
+export type KaraokeStatus = 'none' | 'queued' | 'processing' | 'ready' | 'failed';
+
+export interface KaraokePayload {
+  readonly status: KaraokeStatus;
+  /** Our proxy when ready — never a provider CDN URL. */
+  readonly instrumentalUrl?: string;
+  readonly retryable?: boolean;
+  readonly separationVersion?: string;
+}
+
 export interface AccountProfile {
   readonly userId: string;
   readonly isGuest: boolean;

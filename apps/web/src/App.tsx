@@ -25,6 +25,7 @@ import { SongCard } from './components/SongCard';
 import { Artwork, EmptyState, IconButton, OfflineToast, SkeletonCard, TactileButton } from './components/ui';
 import { useAccount, useListenTracker } from './hooks/useAccount';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
+import { useKaraoke } from './hooks/useKaraoke';
 import { useMediaSession } from './hooks/useMediaSession';
 import { PlaylistsContext, usePlaylists } from './hooks/usePlaylists';
 import { collectAlbumTracks } from './lib/album';
@@ -172,6 +173,7 @@ export default function App() {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const lyricsGeneration = useRef(0);
   const audio = useAudioPlayer();
+  const karaoke = useKaraoke(audio.currentSong, audio.swapAudioSource);
   const hasSongLoaded = audio.currentSong !== null;
   const playlists = usePlaylists();
   const transportRef = useRef(audio);
@@ -1313,6 +1315,7 @@ export default function App() {
         suggestions={suggestions.length > 0 ? suggestions : aiPicks}
         muted={audio.isMuted}
         onMute={audio.toggleMute}
+        karaoke={karaoke}
         onCollapse={collapsePlayer}
         onOpenWorkspace={() => setPlayerMode('workspace')}
         onOpenImmersive={() => setPlayerMode('immersive')}

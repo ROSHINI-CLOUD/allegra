@@ -32,6 +32,11 @@ export class StreamResolver {
     this.timeoutMs = options.timeoutMs ?? STREAM_HEADER_TIMEOUT_MS;
   }
 
+  /** Server-only source CDN URL for Scarleta etc. Never send this to the browser. */
+  public async resolveSourceUrl(songId: string, force = false): Promise<string> {
+    return this.resolve(songId, force);
+  }
+
   public async pipe(songId: string, range: string | undefined, response: ExpressResponse): Promise<void> {
     let upstream = await this.fetchResolved(songId, range, false);
     if (upstream.response.status === 403 || upstream.response.status === 404) {

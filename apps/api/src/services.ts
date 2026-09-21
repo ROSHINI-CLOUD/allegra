@@ -1,9 +1,12 @@
-import type { AiConfig } from './config.js';
+import type { AiConfig, UploadsConfig } from './config.js';
 import { AiClient } from './ai/aiClient.js';
 import { GeminiProvider } from './ai/providers/gemini.js';
 import { OpenAiCompatibleProvider } from './ai/providers/openaiCompatible.js';
 import { BedrockProvider } from './ai/providers/bedrock.js';
 import { ArtworkService } from './services/artwork.js';
+import { CacheKaraokeAssetStore } from './services/karaoke/asset-store.js';
+import { KaraokeService } from './services/karaoke/karaoke.service.js';
+import { ScarletaKaraokeProvider } from './services/karaoke/providers/scarleta.provider.js';
 import { LyricsService } from './services/lyrics.js';
 import { RecommendationService } from './services/recommendations.js';
 import { TranslationService } from './services/translation.js';
@@ -30,6 +33,9 @@ export interface ServiceOptions {
   readonly betterLyricsApiUrl?: string;
   /** Optional key: without it only already-cached songs resolve. */
   readonly betterLyricsApiKey?: string;
+  readonly scarletaApiKey?: string;
+  readonly scarletaApiBaseUrl?: string;
+  readonly uploads?: UploadsConfig;
   readonly cacheStore?: CacheStore;
   readonly userStore?: UserStore;
   /** With both set, user data lives in Convex; otherwise it stays in memory. */
@@ -48,6 +54,7 @@ export interface AppServices {
   readonly auth: AuthService;
   readonly translation: TranslationService;
   readonly recommendations: RecommendationService;
+  readonly karaoke: KaraokeService;
 }
 
 /**
@@ -128,10 +135,18 @@ export function createServices(options: ServiceOptions): AppServices {
     : new MemoryUserStore());
 
   const ai = buildAiClient(options.ai, options.fetchImpl);
+  const stream = new StreamResolver({ saavn, cache, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) });
+  const karaokeProvider = options.scarletaApiKey
+    ? new ScarletaKaraokeProvider({
+        apiKey: options.scarletaApiKey,
+        ...(options.scarletaApiBaseUrl ? { baseUrl: options.scarletaApiBaseUrl } : {}),
+        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
+      })
+    : undefined;
 
   return {
     catalog,
-    stream: new StreamResolver({ saavn, cache, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) }),
+    stream,
     artwork: new ArtworkService(new ItunesProvider({ ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) }), catalog, cache),
     lyrics: new LyricsService(new LrclibProvider({
       ...(options.lrclibApiUrl ? { baseUrl: options.lrclibApiUrl } : {}),
@@ -140,6 +155,13 @@ export function createServices(options: ServiceOptions): AppServices {
       options.betterLyricsApiUrl ? new BetterLyricsProvider({ baseUrl: options.betterLyricsApiUrl, ...(options.betterLyricsApiKey ? { apiKey: options.betterLyricsApiKey } : {}), ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) }) : undefined),
     auth: new AuthService(userStore, options.jwtSecret),
     translation: new TranslationService(ai, cache),
-    recommendations: new RecommendationService(ai, catalog, cache)
+    recommendations: new RecommendationService(ai, catalog, cache),
+    karaoke: new KaraokeService({
+      stream,
+      store: new CacheKaraokeAssetStore(cache),
+      ...(karaokeProvider ? { provider: karaokeProvider } : {}),
+      ...(options.uploads ? { uploads: options.uploads } : {}),
+      ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
+    })
   };
 }

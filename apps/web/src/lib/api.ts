@@ -1,4 +1,4 @@
-import type { AccountProfile, ApiResponse, ArtistProfile, ArtistSummary, HomePayload, LyricLine, LyricsPayload, SharedPlaylist, TasteSummary, UnifiedSong } from '@shared/types';
+import type { AccountProfile, ApiResponse, ArtistProfile, ArtistSummary, HomePayload, KaraokePayload, LyricLine, LyricsPayload, SharedPlaylist, TasteSummary, UnifiedSong } from '@shared/types';
 
 export interface LibraryRecord {
   readonly id: string;
@@ -132,6 +132,16 @@ export async function fetchLyrics(song: UnifiedSong, signal?: AbortSignal): Prom
     }).toString()}`,
     { signal }
   );
+}
+
+/** Current karaoke cache state. Throws ApiError 503 when Scarleta is not configured. */
+export async function fetchKaraokeStatus(songId: string, signal?: AbortSignal): Promise<KaraokePayload> {
+  return request(`/api/songs/${encodeURIComponent(songId)}/karaoke`, { signal });
+}
+
+/** Claim or join karaoke generation. May return 202 while processing. */
+export async function requestKaraoke(songId: string, signal?: AbortSignal): Promise<KaraokePayload> {
+  return request(`/api/songs/${encodeURIComponent(songId)}/karaoke`, { method: 'POST', signal });
 }
 
 export async function createAnonymousSession(): Promise<{ token: string; userId: string }> {

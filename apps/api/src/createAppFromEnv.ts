@@ -17,6 +17,8 @@ export function createAppFromEnv(env: NodeJS.Dict<string>): Express {
     ...(config.lyricaApiUrl ? { lyricaApiUrl: config.lyricaApiUrl } : {}),
     ...(config.betterLyricsApiUrl ? { betterLyricsApiUrl: config.betterLyricsApiUrl } : {}),
     ...(config.betterLyricsApiKey ? { betterLyricsApiKey: config.betterLyricsApiKey } : {}),
+    ...(config.scarletaApiKey ? { scarletaApiKey: config.scarletaApiKey } : {}),
+    ...(config.scarletaApiBaseUrl ? { scarletaApiBaseUrl: config.scarletaApiBaseUrl } : {}),
     ...(config.convexUrl && config.convexServerSecret
       ? { convexUrl: config.convexUrl, convexServerSecret: config.convexServerSecret }
       : {}),

@@ -16,6 +16,7 @@ import { sendFailure } from './routes/common.js';
 import { lyricsRouter } from './routes/lyrics.js';
 import { mcpRouter } from './mcp/server.js';
 import { sharedRouter } from './routes/shared.js';
+import { karaokeRouter } from './routes/karaoke.js';
 import { streamRouter } from './routes/stream.js';
 import { uploadsRouter } from './routes/uploads.js';
 import { userRouter } from './routes/user.js';
@@ -38,6 +39,8 @@ export interface AppOptions {
   readonly lyricaApiUrl?: string;
   readonly betterLyricsApiUrl?: string;
   readonly betterLyricsApiKey?: string;
+  readonly scarletaApiKey?: string;
+  readonly scarletaApiBaseUrl?: string;
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
   readonly ai?: AiConfig;
@@ -89,6 +92,9 @@ export function createApp(options: AppOptions): Express {
     ...(options.lyricaApiUrl ? { lyricaApiUrl: options.lyricaApiUrl } : {}),
     ...(options.betterLyricsApiUrl ? { betterLyricsApiUrl: options.betterLyricsApiUrl } : {}),
     ...(options.betterLyricsApiKey ? { betterLyricsApiKey: options.betterLyricsApiKey } : {}),
+    ...(options.scarletaApiKey ? { scarletaApiKey: options.scarletaApiKey } : {}),
+    ...(options.scarletaApiBaseUrl ? { scarletaApiBaseUrl: options.scarletaApiBaseUrl } : {}),
+    ...(options.uploads ? { uploads: options.uploads } : {}),
     ...(options.convexUrl ? { convexUrl: options.convexUrl } : {}),
     ...(options.convexServerSecret ? { convexServerSecret: options.convexServerSecret } : {}),
     ...(options.ai ? { ai: options.ai } : {}),
@@ -110,6 +116,7 @@ export function createApp(options: AppOptions): Express {
   app.use('/api', artworkRouter(services.artwork));
   app.use('/api', lyricsRouter(services.lyrics));
   app.use('/api', streamRouter(services.stream));
+  app.use('/api', karaokeRouter(services.karaoke));
   app.use('/api', authRouter(services.auth));
   app.use('/api', userRouter(services.auth, services.catalog, options.uploads?.publicBaseUrl));
   app.use('/api', sharedRouter(services.auth, services.catalog, options.uploads?.publicBaseUrl));

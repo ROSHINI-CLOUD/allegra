@@ -2,6 +2,7 @@ import {
   ChevronDown,
   Heart,
   ListMusic,
+  Mic2,
   SkipBack,
   SkipForward,
   Sparkles,
@@ -18,7 +19,8 @@ import type { UnifiedSong } from '@shared/types';
 import { DynamicLyricsBackground } from './DynamicLyricsBackground';
 import { LyricsPanel } from './LyricsPanel';
 import { PlaylistMenu } from './PlaylistMenu';
-import { Artwork, IconButton } from './ui';
+import { Artwork, IconButton, TactileButton } from './ui';
+import type { KaraokeController } from '../hooks/useKaraoke';
 import type { Palette } from '../lib/palette';
 import { tapHaptic } from '../lib/haptics';
 import { creditedArtists, formatTime, clamp } from '../lib/utils';
@@ -43,6 +45,7 @@ interface PlayerPanelProps {
   /** @deprecated Kept for call-site compatibility; atmosphere is CSS artwork now. */
   readonly energy?: number;
   readonly suggestions?: UnifiedSong[];
+  readonly karaoke?: KaraokeController;
   readonly onCollapse: () => void;
   readonly onOpenWorkspace: () => void;
   readonly onOpenImmersive: () => void;
@@ -79,6 +82,7 @@ export function PlayerPanel({
   palette,
   light = false,
   suggestions = [],
+  karaoke,
   onCollapse,
   onOpenWorkspace,
   onOpenImmersive,
@@ -283,6 +287,32 @@ export function PlayerPanel({
                     <PlaylistMenu song={song} />
                     <IconButton icon={muted ? VolumeX : Volume2} label={muted ? 'Unmute' : 'Mute'} active={muted} onClick={onMute} />
                   </div>
+                  {karaoke?.available ? (
+                    <div className="np-karaoke">
+                      <TactileButton
+                        variant={karaoke.mode === 'on' ? 'primary' : 'secondary'}
+                        icon={Mic2}
+                        className={`np-karaoke-btn${karaoke.busy ? ' is-busy' : ''}${karaoke.mode === 'on' ? ' is-on' : ''}`}
+                        disabled={karaoke.busy}
+                        aria-pressed={karaoke.mode === 'on'}
+                        aria-busy={karaoke.busy || undefined}
+                        onClick={() => {
+                          tapHaptic(10);
+                          void karaoke.toggle();
+                        }}
+                      >
+                        {karaoke.busy ? 'Preparing Karaoke…' : karaoke.mode === 'on' ? 'Karaoke on' : 'Karaoke'}
+                      </TactileButton>
+                      {karaoke.error ? (
+                        <p className="np-karaoke-error" role="alert">
+                          {karaoke.error}
+                        </p>
+                      ) : null}
+                      {karaoke.mode === 'on' && !karaoke.busy ? (
+                        <p className="np-karaoke-hint">Instrumental playing — sing along with the lyrics.</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 

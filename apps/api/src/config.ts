@@ -15,6 +15,9 @@ export interface AppConfig {
   readonly lyricaApiUrl?: string;
   readonly betterLyricsApiUrl?: string;
   readonly betterLyricsApiKey?: string;
+  /** Scarleta vocal-removal. Unset disables karaoke routes (503). */
+  readonly scarletaApiKey?: string;
+  readonly scarletaApiBaseUrl?: string;
   /** Convex deployment URL. Unset means user data stays in memory. */
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
@@ -112,6 +115,8 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
   const lyricaApiUrl = isOff(env.LYRICA_API_URL) ? undefined : readOptionalProviderUrl(env.LYRICA_API_URL, production, 'LYRICA_API_URL') ?? DEFAULT_LYRICA;
   const betterLyricsApiUrl = isOff(env.BETTERLYRICS_API_URL) ? undefined : readOptionalProviderUrl(env.BETTERLYRICS_API_URL, production, 'BETTERLYRICS_API_URL') ?? DEFAULT_BETTER_LYRICS;
   const betterLyricsApiKey = env.BETTERLYRICS_API_KEY?.trim() || undefined;
+  const scarletaApiKey = env.SCARLETA_API_KEY?.trim() || undefined;
+  const scarletaApiBaseUrl = env.SCARLETA_API_BASE_URL?.trim() || undefined;
 
   const ai: AiConfig = {
     ...(env.GEMINI_API_KEY?.trim() ? { geminiApiKey: env.GEMINI_API_KEY.trim() } : {}),
@@ -159,6 +164,8 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     ...(lyricaApiUrl ? { lyricaApiUrl } : {}),
     ...(betterLyricsApiUrl ? { betterLyricsApiUrl } : {}),
     ...(betterLyricsApiKey ? { betterLyricsApiKey } : {}),
+    ...(scarletaApiKey ? { scarletaApiKey } : {}),
+    ...(scarletaApiBaseUrl ? { scarletaApiBaseUrl } : {}),
     ...(convexUrl && convexServerSecret ? { convexUrl, convexServerSecret } : {}),
     enableRequestLogging: nodeEnv === 'production',
     ai,
