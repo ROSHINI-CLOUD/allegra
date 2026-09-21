@@ -52,24 +52,32 @@ export function CollectionPage({ kind, title, songs, loading, currentSongId, isP
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const queue = useMemo(() => [...songs], [songs]);
   const customCover = cover?.coverUrl ?? coverUrl ?? null;
-  // Custom cover wins; otherwise the first real song art colours the hero.
+  const collectionIsCurrent = currentSongId !== null && songs.some((song) => song.id === currentSongId);
+  const collectionPlaying = collectionIsCurrent && isPlaying;
+  // Prefer the selected/playing track's art so hero tokens track each pick.
+  const currentSongArt = useMemo(
+    () => (currentSongId ? songs.find((song) => song.id === currentSongId)?.artwork ?? null : null),
+    [currentSongId, songs]
+  );
+  // Custom cover stays on the hero image; aura/CSS tokens follow the song you pick.
   const leadArtwork = useMemo(
     () => customCover ?? songs.find((song) => song.artwork)?.artwork ?? null,
     [customCover, songs]
   );
+  const atmosphereArtwork = currentSongArt ?? leadArtwork;
   const totalSeconds = useMemo(() => songs.reduce((sum, song) => sum + song.duration, 0), [songs]);
-  const collectionIsCurrent = currentSongId !== null && songs.some((song) => song.id === currentSongId);
-  const collectionPlaying = collectionIsCurrent && isPlaying;
 
   useEffect(() => {
-    setPalette(null);
-    if (!leadArtwork) return undefined;
+    if (!atmosphereArtwork) {
+      setPalette(null);
+      return undefined;
+    }
     const controller = new AbortController();
-    void extractPalette(leadArtwork, controller.signal).then((next) => {
+    void extractPalette(atmosphereArtwork, controller.signal).then((next) => {
       if (!controller.signal.aborted) setPalette(next);
     });
     return () => controller.abort();
-  }, [leadArtwork]);
+  }, [atmosphereArtwork]);
 
   const heroStyle = {
     '--art-primary': palette?.primary ?? '#3a3d45',

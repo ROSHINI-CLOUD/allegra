@@ -626,18 +626,19 @@ export default function App() {
     () => (activePlaylist ? activePlaylist.songIds.map((id) => playlists.songs.get(id)).filter((song): song is UnifiedSong => song !== undefined) : []),
     [activePlaylist, playlists.songs]
   );
-  // The page owns the background colour. On an artist / playlist / liked page it is that page's own
-  // artwork (even while another song plays); everywhere else it follows the song that is playing.
+  // Collection pages follow the now-playing cover so the aura shifts with every
+  // pick inside a playlist / likes / shared room. Artist & album keep their hero art.
+  const collectionSongArt = audio.currentSong?.artwork ?? null;
   const backdropSource = view === 'artist'
     ? (artistProfile?.image ?? artistTracks[0]?.artwork ?? null)
     : view === 'playlist'
-      ? (activePlaylist?.coverUrl ?? activePlaylistSongs[0]?.artwork ?? null)
+      ? (collectionSongArt ?? activePlaylist?.coverUrl ?? activePlaylistSongs[0]?.artwork ?? null)
       : view === 'liked'
-        ? (likedSongs[0]?.artwork ?? null)
+        ? (collectionSongArt ?? likedSongs[0]?.artwork ?? null)
         : view === 'album'
           ? (albumSeed?.artwork ?? null)
           : view === 'shared'
-            ? (shared?.coverUrl ?? shared?.songs[0]?.artwork ?? null)
+            ? (collectionSongArt ?? shared?.coverUrl ?? shared?.songs[0]?.artwork ?? null)
             : null;
   const [backdropPalette, setBackdropPalette] = useState<{ source: string; palette: Palette } | null>(null);
   useEffect(() => {
@@ -856,12 +857,13 @@ export default function App() {
     else window.location.replace('#discover');
   }, [view, albumSeed, audio.currentSong]);
 
+  const shellPalette = shaderPalette;
   const shellStyle = {
-    '--ambient-accent': ambientColor,
+    '--ambient-accent': shellPalette.primary || ambientColor,
     '--hero-art': activeSong?.artwork ? `url(${JSON.stringify(activeSong.artwork)})` : 'none',
-    '--art-primary': palette.primary,
-    '--art-secondary': palette.secondary,
-    '--art-tertiary': palette.tertiary
+    '--art-primary': shellPalette.primary,
+    '--art-secondary': shellPalette.secondary,
+    '--art-tertiary': shellPalette.tertiary
   } as CSSProperties;
 
   return (
