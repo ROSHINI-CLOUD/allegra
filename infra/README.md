@@ -1,11 +1,18 @@
 # Deployment
 
 **Live right now:** everything — static frontend and the whole Express API — on one Vercel
-project. `api/index.ts` wraps the existing app (`createAppFromEnv`, shared with the App Runner
+project (`https://allegravibe.vercel.app`, alias `https://allegra-green.vercel.app`).
+`api/index.ts` wraps the existing app (`createAppFromEnv`, shared with the App Runner
 entrypoint below) as a serverless function; `vercel.json` rewrites `/api/(.*)` to it. Verified
 live, including the one behavior that's supposed to be the hard part:
 `GET /api/stream/:id` with a `Range` header returns real `206 Partial Content` with correct
 `Content-Range`/`Accept-Ranges` on Vercel's Node runtime.
+
+**Env sync:** `node scripts/sync-vercel-env.mjs` pushes non-empty `apps/api/.env` keys to
+Production / Preview / Development. It forces `ALLEGRA_ORIGIN=https://allegravibe.vercel.app`,
+blank `VITE_API_BASE_URL` (same-origin `/api`), skips `NODE_ENV`/`PORT`, and never ships
+localhost `CONVEX_URL`. Root `package.json` must keep API runtime deps (`@aws-sdk/*`,
+`@modelcontextprotocol/sdk`, express, …) because Vercel resolves `node_modules` from the repo root.
 
 **Still needed before the actual hackathon submission:** Ship It (`.planning/01-GOAL.md`)
 requires a live **AWS** URL, and this Vercel-only deploy doesn't touch AWS at all. The plan is
