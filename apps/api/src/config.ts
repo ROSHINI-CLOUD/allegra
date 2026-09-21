@@ -22,6 +22,17 @@ export interface AppConfig {
   readonly ai: AiConfig;
   /** Playlist-cover uploads. Unset disables POST /api/uploads/sign. */
   readonly uploads?: UploadsConfig;
+  /** DynamoDB TTL cache. Unset keeps an in-process memory cache only. */
+  readonly cache?: CacheConfig;
+}
+
+/** Hand-rolled DynamoDB cache (no AWS SDK). Instance-role creds work via container URI. */
+export interface CacheConfig {
+  readonly tableName: string;
+  readonly region: string;
+  readonly accessKeyId?: string;
+  readonly secretAccessKey?: string;
+  readonly sessionToken?: string;
 }
 
 /** Credentials + bucket for hand-rolled S3 PUT presigning (no AWS SDK). */
@@ -32,6 +43,7 @@ export interface UploadsConfig {
   readonly publicBaseUrl: string;
   readonly accessKeyId: string;
   readonly secretAccessKey: string;
+  readonly sessionToken?: string;
   readonly expiresInSeconds: number;
 }
 
@@ -47,6 +59,8 @@ export interface AiConfig {
   readonly groqModel?: string;
   readonly awsAccessKeyId?: string;
   readonly awsSecretAccessKey?: string;
+  /** Temporary session from `aws login` / STS — required when the access key starts with ASIA. */
+  readonly awsSessionToken?: string;
   readonly awsRegion?: string;
   readonly bedrockModelId?: string;
   /**
@@ -110,6 +124,7 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     ...(env.GROQ_MODEL?.trim() ? { groqModel: env.GROQ_MODEL.trim() } : {}),
     ...(env.AWS_ACCESS_KEY_ID?.trim() ? { awsAccessKeyId: env.AWS_ACCESS_KEY_ID.trim() } : {}),
     ...(env.AWS_SECRET_ACCESS_KEY?.trim() ? { awsSecretAccessKey: env.AWS_SECRET_ACCESS_KEY.trim() } : {}),
+    ...(env.AWS_SESSION_TOKEN?.trim() ? { awsSessionToken: env.AWS_SESSION_TOKEN.trim() } : {}),
     ...(env.AWS_REGION?.trim() ? { awsRegion: env.AWS_REGION.trim() } : {}),
     ...(env.BEDROCK_MODEL_ID?.trim() ? { bedrockModelId: env.BEDROCK_MODEL_ID.trim() } : {}),
     ...(env.AI_PRIMARY?.trim() ? { primary: env.AI_PRIMARY.trim().toLowerCase() } : {})
@@ -130,6 +145,7 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
   }
 
   const uploads = loadUploadsConfig(env, ai);
+  const cache = loadCacheConfig(env, ai);
 
   const config: AppConfig = {
     nodeEnv,
@@ -146,7 +162,8 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     ...(convexUrl && convexServerSecret ? { convexUrl, convexServerSecret } : {}),
     enableRequestLogging: nodeEnv === 'production',
     ai,
-    ...(uploads ? { uploads } : {})
+    ...(uploads ? { uploads } : {}),
+    ...(cache ? { cache } : {})
   };
 
   const withOrigin = allowedOrigin ? { ...config, allowedOrigin } : config;
@@ -162,12 +179,34 @@ function isOff(value: string | undefined): boolean {
  * already uses. Any missing piece leaves uploads disabled (503) rather than
  * half-configured.
  */
+/**
+ * Optional DynamoDB cache table. When set, App Runner layers memory + Dynamo so
+ * lyrics/search/AI hits survive restarts. Credentials may be static env keys or
+ * the container role (`AWS_CONTAINER_CREDENTIALS_*`).
+ */
+function loadCacheConfig(env: NodeJS.Dict<string>, ai: AiConfig): CacheConfig | undefined {
+  const tableName = env.DDB_TABLE_CACHE?.trim();
+  if (!tableName) return undefined;
+  const region = (env.AWS_REGION?.trim() || ai.awsRegion || '').trim();
+  if (!region) {
+    throw new Error('DDB_TABLE_CACHE requires AWS_REGION (or ai.awsRegion).');
+  }
+  return {
+    tableName,
+    region,
+    ...(ai.awsAccessKeyId ? { accessKeyId: ai.awsAccessKeyId } : {}),
+    ...(ai.awsSecretAccessKey ? { secretAccessKey: ai.awsSecretAccessKey } : {}),
+    ...(ai.awsSessionToken ? { sessionToken: ai.awsSessionToken } : {})
+  };
+}
+
 function loadUploadsConfig(env: NodeJS.Dict<string>, ai: AiConfig): UploadsConfig | undefined {
   const bucket = env.S3_COVERS_BUCKET?.trim();
   const publicBaseUrl = env.S3_COVERS_PUBLIC_BASE_URL?.trim();
   const region = (env.S3_COVERS_REGION?.trim() || env.AWS_REGION?.trim() || ai.awsRegion || '').trim();
   const accessKeyId = ai.awsAccessKeyId?.trim();
   const secretAccessKey = ai.awsSecretAccessKey?.trim();
+  const sessionToken = ai.awsSessionToken?.trim();
   if (!bucket && !publicBaseUrl) return undefined;
   if (!bucket || !publicBaseUrl || !region || !accessKeyId || !secretAccessKey) {
     throw new Error(
@@ -185,7 +224,15 @@ function loadUploadsConfig(env: NodeJS.Dict<string>, ai: AiConfig): UploadsConfi
   if (!Number.isInteger(expiresInSeconds) || expiresInSeconds < 30 || expiresInSeconds > 900) {
     throw new Error('S3_COVERS_UPLOAD_EXPIRES_SECONDS must be an integer between 30 and 900.');
   }
-  return { bucket, region, publicBaseUrl: publicBaseUrl.replace(/\/+$/, ''), accessKeyId, secretAccessKey, expiresInSeconds };
+  return {
+    bucket,
+    region,
+    publicBaseUrl: publicBaseUrl.replace(/\/+$/, ''),
+    accessKeyId,
+    secretAccessKey,
+    ...(sessionToken ? { sessionToken } : {}),
+    expiresInSeconds
+  };
 }
 
 function readOptionalProviderUrl(value: string | undefined, production: boolean, name: string): string | undefined {

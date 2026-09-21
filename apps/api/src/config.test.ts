@@ -56,6 +56,30 @@ test('production accepts a complete trusted configuration', () => {
   assert.equal(config.uploads, undefined);
 });
 
+test('DDB_TABLE_CACHE loads a cache config and requires a region', () => {
+  assert.throws(
+    () => loadConfig({
+      NODE_ENV: 'development',
+      DDB_TABLE_CACHE: 'allegra-cache-dev'
+    }),
+    /DDB_TABLE_CACHE requires AWS_REGION/
+  );
+
+  const config = loadConfig({
+    NODE_ENV: 'development',
+    AWS_REGION: 'ap-south-1',
+    AWS_ACCESS_KEY_ID: 'AKIAEXAMPLE',
+    AWS_SECRET_ACCESS_KEY: 'secret',
+    DDB_TABLE_CACHE: 'allegra-cache-dev'
+  });
+  assert.deepEqual(config.cache, {
+    tableName: 'allegra-cache-dev',
+    region: 'ap-south-1',
+    accessKeyId: 'AKIAEXAMPLE',
+    secretAccessKey: 'secret'
+  });
+});
+
 test('S3 cover uploads load only when every required piece is present', () => {
   assert.throws(
     () => loadConfig({

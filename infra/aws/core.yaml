@@ -42,8 +42,9 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: expiresAt
         Enabled: true
+      # Ephemeral TTL cache — PITR is pure spend with no recovery value.
       PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: true
+        PointInTimeRecoveryEnabled: false
       Tags:
         - Key: app
           Value: allegra

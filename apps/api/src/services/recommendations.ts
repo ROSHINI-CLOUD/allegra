@@ -1,5 +1,6 @@
 import type { AiClient } from '../ai/aiClient.js';
 import { extractJson } from '../ai/json.js';
+import { cachedLookup, cacheKey, type CacheStore } from '../lib/cache.js';
 import { songIdentity } from '../lib/normalize.js';
 import type { UnifiedSong } from '../types.js';
 
@@ -25,10 +26,19 @@ export interface RecommendationResult {
 
 const SYSTEM_PROMPT = `You are a music taste analyst for a streaming app. Given a listener's liked and recently played songs, infer their taste (genres, languages, moods, era, artists) and produce search queries that would surface songs they'd likely enjoy next — favor discovery over repeating what they already have. Respond with ONLY JSON: {"queries": string[3..5], "reasoning": "one short sentence"}. No markdown fences, no commentary.`;
 
+/** Hits are reusable across track skips; misses must cool down so Bedrock is not hammered. */
+const HIT_TTL_SECONDS = 3_600;
+const MISS_TTL_SECONDS = 600;
+
+/**
+ * Deep module: callers only know `recommend(...)`. Caching, negative caching,
+ * AI cascade cost, and catalog fan-out stay behind this interface.
+ */
 export class RecommendationService {
   public constructor(
     private readonly ai: AiClient,
-    private readonly catalog: SongSearcher
+    private readonly catalog: SongSearcher,
+    private readonly cache: CacheStore
   ) {}
 
   public get isAvailable(): boolean {
@@ -50,6 +60,20 @@ export class RecommendationService {
     if (!this.ai.isConfigured) return null;
     if (context.likedSongs.length === 0 && context.recentSongs.length === 0 && !context.currentSong && !(context.favoriteArtists?.length)) return null;
 
+    const key = recommendationCacheKey(context, limit);
+    // Cache the unfiltered shelf; apply per-request excludes on the way out so
+    // the same taste fingerprint stays reusable across slightly different libraries.
+    const cached = await cachedLookup(this.cache, {
+      key,
+      hitTtlSeconds: HIT_TTL_SECONDS,
+      missTtlSeconds: MISS_TTL_SECONDS,
+      load: () => this.loadRecommendations(context, limit)
+    });
+    if (!cached) return null;
+    return filterCachedResult(cached, excludeIds, excludeSongs, limit);
+  }
+
+  private async loadRecommendations(context: TasteContext, limit: number): Promise<RecommendationResult | null> {
     const prompt = describeTaste(context);
     // Gemini 2.5 spends part of maxOutputTokens on hidden "thoughts", so 400
     // routinely truncates the JSON mid-object and the whole recommend path returns null.
@@ -60,12 +84,11 @@ export class RecommendationService {
     const queries = toQueries(parsed?.queries);
     if (queries.length === 0) return null;
 
-    const seen = new Set(excludeIds);
+    const seen = new Set<string>();
     // Overlapping queries ("Arijit Singh top hits" and "Hindi romantic") return
     // the same recording under different release ids, so id alone is not enough
-    // to keep a song off the shelf twice — or to keep one the listener already
-    // has off it at all.
-    const identities = new Set(excludeSongs.map(songIdentity));
+    // to keep a song off the shelf twice.
+    const identities = new Set<string>();
     const songs: UnifiedSong[] = [];
     for (const query of queries) {
       if (songs.length >= limit) break;
@@ -87,8 +110,46 @@ export class RecommendationService {
     if (songs.length === 0) return null;
 
     const reasoning = typeof parsed?.reasoning === 'string' ? parsed.reasoning.trim() : '';
-    return { songs, provider: result.provider, reasoning: reasoning || 'Based on what you’ve been listening to.' };
+    return {
+      songs,
+      provider: result.provider,
+      reasoning: reasoning || 'Based on what you’ve been listening to.'
+    };
   }
+}
+
+/**
+ * Taste-stable key on purpose: now-playing is allowed in the prompt on a miss,
+ * but must not bust the cache on every skip (that is the Bedrock burn path).
+ */
+function recommendationCacheKey(context: TasteContext, limit: number): string {
+  return cacheKey(
+    'ai-recommend',
+    String(limit),
+    summarizeSongs(context.likedSongs, 20),
+    summarizeSongs(context.recentSongs, 20),
+    (context.favoriteArtists ?? []).slice(0, 12).join('|'),
+    (context.favoriteLanguages ?? []).slice(0, 4).join('|')
+  );
+}
+
+function summarizeSongs(songs: ReadonlyArray<{ title: string; artist: string }>, limit: number): string {
+  return songs
+    .slice(0, limit)
+    .map((song) => `${song.title}\u001f${song.artist}`)
+    .join('\u001e');
+}
+
+function filterCachedResult(
+  cached: RecommendationResult,
+  excludeIds: ReadonlySet<string>,
+  excludeSongs: readonly UnifiedSong[],
+  limit: number
+): RecommendationResult | null {
+  const identities = new Set(excludeSongs.map(songIdentity));
+  const songs = cached.songs.filter((song) => !excludeIds.has(song.id) && !identities.has(songIdentity(song))).slice(0, limit);
+  if (songs.length === 0) return null;
+  return { ...cached, songs };
 }
 
 /**

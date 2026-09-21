@@ -52,6 +52,7 @@ Resources:
               PORT: '8080'
               APP_VERSION: !Ref AppVersion
               ALLEGRA_ORIGIN: !Ref AllegraOrigin
+              AWS_REGION: !Ref AWS::Region
               DDB_TABLE_CACHE: !Ref CacheTableName
               DDB_TABLE_USERS: !Ref UsersTableName
               DDB_TABLE_LIBRARIES: !Ref LibrariesTableName
@@ -61,13 +62,14 @@ Resources:
               GAANA_API_URL: !Ref GaanaApiUrlParameterArn
               LRCLIB_API_URL: !Ref LrclibApiUrlParameterArn
       InstanceConfiguration:
-        Cpu: 1 vCPU
-        Memory: 2 GB
+        # Hackathon / low-traffic default. Scale up only if CPU/latency dashboards demand it.
+        Cpu: 0.25 vCPU
+        Memory: 0.5 GB
         InstanceRoleArn: !Ref InstanceRoleArn
       HealthCheckConfiguration:
         Protocol: HTTP
         Path: /api/health
-        Interval: 10
+        Interval: 20
         Timeout: 5
         HealthyThreshold: 1
         UnhealthyThreshold: 5

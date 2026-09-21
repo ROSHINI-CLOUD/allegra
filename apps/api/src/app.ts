@@ -6,6 +6,7 @@ import { pinoHttp } from 'pino-http';
 
 import type { AiConfig, UploadsConfig } from './config.js';
 import { createServices, type AppServices } from './services.js';
+import type { CacheStore } from './lib/cache.js';
 import { createLogger, REDACTED_PATHS } from './lib/logger.js';
 import { aiRouter } from './routes/ai.js';
 import { artworkRouter } from './routes/artwork.js';
@@ -40,11 +41,13 @@ export interface AppOptions {
   readonly convexServerSecret?: string;
   readonly ai?: AiConfig;
   readonly uploads?: UploadsConfig;
+  readonly cacheStore?: CacheStore;
   readonly fetchImpl?: typeof fetch;
   readonly rateLimit?: false | {
     readonly api?: RateLimitConfig;
     readonly stream?: RateLimitConfig;
     readonly auth?: RateLimitConfig;
+    readonly ai?: RateLimitConfig;
   };
   readonly enableRequestLogging?: boolean;
 }
@@ -88,6 +91,7 @@ export function createApp(options: AppOptions): Express {
     ...(options.convexUrl ? { convexUrl: options.convexUrl } : {}),
     ...(options.convexServerSecret ? { convexServerSecret: options.convexServerSecret } : {}),
     ...(options.ai ? { ai: options.ai } : {}),
+    ...(options.cacheStore ? { cacheStore: options.cacheStore } : {}),
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
   });
 
@@ -124,6 +128,8 @@ function createRateLimiter(config: AppOptions['rateLimit']): (request: Request, 
   const api = limiter(limits.api ?? { windowMs: 60_000, limit: 120 });
   const stream = limiter(limits.stream ?? { windowMs: 60_000, limit: 300 });
   const auth = limiter(limits.auth ?? { windowMs: 60_000, limit: 30 });
+  // Bedrock/translate are the spendy paths — keep them well under the general API budget.
+  const ai = limiter(limits.ai ?? { windowMs: 60_000, limit: 20 });
 
   return (request, response, next) => {
     if (request.path === '/api/health') {
@@ -136,6 +142,10 @@ function createRateLimiter(config: AppOptions['rateLimit']): (request: Request, 
     }
     if (request.path.startsWith('/api/auth')) {
       auth(request, response, next);
+      return;
+    }
+    if (request.path.startsWith('/api/ai')) {
+      ai(request, response, next);
       return;
     }
     api(request, response, next);

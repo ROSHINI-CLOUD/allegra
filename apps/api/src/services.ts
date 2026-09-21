@@ -92,6 +92,7 @@ export function buildAiClient(ai: AiConfig | undefined, fetchImpl?: typeof fetch
     providers.push(new BedrockProvider({
       accessKeyId: ai.awsAccessKeyId,
       secretAccessKey: ai.awsSecretAccessKey,
+      ...(ai.awsSessionToken ? { sessionToken: ai.awsSessionToken } : {}),
       region: ai.awsRegion ?? 'us-east-1',
       ...(ai.bedrockModelId ? { modelId: ai.bedrockModelId } : {}),
       ...(fetchImpl ? { fetchImpl } : {})
@@ -104,7 +105,9 @@ export function buildAiClient(ai: AiConfig | undefined, fetchImpl?: typeof fetch
     const primary = ai.primary;
     providers.sort((left, right) => Number(right.name === primary) - Number(left.name === primary));
   }
-  return new AiClient(providers);
+  // With an explicit primary, try that provider plus one fallback — not the whole
+  // paid cascade — so a slow Bedrock miss does not stack Gemini/NVIDIA/Groq bills.
+  return new AiClient(providers, ai?.primary ? { maxAttempts: 2 } : {});
 }
 
 export function createServices(options: ServiceOptions): AppServices {
@@ -137,6 +140,6 @@ export function createServices(options: ServiceOptions): AppServices {
       options.betterLyricsApiUrl ? new BetterLyricsProvider({ baseUrl: options.betterLyricsApiUrl, ...(options.betterLyricsApiKey ? { apiKey: options.betterLyricsApiKey } : {}), ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) }) : undefined),
     auth: new AuthService(userStore, options.jwtSecret),
     translation: new TranslationService(ai, cache),
-    recommendations: new RecommendationService(ai, catalog)
+    recommendations: new RecommendationService(ai, catalog, cache)
   };
 }

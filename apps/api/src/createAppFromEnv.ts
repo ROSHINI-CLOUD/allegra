@@ -2,6 +2,7 @@ import type { Express } from 'express';
 
 import { createApp, type AppOptions } from './app.js';
 import { loadConfig } from './config.js';
+import { createCacheStore } from './db/createCacheStore.js';
 
 /** Shared by the App Runner entrypoint (index.ts) and the Vercel serverless function. */
 export function createAppFromEnv(env: NodeJS.Dict<string>): Express {
@@ -21,6 +22,7 @@ export function createAppFromEnv(env: NodeJS.Dict<string>): Express {
       : {}),
     enableRequestLogging: config.enableRequestLogging,
     ai: config.ai,
+    cacheStore: createCacheStore(config.cache),
     ...(config.uploads ? { uploads: config.uploads } : {}),
     ...(config.allowedOrigin ? { allowedOrigin: config.allowedOrigin } : {}),
     ...(config.additionalOrigins ? { additionalOrigins: config.additionalOrigins } : {})
