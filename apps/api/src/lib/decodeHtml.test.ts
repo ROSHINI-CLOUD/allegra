@@ -14,3 +14,8 @@ test('repairMojibake restores double-encoded quotes and dashes', () => {
   assert.equal(repairMojibake('said, \u00e2\u20ac\u0153hi\u00e2\u20ac\u009d \u00e2\u20ac\u2122s'), 'said, \u201chi\u201d \u2019s');
   assert.equal(repairMojibake('plain text'), 'plain text');
 });
+
+test('repairMojibake re-spaces glued sentences but leaves abbreviations alone', () => {
+  assert.equal(repairMojibake('music director Pritam.Known for his voice'), 'music director Pritam. Known for his voice');
+  assert.equal(repairMojibake('U.S.A. and 3.5 stars'), 'U.S.A. and 3.5 stars');
+});

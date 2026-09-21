@@ -1,10 +1,9 @@
 import crypto from 'node:crypto';
-import jwt from 'jsonwebtoken';
 
-import { ConflictError, InvalidCredentialsError, PersistenceError } from '../lib/errors.js';
+import { PersistenceError } from '../lib/errors.js';
 import type { UserData, UserStore } from '../user/store.js';
 import { mergeTaste } from '../user/taste.js';
-import { hashPassword, verifyPassword } from './password.js';
+import type { GuestTokenVerifier, TokenVerifier, VerifiedCaller } from './verifier.js';
 
 export interface AuthUser {
   readonly userId: string;
@@ -15,97 +14,81 @@ export interface Session {
   readonly userId: string;
 }
 
-export interface Credentials {
-  readonly email: string;
-  readonly password: string;
-}
-
-export interface Registration extends Credentials {
+/** What the identity provider knows about someone, copied onto their profile once. */
+export interface Identity {
+  readonly email?: string;
   readonly displayName?: string;
 }
 
-/** Checked against when the email is unknown, so "no such account" and "wrong password" cost the same. */
-const DUMMY_HASH = 'scrypt$00000000000000000000000000000000$' + '00'.repeat(64);
+/** Seam for reading a signed-in identity. Convex implements it; in-memory setups do not need to. */
+export interface IdentityDirectory {
+  identity(userId: string): Promise<Identity | null>;
+}
 
+export interface AuthServiceOptions {
+  readonly store: UserStore;
+  /** Signs and checks guest tokens. */
+  readonly guest: GuestTokenVerifier;
+  /** Guest tokens plus, when configured, Convex Auth sessions. */
+  readonly verifier: TokenVerifier;
+  readonly directory?: IdentityDirectory;
+}
+
+/**
+ * Who the caller is, and what happens the first time a real account appears.
+ *
+ * Sign-in itself is not here: Convex Auth owns Google and issues the session token.
+ * This service only decides which profile a verified token belongs to.
+ */
 export class AuthService {
-  public constructor(
-    private readonly store: UserStore,
-    private readonly secret: string
-  ) {}
+  private readonly store: UserStore;
+  private readonly guest: GuestTokenVerifier;
+  private readonly verifier: TokenVerifier;
+  private readonly directory: IdentityDirectory | undefined;
+
+  public constructor(options: AuthServiceOptions) {
+    this.store = options.store;
+    this.guest = options.guest;
+    this.verifier = options.verifier;
+    this.directory = options.directory;
+  }
 
   public async createGuest(): Promise<Session> {
     const userId = crypto.randomUUID();
-    const user: UserData = {
-      userId,
-      isGuest: true,
-      createdAt: new Date().toISOString(),
-      libraries: [],
-      likedSongIds: [],
-      recentlyPlayed: [],
-      settings: {}
-    };
-    await this.persist(user);
-    return { token: this.sign(userId), userId };
+    await this.persist(emptyProfile(userId, true));
+    return { token: this.guest.sign(userId), userId };
   }
 
   /**
-   * Turns the caller's guest session into a real account, so nothing they liked or built as a guest is lost.
-   * With no guest session (or one that is already an account) a fresh account is created instead.
+   * Resolves a bearer token to a profile id, creating the profile the first time a
+   * Google account signs in. Returns null when the token is not ours.
    */
-  public async register(guestUserId: string | null, input: Registration): Promise<Session> {
-    const existing = await this.lookupByEmail(input.email);
-    if (existing) throw new ConflictError();
+  public async resolveCaller(token: string): Promise<VerifiedCaller | null> {
+    const caller = await this.verifier.verify(token);
+    if (!caller) return null;
+    if (caller.source === 'guest') return caller;
 
-    const passwordHash = await hashPassword(input.password);
-    const guest = guestUserId ? await this.getUser(guestUserId) : null;
-    const base: UserData = guest?.isGuest
-      ? guest
-      : {
-          userId: crypto.randomUUID(),
-          isGuest: false,
-          createdAt: new Date().toISOString(),
-          libraries: [],
-          likedSongIds: [],
-          recentlyPlayed: [],
-          settings: {}
-        };
-    const displayName = input.displayName?.trim().slice(0, 60);
-    const account: UserData = {
-      ...base,
-      isGuest: false,
-      email: input.email,
-      passwordHash,
-      ...(displayName ? { displayName } : {})
-    };
-    await this.persist(account);
-    return { token: this.sign(account.userId), userId: account.userId };
+    const existing = await this.getUser(caller.userId);
+    if (!existing) {
+      const identity = (await this.directory?.identity(caller.userId).catch(() => null)) ?? null;
+      await this.persist({
+        ...emptyProfile(caller.userId, false),
+        ...(identity?.email ? { email: identity.email } : {}),
+        ...(identity?.displayName ? { displayName: identity.displayName.slice(0, 60) } : {})
+      });
+    }
+    return caller;
   }
 
-  /** Signs in, and folds whatever the visitor did as a guest on this device into the account they signed into. */
-  public async login(guestUserId: string | null, input: Credentials): Promise<Session> {
-    const account = await this.lookupByEmail(input.email);
-    const ok = await verifyPassword(input.password, account?.passwordHash ?? DUMMY_HASH);
-    if (!account || !ok) throw new InvalidCredentialsError();
-
-    if (guestUserId && guestUserId !== account.userId) {
-      const guest = await this.getUser(guestUserId);
-      if (guest?.isGuest && (guest.likedSongIds.length > 0 || guest.libraries.length > 0 || guest.recentlyPlayed.length > 0 || guest.taste)) {
-        await this.persist(mergeGuestInto(account, guest));
-      }
-    }
-    return { token: this.sign(account.userId), userId: account.userId };
-  }
-
-  public verify(token: string): AuthUser | null {
-    try {
-      const payload = jwt.verify(token, this.secret);
-      if (typeof payload === 'string' || typeof payload.sub !== 'string') {
-        return null;
-      }
-      return { userId: payload.sub };
-    } catch {
-      return null;
-    }
+  /**
+   * Folds what this browser did as a guest into the account that just signed in, so
+   * nothing built before signing in is lost. Safe to call twice: merging is a union.
+   */
+  public async linkGuest(guestUserId: string, accountUserId: string): Promise<void> {
+    if (guestUserId === accountUserId) return;
+    const [guest, account] = await Promise.all([this.getUser(guestUserId), this.getUser(accountUserId)]);
+    if (!guest?.isGuest || !account || !hasContent(guest)) return;
+    await this.persist(mergeGuestInto(account, guest));
   }
 
   public async getUser(userId: string): Promise<UserData | null> {
@@ -120,17 +103,9 @@ export class AuthService {
     await this.persist(user);
   }
 
-  /** Storage seams for the routes that need them (sharing looks up other people's playlists). */
+  /** Storage seam for the routes that need it (sharing looks up other people's playlists). */
   public get userStore(): UserStore {
     return this.store;
-  }
-
-  private async lookupByEmail(email: string): Promise<UserData | null> {
-    try {
-      return await this.store.findByEmail(email);
-    } catch {
-      throw new PersistenceError();
-    }
   }
 
   private async persist(user: UserData): Promise<void> {
@@ -140,10 +115,22 @@ export class AuthService {
       throw new PersistenceError();
     }
   }
+}
 
-  private sign(userId: string): string {
-    return jwt.sign({}, this.secret, { subject: userId, expiresIn: '30d' });
-  }
+function emptyProfile(userId: string, isGuest: boolean): UserData {
+  return {
+    userId,
+    isGuest,
+    createdAt: new Date().toISOString(),
+    libraries: [],
+    likedSongIds: [],
+    recentlyPlayed: [],
+    settings: {}
+  };
+}
+
+function hasContent(user: UserData): boolean {
+  return user.likedSongIds.length > 0 || user.libraries.length > 0 || user.recentlyPlayed.length > 0 || Boolean(user.taste);
 }
 
 /** Account data wins on conflicts; the guest's likes, playlists, plays and taste are added underneath it. */

@@ -21,6 +21,7 @@ export function createAppFromEnv(env: NodeJS.Dict<string>): Express {
     ...(config.convexUrl && config.convexServerSecret
       ? { convexUrl: config.convexUrl, convexServerSecret: config.convexServerSecret }
       : {}),
+    ...(config.convexSiteUrl ? { convexSiteUrl: config.convexSiteUrl } : {}),
     enableRequestLogging: config.enableRequestLogging,
     ai: config.ai,
     cacheStore: createCacheStore(config.cache),

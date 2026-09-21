@@ -2129,7 +2129,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .artist-hero-copy h1 .artist-verified--inline { width: 28px; height: 28px; margin-left: 10px; vertical-align: 0.16em; }
 .artist-bio { max-width: 72ch; margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 1.7; }
 .artist-bio-block { display: flex; max-width: 72ch; flex-direction: column; align-items: flex-start; gap: 6px; }
-.artist-bio.is-clamped { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; }
+.artist-bio.is-clamped { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; }
 
 /* ---------- Apple Music player bar ----------
  * Floating frosted capsule: transport left, a track capsule with scrubber in the middle,
@@ -3521,6 +3521,12 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .auth-submit:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .auth-submit:disabled { opacity: 0.55; }
 .auth-hint { margin: -6px 0 0; color: rgba(255, 255, 255, 0.5); font-size: 12px; }
+/* Google requires its mark to keep its own colours, so the button stays light. */
+.auth-google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 50px; margin-top: 4px; padding-inline: 24px; border-radius: 999px; background: #fff; color: #1f1f1f; font-size: 15px; font-weight: 500; white-space: nowrap; transition: transform var(--d-fast) var(--ease-press), box-shadow var(--d-base) var(--ease-standard), filter var(--d-fast) var(--ease-standard); }
+.auth-google:not(:disabled):hover { transform: translateY(-1px); filter: brightness(0.97); }
+.auth-google:not(:disabled):active { transform: translateY(1px) scale(0.985); }
+.auth-google:disabled { opacity: 0.55; }
+.auth-google svg { flex: none; }
 .auth-error { margin: 0; color: #ff8f86; font-size: 13px; }
 .auth-signout { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 8px 0; border: 0; background: none; color: rgba(255, 255, 255, 0.62); font: inherit; font-size: 14px; cursor: pointer; }
 .auth-signout:hover { color: #fff; }
@@ -4406,3 +4412,212 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   .am-now .tactile-icon-control:hover, .am-now .tactile-icon-control:active { transform: none; }
   .am-btn:hover svg, .am-play:hover svg { transform: none; }
 }
+
+/* ---------- Artist "about" sheet ---------- */
+.artist-about {
+  position: fixed;
+  z-index: 70;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(12px, 3vw, 40px);
+  background: rgba(6, 6, 9, 0.5);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+}
+
+.artist-about__sheet {
+  position: relative;
+  display: grid;
+  width: min(940px, 100%);
+  max-height: min(680px, 100%);
+  grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 30px;
+  background:
+    radial-gradient(90% 70% at 8% 0%, color-mix(in oklab, var(--art-primary, #3a3d45) 46%, transparent), transparent 70%),
+    radial-gradient(70% 60% at 100% 100%, color-mix(in oklab, var(--art-secondary, #2c2f36) 36%, transparent), transparent 70%),
+    rgba(18, 19, 24, 0.82);
+  box-shadow: 0 50px 120px -30px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.artist-about__close {
+  position: absolute;
+  z-index: 3;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+  transition: transform var(--d-fast) var(--ease-press), background-color var(--d-fast) var(--ease-standard);
+}
+.artist-about__close:hover { transform: rotate(90deg) scale(1.06); background: rgba(255, 255, 255, 0.22); }
+.artist-about__close:active { transform: scale(0.92); }
+
+.artist-about__side { display: flex; min-width: 0; flex-direction: column; gap: 10px; padding: 34px 26px 30px 34px; overflow-y: auto; scrollbar-width: none; }
+.artist-about__portrait {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  margin: 0 0 8px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 30px 50px -28px rgba(0, 0, 0, 0.8);
+}
+.artist-about__portrait img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 16%; }
+.artist-about__portrait span { font-size: 84px; font-weight: 800; color: rgba(255, 255, 255, 0.8); }
+.artist-about__eyebrow { color: rgba(255, 255, 255, 0.6); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; }
+.artist-about__side h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: clamp(28px, 3.4vw, 40px); font-weight: 800; letter-spacing: -0.04em; line-height: 1; overflow-wrap: anywhere; }
+.artist-about__side h2 svg { flex: 0 0 auto; color: var(--wave, #d9e66a); }
+.artist-about__facts { display: flex; flex-wrap: wrap; gap: 7px; margin: 6px 0 0; padding: 0; list-style: none; }
+.artist-about__facts li { padding: 5px 11px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.88); font-size: 12px; }
+
+.artist-about__story { display: flex; min-width: 0; min-height: 0; flex-direction: column; padding: 34px 40px 0 6px; }
+.artist-about__kicker { margin-bottom: 14px; color: var(--wave, #d9e66a); font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+.artist-about__scroll {
+  min-height: 0;
+  flex: 1;
+  padding: 4px 6px 48px 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 22px, #000 calc(100% - 56px), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 22px, #000 calc(100% - 56px), transparent 100%);
+}
+.artist-about__scroll::-webkit-scrollbar { display: none; }
+.artist-about__scroll p { max-width: 62ch; margin: 0 0 1.15em; color: rgba(255, 255, 255, 0.82); font-size: 16px; line-height: 1.75; }
+.artist-about__scroll p.is-lead { color: #fff; font-size: 19px; line-height: 1.65; }
+.artist-about__scroll p.is-lead::first-letter { float: left; margin: 0.06em 0.12em 0 0; color: var(--wave, #d9e66a); font-size: 3.5em; font-weight: 800; line-height: 0.8; }
+
+@media (max-width: 720px) {
+  .artist-about { place-items: end center; padding: 0; }
+  .artist-about__sheet { max-height: 88vh; grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); border-radius: 28px 28px 0 0; }
+  .artist-about__side { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 22px 60px 8px 22px; overflow: visible; }
+  .artist-about__portrait { width: 84px; flex: 0 0 84px; aspect-ratio: 1; margin: 0; border-radius: 18px; }
+  .artist-about__portrait span { font-size: 40px; }
+  .artist-about__eyebrow { flex-basis: calc(100% - 100px); }
+  .artist-about__side h2 { flex-basis: calc(100% - 100px); font-size: 28px; }
+  .artist-about__facts { flex-basis: 100%; }
+  .artist-about__story { padding: 14px 22px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artist-about__close:hover, .artist-about__close:active { transform: none; }
+}
+
+/* Room for glow and blur: lines never touch the scroller's clip edge, so the active line's halo
+ * and the progressive blur fade out in open space instead of being sliced by overflow-x. */
+.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__scroll { padding-inline: clamp(28px, 4vw, 48px); }
+.ytm-lyrics--nobackdrop.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__edge { right: -32px; left: -32px; }
+.ytm-lyrics--softfocus .ytm-lyrics__line.is-active { text-shadow: 0 0 22px rgba(255, 255, 255, 0.2) !important; }
+
+/* ---------- Big player controls: dark glass card, crisp white, clear grouping ---------- */
+.listening-world .np-controls {
+  align-items: stretch;
+  gap: 14px;
+  width: min(100%, 420px);
+  padding: 18px 22px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(10, 12, 16, 0.44), rgba(10, 12, 16, 0.34));
+  box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  backdrop-filter: blur(26px) saturate(150%);
+}
+
+.listening-world .listening-progress { gap: 8px 12px; }
+.listening-world .listening-progress .progress-range { --track-height: 8px; --thumb-size: 16px; --track-rest: rgba(255, 255, 255, 0.3); --track-done: #fff; }
+.listening-world .listening-progress .progress-time {
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-shadow: none;
+  opacity: 0.95;
+}
+
+/* Transport: skip buttons are bare icons, play is the one solid, bright shape. */
+.listening-world .np-btns { gap: 22px; }
+.listening-world .np-btns .tactile-icon-control {
+  width: 52px;
+  height: 52px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+}
+.listening-world .np-btns .tactile-icon-control:hover { background: rgba(255, 255, 255, 0.16); }
+.listening-world .np-btns .tactile-icon-control svg { width: 24px; height: 24px; filter: none; }
+.listening-world .ctrl-play { width: 68px; height: 68px; background: #fff; color: #0b0c10; box-shadow: 0 14px 30px -10px rgba(0, 0, 0, 0.55); }
+.listening-world .ctrl-play svg { width: 26px; height: 26px; }
+.listening-world .ctrl-play:hover { transform: scale(1.06); }
+
+/* Actions: one quiet pill holding the three secondary controls. */
+.listening-world .np-actions {
+  align-self: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.listening-world .np-actions .tactile-icon-control,
+.listening-world .np-actions button {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+}
+.listening-world .np-actions .tactile-icon-control:hover,
+.listening-world .np-actions button:hover { background: rgba(255, 255, 255, 0.16); }
+.listening-world .np-actions .tactile-icon-control.text-accent-deep { color: var(--wave, #d9e66a); }
+.listening-world .np-actions svg { width: 20px; height: 20px; filter: none; }
+
+.listening-world .np-title .np-link,
+.listening-world .np-title .np-link--title { color: #fff; opacity: 1; }
+
+/* ---------- Big player controls, unwrapped: bare controls, even rhythm ---------- */
+.listening-world .np-controls {
+  gap: 26px;
+  width: min(100%, 420px);
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.listening-world .np-controls { --np-lift: drop-shadow(0 1px 8px rgba(0, 0, 0, 0.32)); }
+.listening-world .listening-progress { gap: 10px 12px; }
+.listening-world .listening-progress .progress-range { --track-rest: rgba(255, 255, 255, 0.4); }
+.listening-world .listening-progress .progress-time { text-shadow: 0 1px 10px rgba(0, 0, 0, 0.4); }
+
+.listening-world .np-btns { justify-content: center; gap: 30px; }
+.listening-world .np-btns svg { filter: var(--np-lift); }
+
+/* The one solid shape: a white disc with a black glyph. */
+.listening-world .ctrl-play svg { color: #0b0c10; filter: none; }
+
+.listening-world .np-actions {
+  align-self: center;
+  gap: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.listening-world .np-actions svg { filter: var(--np-lift); }
+.listening-world .np-actions .tactile-icon-control,
+.listening-world .np-actions button { width: 44px; height: 44px; }

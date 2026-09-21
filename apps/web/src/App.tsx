@@ -18,7 +18,6 @@ import { LyricsPanel } from './components/LyricsPanel';
 import { LibraryPage } from './components/LibraryPage';
 import { DynamicAura } from './components/DynamicAura';
 import { AuthDialog } from './components/AuthDialog';
-import type { AuthMode } from './components/AuthDialog';
 import { CommandPalette } from './components/CommandPalette';
 import { HomePage } from './components/HomePage';
 import { PlayerPanel } from './components/PlayerPanel';
@@ -110,7 +109,6 @@ export default function App() {
   const [sharedLoading, setSharedLoading] = useState(false);
   const [sharedError, setSharedError] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<AuthMode>('signUp');
   const [artistSongs, setArtistSongs] = useState<UnifiedSong[]>([]);
   const [artistProfile, setArtistProfile] = useState<ArtistProfile | null>(null);
   const [artistLoading, setArtistLoading] = useState(false);
@@ -962,7 +960,7 @@ export default function App() {
         <DynamicAura paused={motionPaused} energy={0.55} mood="energy" palette={shaderPalette} light={theme === 'light'} />
       )}
       <a className="skip-link" href="#main-content">Skip to content</a>
-      <AuthDialog open={authOpen} mode={authMode} account={account} onModeChange={setAuthMode} onClose={() => setAuthOpen(false)} />
+      <AuthDialog open={authOpen} account={account} onClose={() => setAuthOpen(false)} />
       <header className="site-header">
           <div className="site-header-top"><Link className="brand" href={paths.home} aria-label="Allegra home"><img className="brand-mark" src="/allegra-logo.png" alt="" /><span className="brand-word">Allegra<i>.</i></span><span className="brand-mono" aria-hidden="true">A<i>.</i></span></Link><button className="icon-button nav-collapse-toggle" type="button" aria-label={navCollapsed ? 'Expand navigation' : 'Collapse navigation'} title={navCollapsed ? 'Expand navigation' : 'Collapse navigation'} onClick={toggleNavigation}>{navCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}</button></div>
           <nav className="desktop-nav" aria-label="Primary navigation">
@@ -975,7 +973,7 @@ export default function App() {
             <Link className="nav-link" href={paths.library} title="Playlists" onClick={(event) => openLibrarySection(event, 'library-playlists')}><ListMusic size={22} strokeWidth={1.5} aria-hidden="true" /><span className="nav-label">Playlists</span></Link>
           </nav>
           <div className="header-actions">
-            <button type="button" className="session-chip" onClick={() => { setAuthMode('signUp'); setAuthOpen(true); }} aria-label={account.profile && !account.profile.isGuest ? 'Open your account' : 'Sign in or create an account'}>
+            <button type="button" className="session-chip" onClick={() => setAuthOpen(true)} aria-label={account.profile && !account.profile.isGuest ? 'Open your account' : 'Sign in or create an account'}>
               <span className="session-avatar" aria-hidden="true">{account.profile && !account.profile.isGuest ? (account.profile.displayName ?? account.profile.email ?? 'A').slice(0, 1).toUpperCase() : 'G'}</span>
               <span className="session-copy">
                 <strong>{account.profile && !account.profile.isGuest ? (account.profile.displayName ?? 'Your account') : 'Guest'}</strong>
@@ -1029,7 +1027,7 @@ export default function App() {
             onOpenArtist={openArtist}
             onCreatePlaylist={(name) => playlists.create(name)}
             onSeedTaste={(artistNames, languageNames) => account.seed(artistNames, languageNames)}
-            onOpenAuth={() => { setAuthMode('signUp'); setAuthOpen(true); }}
+            onOpenAuth={() => setAuthOpen(true)}
           />
         ) : view === 'shared' ? (
           sharedError ? (

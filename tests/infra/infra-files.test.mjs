@@ -41,10 +41,21 @@ test('one lockfile: every workspace installs from the root', async () => {
 
 test('Convex schema and functions exist for the UserStore seam', async () => {
   const schema = await text('convex/schema.ts');
-  assert.match(schema, /users:\s*defineTable/);
-  const users = await text('convex/users.ts');
-  assert.match(users, /export const get = query/);
-  assert.match(users, /export const save = mutation/);
+  // Convex Auth owns `users`; our listener data lives alongside it in `profiles`.
+  assert.match(schema, /\.\.\.authTables/);
+  assert.match(schema, /profiles:\s*defineTable/);
+  const profiles = await text('convex/profiles.ts');
+  assert.match(profiles, /export const get = query/);
+  assert.match(profiles, /export const save = mutation/);
+});
+
+test('Google sign-in is wired through Convex Auth, not this repo', async () => {
+  // A Google secret must never reach our API or the browser bundle: Convex holds it.
+  const auth = await text('convex/auth.ts');
+  assert.match(auth, /convexAuth/);
+  assert.match(auth, /providers:\s*\[Google\]/);
+  const http = await text('convex/http.ts');
+  assert.match(http, /auth\.addHttpRoutes\(http\)/);
 });
 
 test('CI runs the release gates', async () => {

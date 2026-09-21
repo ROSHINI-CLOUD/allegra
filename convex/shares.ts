@@ -1,7 +1,7 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 
-import { requireSecret } from './users';
+import { requireSecret } from './profiles';
 
 export const get = query({
   args: { secret: v.string(), code: v.string() },

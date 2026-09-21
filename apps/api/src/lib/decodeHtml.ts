@@ -37,5 +37,7 @@ const MOJIBAKE: ReadonlyArray<readonly [string, string]> = [
 
 /** Repairs double-encoded quotes and dashes in provider prose (artist bios). */
 export function repairMojibake(value: string): string {
-  return MOJIBAKE.reduce((text, [broken, fixed]) => text.split(broken).join(fixed), value);
+  const repaired = MOJIBAKE.reduce((text, [broken, fixed]) => text.split(broken).join(fixed), value);
+  // Providers also glue sentences together ("Pritam.Known"): restore the space after a full stop.
+  return repaired.replace(/([a-z]{2}[.!?])([A-Z][a-z])/g, '$1 $2');
 }

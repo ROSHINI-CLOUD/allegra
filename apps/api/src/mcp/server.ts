@@ -32,7 +32,7 @@ export function mcpRouter(services: AppServices): Router {
 
   router.post('/mcp', async (request, response) => {
     const token = bearerToken(request.header('authorization'));
-    const verified = token ? services.auth.verify(token) : null;
+    const verified = token ? await services.auth.resolveCaller(token) : null;
     if (!verified) {
       unauthorized(response);
       return;

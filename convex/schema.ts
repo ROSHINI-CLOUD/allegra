@@ -1,3 +1,4 @@
+import { authTables } from '@convex-dev/auth/server';
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 
@@ -30,7 +31,18 @@ const taste = v.object({
 });
 
 export default defineSchema({
-  users: defineTable({
+  // Convex Auth owns `users`, `authAccounts`, `authSessions` and friends. It is the
+  // identity record (who signed in with Google); `profiles` below is what they listen to.
+  ...authTables,
+
+  /**
+   * One row per listener, keyed by `userId`.
+   *
+   * For a signed-in listener that is their Convex Auth user id, so the identity and
+   * the library stay joined without duplicating either. For a guest it is a random
+   * id held only by that browser.
+   */
+  profiles: defineTable({
     userId: v.string(),
     isGuest: v.boolean(),
     createdAt: v.string(),
@@ -40,7 +52,6 @@ export default defineSchema({
     settings: v.any(),
     displayName: v.optional(v.string()),
     email: v.optional(v.string()),
-    passwordHash: v.optional(v.string()),
     taste: v.optional(taste)
   })
     .index('by_userId', ['userId'])

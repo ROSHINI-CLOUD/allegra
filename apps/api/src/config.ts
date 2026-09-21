@@ -21,6 +21,8 @@ export interface AppConfig {
   /** Convex deployment URL. Unset means user data stays in memory. */
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
+  /** Convex site origin, which issues Convex Auth session tokens. Unset disables Google sign-in. */
+  readonly convexSiteUrl?: string;
   readonly enableRequestLogging: boolean;
   readonly ai: AiConfig;
   /** Playlist-cover uploads. Unset disables POST /api/uploads/sign. */
@@ -159,6 +161,10 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     }
   }
 
+  // Convex serves functions from .convex.cloud and HTTP (including auth) from
+  // .convex.site. Deriving it keeps one URL to configure instead of two that must agree.
+  const convexSiteUrl = env.CONVEX_SITE_URL?.trim() || convexUrl?.replace(/\.convex\.cloud$/, '.convex.site');
+
   const uploads = loadUploadsConfig(env, ai);
   const cache = loadCacheConfig(env, ai);
   const karaoke = loadKaraokeConfig(env, ai);
@@ -177,6 +183,7 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     ...(betterLyricsApiKey ? { betterLyricsApiKey } : {}),
     ...(karaoke ? { karaoke } : {}),
     ...(convexUrl && convexServerSecret ? { convexUrl, convexServerSecret } : {}),
+    ...(convexSiteUrl ? { convexSiteUrl } : {}),
     enableRequestLogging: nodeEnv === 'production',
     ai,
     ...(uploads ? { uploads } : {}),

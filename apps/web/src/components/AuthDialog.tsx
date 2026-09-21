@@ -4,37 +4,41 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 
-import { FloatingField } from './ui';
+import { useSignIn } from '../auth/SignInContext';
 import type { AccountApi } from '../hooks/useAccount';
 import { motionTokens, spring } from '../motion';
-
-export type AuthMode = 'signUp' | 'signIn';
+import { FloatingField } from './ui';
 
 interface AuthDialogProps {
   readonly open: boolean;
-  readonly mode: AuthMode;
   readonly account: AccountApi;
-  readonly onModeChange: (mode: AuthMode) => void;
   readonly onClose: () => void;
 }
 
-const MODES: readonly { readonly id: AuthMode; readonly label: string }[] = [
-  { id: 'signUp', label: 'Create account' },
-  { id: 'signIn', label: 'Sign in' }
-];
+/** Google's mark, inlined so the button never waits on a third-party request. */
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true" focusable="false">
+      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z" />
+      <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33Z" />
+      <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z" />
+    </svg>
+  );
+}
 
 /**
- * Sign up / sign in, and once signed in the account panel. Fields use Watermelon's floating-label input.
- * Creating an account converts the current guest session, so nothing already liked or built is lost.
+ * Sign in, and once signed in the account panel.
+ *
+ * Google is the only way in: Convex Auth owns the credentials, so this app never
+ * holds a password. Whatever was liked or built as a guest follows the listener in.
  */
-export function AuthDialog({ open, mode, account, onModeChange, onClose }: AuthDialogProps) {
+export function AuthDialog({ open, account, onClose }: AuthDialogProps) {
   const reduced = useReducedMotion();
+  const signIn = useSignIn();
   const { profile } = account;
   const signedIn = profile !== null && !profile.isGuest;
 
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editingName, setEditingName] = useState('');
@@ -44,11 +48,10 @@ export function AuthDialog({ open, mode, account, onModeChange, onClose }: AuthD
     if (!open) return undefined;
     setError(null);
     setBusy(false);
-    setPassword('');
     setEditingName(profile?.displayName ?? '');
     const timer = window.setTimeout(() => firstField.current?.focus(), 80);
     return () => window.clearTimeout(timer);
-  }, [open, mode, profile?.displayName]);
+  }, [open, profile?.displayName]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -81,19 +84,16 @@ export function AuthDialog({ open, mode, account, onModeChange, onClose }: AuthD
     };
   }, [open]);
 
-  const submit = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
+  const startGoogle = async (): Promise<void> => {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      if (mode === 'signUp') await account.signUp({ email, password, ...(name.trim() ? { displayName: name.trim() } : {}) });
-      else await account.signIn({ email, password });
-      setPassword('');
-      onClose();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Something went wrong. Try again.');
-    } finally {
+      await signIn.signInWithGoogle();
+      // The redirect back from Google re-mounts the app, so there is nothing to
+      // close here on success; only a failure returns to this dialog.
+    } catch {
+      setError('Google sign-in did not complete. Try again.');
       setBusy(false);
     }
   };
@@ -114,7 +114,8 @@ export function AuthDialog({ open, mode, account, onModeChange, onClose }: AuthD
   const leave = async (): Promise<void> => {
     setBusy(true);
     try {
-      await account.signOut();
+      await signIn.signOut();
+      await account.startGuest();
       onClose();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not sign out.');
@@ -134,7 +135,7 @@ export function AuthDialog({ open, mode, account, onModeChange, onClose }: AuthD
             className="glass-sheet auth-sheet"
             role="dialog"
             aria-modal="true"
-            aria-label={signedIn ? 'Your account' : mode === 'signUp' ? 'Create an account' : 'Sign in'}
+            aria-label={signedIn ? 'Your account' : 'Sign in'}
             initial={{ opacity: 0, y: 22, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 14, scale: 0.975 }}
@@ -157,28 +158,31 @@ export function AuthDialog({ open, mode, account, onModeChange, onClose }: AuthD
               </div>
             ) : (
               <div className="auth-body">
-                <div className="auth-tabs" role="tablist" aria-label="Account">
-                  {MODES.map((item) => (
-                    <button key={item.id} type="button" role="tab" aria-selected={mode === item.id} className="auth-tab" onClick={() => onModeChange(item.id)}>
-                      {mode === item.id ? <motion.span layoutId="auth-tab-pill" className="auth-tab-pill" transition={reduced ? { duration: 0 } : spring.tactile} /> : null}
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-                <h2>{mode === 'signUp' ? 'Keep your music' : 'Welcome back'}</h2>
+                <h2>Keep your music</h2>
                 <p className="auth-lede">
-                  {mode === 'signUp'
-                    ? 'Make an account and everything you have liked, every playlist and your taste comes with you, on any device.'
-                    : 'Sign in and whatever you played as a guest on this device joins your library.'}
+                  Sign in and everything you have liked, every playlist and your taste comes with you, on any device.
+                  What you played as a guest on this device joins your library.
                 </p>
-                <form className="auth-form" onSubmit={(event) => void submit(event)}>
-                  {mode === 'signUp' ? <FloatingField ref={firstField} label="Your name" autoComplete="name" value={name} maxLength={60} onChange={(event) => setName(event.target.value)} /> : null}
-                  <FloatingField ref={mode === 'signIn' ? firstField : undefined} label="Email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
-                  <FloatingField label="Password" type="password" autoComplete={mode === 'signUp' ? 'new-password' : 'current-password'} required minLength={mode === 'signUp' ? 8 : 1} value={password} onChange={(event) => setPassword(event.target.value)} />
-                  {mode === 'signUp' ? <p className="auth-hint">At least 8 characters.</p> : null}
-                  {error ? <p className="auth-error" role="alert">{error}</p> : null}
-                  <button type="submit" className="btn-primary tactile-control auth-submit" disabled={busy}>{busy ? 'One moment…' : mode === 'signUp' ? 'Create account' : 'Sign in'}</button>
-                </form>
+                {signIn.available ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn-glass tactile-control auth-google"
+                      onClick={() => void startGoogle()}
+                      disabled={busy || signIn.loading}
+                    >
+                      <GoogleMark />
+                      <span>{busy ? 'Taking you to Google…' : 'Continue with Google'}</span>
+                    </button>
+                    {error ? <p className="auth-error" role="alert">{error}</p> : null}
+                    <p className="auth-hint">You can keep listening as a guest — nothing is lost either way.</p>
+                  </>
+                ) : (
+                  <p className="auth-hint">
+                    Accounts are not switched on for this deployment yet. Everything still works as a guest on
+                    this device.
+                  </p>
+                )}
               </div>
             )}
           </motion.div>

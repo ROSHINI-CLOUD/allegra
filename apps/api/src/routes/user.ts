@@ -337,7 +337,7 @@ export async function learn(catalog: CatalogService, user: UserData, id: string,
 }
 
 async function authenticatedUser(auth: AuthService, request: Parameters<typeof getUserId>[1], response: Parameters<typeof sendUnauthorized>[0]): Promise<UserData | null> {
-  const userId = getUserId(auth, request);
+  const userId = await getUserId(auth, request);
   if (!userId) {
     sendUnauthorized(response);
     return null;
