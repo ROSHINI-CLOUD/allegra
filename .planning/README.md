@@ -33,3 +33,4 @@ All three are preventable by doing the boring thing early.
 - `14-HANDOFF-BACKEND.md` — where the backend stands (Convex, accounts, taste, sharing) and the paste-in prompt for the next AI.
 - `15-BACKEND-REMAINING.md` — ordered task list: AWS hosting + small AWS integrations, Convex production, tests.
 - `16-FULL-PRODUCT-PROMPT.md` — **the prompt to paste**: full-product goal, Allegra vibe, definition of 100 percent, browser self-test loop, exact AWS scope.
+- `23-HANDOFF-KARAOKE.md` — **Sing / AWS Batch karaoke** (replaces Scarleta). Decisions: `docs/karaoke-aws-decisions.md`.

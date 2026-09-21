@@ -775,8 +775,10 @@ Also port: **auto-next** on `ended`, plus a "within 0.35s of duration" fallback 
 ### Lyrics rendering
 The server returns parsed `LyricLine[]`, so `LyricsPanel` just binary-searches for the last line with `timestamp <= currentTime`. Both synced and interpolated-plain lyrics use that **same** path — that's the whole point of the interpolation fallback. Render `[INSTRUMENTAL]` as an icon, not text.
 
-### Karaoke mode — an honest note
-The vocal/instrumental sliders are currently cosmetic, and **real stem separation cannot be done client-side.** It needs Demucs/Spleeter on a GPU, ~10–60s per track, cached as separate files. Options: (a) keep it cosmetic and label it a visual mode, (b) build an offline pre-processing pipeline for a small curated set, (c) cut it from v1. **Recommend (c) for v1, (b) for v2.** Don't ship a slider that does nothing and call it a feature.
+### Karaoke / Sing mode — updated note
+**Client-side stem separation is still impossible.** Allegra now does it **server-side on AWS Batch Spot GPU** (HTDemucs via `audio-separator`), caches `vocals.m4a` + `instrumental.m4a` on S3, and proxies them with Range → 206. The browser mixes with Web Audio GainNodes; sliders never hit the network.
+
+Scarleta was an earlier spike and has been **removed**. Canonical write-up: [`docs/karaoke-aws-decisions.md`](./karaoke-aws-decisions.md). Without Batch env the routes return 503 and the UI hides the control — do not ship a dead slider.
 
 ### Two cleanups before any of this
 - **Scrub the plaintext credentials** in `AppContext.tsx` (`Password@123`) and `Pages.tsx` (`allegra@pass2025`, `guest-session-pass`) — and rotate them if they're real anywhere.
@@ -790,7 +792,9 @@ The vocal/instrumental sliders are currently cosmetic, and **real stem separatio
 Turn Allegra from a mocked UI demo into a working music-streaming web app with real search, real audio playback, real high-res artwork, real time-synced lyrics, and real persistence.
 
 ## Non-goals (v1)
-Licensed/commercial distribution · real payments · real stem separation · offline downloads · social features · native apps.
+Licensed/commercial distribution · real payments · offline downloads · social features · native apps · always-on GPU · SageMaker karaoke.
+
+On-demand Batch Spot Sing is documented in `docs/karaoke-aws-decisions.md` (stretch / AWS-backed).
 
 ## Phases
 

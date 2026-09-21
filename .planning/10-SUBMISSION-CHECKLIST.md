@@ -78,7 +78,7 @@ forwarding the Range header and preserving the upstream status and Content-Range
 
 ## Known limitations
 - Audio proxies through our server; wouldn't scale without a signed-redirect path
-- Karaoke mode is a visual mode — real stem separation needs GPU processing
+- Sing / Karaoke needs AWS Batch + Spot GPU quota + karaoke bucket env; first uncached song can take minutes while capacity scales from zero; stems are cached after that
 - Unofficial community APIs; this is a learning project, not a licensed service
 
 ## Live: <url>    Repo: <url>
@@ -90,7 +90,7 @@ forwarding the Range header and preserving the upstream status and Content-Range
 
 ## 📄 README
 
-A judge must be able to clone and run it. Include: one-line description · screenshot or GIF of the hero transition · live URL · architecture diagram · **setup that actually works from a fresh clone** · `.env.example` · what's real vs demo (karaoke, premium) · the legal note · team + roles · AI tools.
+A judge must be able to clone and run it. Include: one-line description · screenshot or GIF of the hero transition · live URL · architecture diagram · **setup that actually works from a fresh clone** · `.env.example` · what's real vs demo (**Sing** when Batch is configured; Premium UI-only) · point at `docs/karaoke-aws-decisions.md` · the legal note · team + roles · AI tools.
 
 **P4 must personally do a fresh clone and follow their own README.** Every team believes their README works. Most don't.
 

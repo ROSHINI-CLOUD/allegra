@@ -108,5 +108,17 @@ The unglamorous ticket that wins Best UI. For **every** async surface:
 ### F13 · Fonts — 15 min
 Story Script, Jim Nightshade, Great Vibes, Average Sans are referenced in `fontFamily` but **never imported** — the branding is currently falling back to system fonts. Add the Google Fonts link with `display=swap` and `preconnect`, or self-host. Check any custom face is actually licensed for the demo.
 
-## Honest note on karaoke mode
-The vocal/instrumental sliders are cosmetic and **real stem separation cannot happen client-side** — it needs Demucs/Spleeter on a GPU, 10–60 s per track. Either relabel it a **visual mode** or cut it. Do not ship a slider that does nothing and present it as a feature; a judge who moves it and hears no change has learned something bad about the whole project.
+## Sing / Karaoke mode (updated 2026-09-21)
+
+**Client-side stem separation is still impossible** — and we do not pretend otherwise.
+
+Product path now:
+
+1. User presses **Sing** → API claim / poll (Scarleta **removed**).
+2. When `ready`, FE loads **both** `/api/stream/karaoke/:id/vocals` and `.../instrumental`.
+3. `SingStemPlayer` wires two media elements through **Web Audio GainNodes**.
+4. Voice / Instrumental sliders change **gains only** — no network, no regeneration.
+
+If Batch karaoke env is unset, the API returns **503** and the control stays **hidden** (no dead slider).
+
+Handoff: `.planning/23-HANDOFF-KARAOKE.md` · decisions: `docs/karaoke-aws-decisions.md`.

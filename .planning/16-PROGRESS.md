@@ -65,6 +65,9 @@ web on `:5173`, driven in a real Chromium browser at 1440×900 / 1351×918.
   Gates green (111 API + 5 infra). **Not verified against a real bucket** — waiting on `aws configure`
   then bucket + CloudFront + env (`S3_COVERS_BUCKET`, `S3_COVERS_PUBLIC_BASE_URL`).
 - [ ] **25. README "How we used AWS"** — not started.
+- [~] **26. Sing / Karaoke (AWS Batch dual-stem)** — code + CFN + worker on `fe/karaoke-aws`
+  (Scarleta removed). Unit/route tests green; **not deployed / not E2E on GPU**. See
+  `docs/karaoke-aws-decisions.md` and `.planning/23-HANDOFF-KARAOKE.md`.
 
 ---
 

@@ -27,6 +27,20 @@ One entry per person per checkpoint. Two minutes each. Specific beats profound.
 
 ---
 
+## 2026-09-21 — Sing / AWS Batch (team)
+
+**Did:** Replaced Scarleta karaoke with AWS Batch Spot dual-stem Sing on `fe/karaoke-aws`; deleted `fe/karaoke-scarleta`; wrote decisions + deploy docs; updated `.planning` so “visual-only karaoke” is no longer the story.
+
+**Learned:** Keeping `KaraokeService` + the claim/dedupe seam mattered more than swapping HTTP providers — concurrency safety and “generate once” live above Scarleta/Batch. Also: an infra test that bans `@aws-sdk/*` forced an explicit allowlist for Batch+S3 only, instead of silently violating the hand-rolled SigV4 rule elsewhere.
+
+**Stuck on:** Live GPU E2E (quota + CFN deploy) — left as human follow-up; agent session was code+CFN only.
+
+**Would do differently:** Encode job identity in Batch parameters from day one (not only an in-memory map) before the first restart during polling.
+
+Canonical: `docs/karaoke-aws-decisions.md`.
+
+---
+
 > **Good entry:** "Learned that a proxy returning 200 instead of 206 makes an audio element unable to seek at all — the browser needs a byte-range to seek within. Took two hours to find because playback itself looked perfect."
 >
 > **Weak entry:** "Learned a lot about AWS today."

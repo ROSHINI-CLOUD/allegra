@@ -75,7 +75,8 @@ OUT OF SCOPE (do not do these)
 - Amazon SES, Translate, Polly, Personalize, DynamoDB, Cognito, or any other AWS service.
 - Replacing Convex with any other database. Adding email verification or password reset.
 - A redesign. The vibe is fixed (see 16-FULL-PRODUCT-PROMPT.md section 2). Extend it, do not restyle it.
-- Real stem separation / karaoke sliders, payments, a Premium page.
+- Payments / a Premium checkout (Premium UI demo only).
+- Always-on GPU or Scarleta. Sing is AWS Batch Spot dual-stem when configured — see `docs/karaoke-aws-decisions.md` / `.planning/23-HANDOFF-KARAOKE.md`.
 - Changing any existing response shape in docs/api-contract.md (additive only, documented in the same commit).
 - Adding the AWS SDK to the API. (tests/infra forbids it. If you truly must, update that test in the same commit and explain why.)
 - Rewriting working code, renaming files, or "cleaning up" unrelated areas.

@@ -19,6 +19,8 @@
 | R11 | Builder Center verification not done | Low | **Eligibility** | Do it at T+0 | Not verified T+4 → escalate to organisers |
 | R12 | Secrets committed | Low | Public repo | P4 greps pre-submission; SSM not `.env` | Found → rotate **and** purge history |
 | R13 | Scope creep | **High** | Everything | This document | Anything not in `01-GOAL.md` must-ship → no |
+| R14 | **Sing GPU cost / stuck Spot capacity** | Med | Bill surprise or “Preparing…” forever | CFN max 1 GPU; min 0; budget alerts; 503 when unset | Quota 0 → document request; never silent On-Demand upgrade |
+| R15 | First Sing cold-start too slow for demo | Med | Awkward live demo | Pre-warm one demo track before filming; cache hit is instant | Demo only uncached songs → use prepared track |
 
 **R1, R2 and R9 are the three that actually lose hackathons.** They are all preventable by doing the boring thing early.
 
@@ -49,4 +51,9 @@ Append as you go — this is raw material for both the write-up and Technical Un
 
 | T+ | Decision | Why | Who |
 |---|---|---|---|
-| | | | |
+| 2026-09-21 | Replace Scarleta karaoke with **AWS Batch Spot dual-stem Sing**; keep `KaraokeService` + claim/dedupe; delete `fe/karaoke-scarleta`; work on `fe/karaoke-aws` | Apple Music Sing needs vocals+instrumental; Scarleta was instrumental-only and third-party; Spot scales to zero | FE/BE |
+| 2026-09-21 | Stage source audio to private S3 before Batch; worker never fetches Saavn CDN URLs | Fragile temporary CDNs break GPU jobs | BE |
+| 2026-09-21 | Poll Batch + S3 HeadObject for completion (no browser→AWS) | Fits existing poll loop; least new event plumbing | BE |
+| 2026-09-21 | Allowlist only `@aws-sdk/client-batch` + `@aws-sdk/client-s3` in API | Batch/S3 Range GetObject; rest of AWS stays hand-rolled SigV4 | BE/Infra |
+| 2026-09-21 | Agent session = **code + CFN only** (no live GPU deploy) | Quota / account deploy is human | Team |
+| 2026-09-21 | Full decision write-up in `docs/karaoke-aws-decisions.md` | Single source for judges + next agents | Team |

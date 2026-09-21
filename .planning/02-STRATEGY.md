@@ -78,14 +78,15 @@ Ranked by how likely they are to eat the hackathon. P1 and P3 must know these co
 - ★ Bedrock feature: *"Set the mood"* — natural-language → a generated queue, or a one-paragraph context card for the playing track
 - Library persistence beyond guest
 - Web Audio visualizer driven by real frequency data
+- **Sing / Karaoke dual-stem** via AWS Batch Spot GPU (code on `fe/karaoke-aws`; needs human deploy + quota) — decisions in `docs/karaoke-aws-decisions.md`
 
 ### Cut now, deliberately
 | Cut | Why |
 |---|---|
 | **Genius scraping** | Flakiest tier, breaks on any redesign, ToS-grey, and LRCLIB already covers us. |
 | **Email/password auth** | A time sink with near-zero judging value. **Anonymous JWT from first load**, libraries persist against that id. Demonstrates real persistence with no login screen to build, style or debug. |
-| **Real stem separation (karaoke)** | Needs Demucs/Spleeter on a GPU, 10–60 s per track. Impossible here. The sliders stay as a *visual* mode, honestly labelled. Do not ship a control that does nothing and call it a feature. |
 | **Payments** | Premium page stays a UI demo, labelled as one. |
+| **Always-on GPU / SageMaker karaoke** | Rejected. Sing uses **AWS Batch Spot `g4dn.xlarge`** that scales to **zero**. See `docs/karaoke-aws-decisions.md`. |
 | **Offline / PWA / downloads** | Out of scope. |
 
 ## Legal footing — state it once, in the README

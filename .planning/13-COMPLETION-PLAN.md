@@ -27,7 +27,7 @@ The whole diff (3.9k lines of UI work) was uncommitted on `main`.
 2. **Convex cannot replace the API.** The audio proxy needs long-lived HTTP with byte-range streaming; Convex functions are not built for that. API runs on AWS App Runner (source-deploy, no Docker/ECR needed), web on AWS Amplify Hosting.
 3. Convex functions are public URLs, so every function checks a shared secret (`CONVEX_SERVER_SECRET`) held only by the API.
 4. With `CONVEX_URL` unset the API falls back to the in-memory store, so local dev needs no account.
-5. **Cut, per the risk register**: Bedrock "Set the mood" (AWS-only), Karaoke sliders and Premium page (never built; README no longer claims them).
+5. **Premium** stays a UI demo (no payments). **Sing / Karaoke** is no longer a fake slider cut — it is on-demand AWS Batch dual-stem on `fe/karaoke-aws` (see `docs/karaoke-aws-decisions.md`). Still needs human CFN/ECR/quota before production demo.
 
 ## Work list
 
@@ -36,7 +36,7 @@ The whole diff (3.9k lines of UI work) was uncommitted on `main`.
 | 1 | Fix lint error on `main` (unused `origin`) | `npm run lint` exit 0 |
 | 2 | `convex/` schema + functions, secret-guarded | Deployable with `npx convex deploy` |
 | 3 | `ConvexUserStore` behind the `UserStore` seam, unit-tested with a fake client | Tests green, memory fallback kept |
-| 4 | Delete dead DynamoDB code + AWS SDK deps (App Runner/Amplify replace them, not remove AWS) | No `dynamo`/`@aws-sdk` references — done, verified |
+| 4 | Delete dead DynamoDB user-store code; keep hand-rolled SigV4 for covers/cache/Bedrock | Done. **Later exception:** karaoke allowlists `@aws-sdk/client-batch` + `@aws-sdk/client-s3` only (infra test updated) |
 | 5 | Web: recover from a stale/unknown session token (401 → new anon session) | Restarting the API never leaves Library stuck on an error |
 | 6 | Web: Space play/pause, playlists (create, add current song, remove, delete) in Library | Uses existing `/api/libraries` endpoints |
 | 7 | `amplify.yml`, App Runner source-deploy config, CI rewritten, root `npm run dev` | CI covers web build too |

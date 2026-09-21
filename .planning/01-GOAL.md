@@ -57,7 +57,9 @@ Two of four criteria are about **communication**, not code. This is why one of f
 
 ## Explicit non-goals
 
-Licensed/commercial distribution · real payments · real audio stem separation · offline downloads · social features · native apps · an admin panel · full OAuth.
+Licensed/commercial distribution · real payments · offline downloads · social features · native apps · an admin panel · full OAuth · always-on GPU inference · SageMaker/EKS for karaoke.
+
+**Exception (2026-09-21):** on-demand **Sing** dual-stem separation via **AWS Batch Spot GPU** is in scope on branch `fe/karaoke-aws` (not Scarleta). It is lazy, cached once per song+source+model version, and disabled (503) until Batch env is configured. See `docs/karaoke-aws-decisions.md`.
 
 ## The one-sentence pitch
 

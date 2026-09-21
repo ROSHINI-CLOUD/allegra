@@ -4,9 +4,10 @@ Agent-facing guide for the Allegra repo. Human-facing rules are in `CLAUDE.md` �
 
 ## Orientation, in order
 1. `.planning/03-DELIVERY.md` — the schedule and current phase
-2. `docs/api-contract.md` — **frozen**. The FE↔BE seam.
-3. The plan for your area — `.planning/05-` backend, `06-` frontend, `07-` motion, `13-` completion plan (no AWS), `09-` QA
-4. `CLAUDE.md` — the hard rules
+2. `docs/api-contract.md` — **frozen**. The FE↔BE seam. (Karaoke/Sing shape updated 2026-09-21 — dual stems.)
+3. The plan for your area — `.planning/05-` backend, `06-` frontend, `07-` motion, `13-` completion plan, `09-` QA
+4. Sing / Karaoke (AWS Batch): `docs/karaoke-aws-decisions.md` + `.planning/23-HANDOFF-KARAOKE.md` — **do not reintroduce Scarleta**
+5. `CLAUDE.md` — the hard rules
 
 Role briefings: `docs/agent-prompts/{backend,frontend,infra,qa}-agent.md`
 

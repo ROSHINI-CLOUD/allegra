@@ -57,4 +57,4 @@ Run all three before opening a PR. Frontend work also gets checked at 360 / 768 
 `.planning/11-RISK-REGISTER.md` holds the cut list, agreed while we were calm. Anything not on the must-ship list in `.planning/01-GOAL.md` is a no. **Feature freeze at T+26**, bugfix only.
 
 ## What's real vs demo
-Karaoke sliders are a **visual mode** — real stem separation needs GPU processing and is out of scope. The Premium page is a **UI demo**, no payments. Both are labelled as such in the UI and the README. Don't ship a control that does nothing and present it as a feature.
+**Sing / Karaoke** is real **on-demand dual-stem separation** (AWS Batch Spot GPU → S3 → our stream proxy → Web Audio GainNodes) when Batch env is configured; otherwise the API returns 503 and the control stays hidden. Do **not** reintroduce Scarleta. Do **not** run AI when a slider moves. The Premium page is a **UI demo**, no payments. Don't ship a control that does nothing and present it as a feature. Decisions: `docs/karaoke-aws-decisions.md`.

@@ -1,31 +1,42 @@
-# 23 — Karaoke (Scarleta) handoff
+# 23 — Karaoke (AWS Batch) handoff
 
-Branch: `fe/karaoke-scarleta`
+Branch: `fe/karaoke-aws`. Scarleta is gone; nothing in the repo calls it.
 
 ## Architecture
 
-Deep module `KaraokeService` (`status` / `request` / `pipeInstrumental`).
-Provider seam: `KaraokeSeparationProvider` → `ScarletaKaraokeProvider` (+ Fake in tests).
-Asset store: cache-backed (`CacheKaraokeAssetStore`); optional S3 copy when uploads config is present.
+```
+Sing button → POST /api/songs/:id/karaoke → KaraokeService → KaraokeSeparationProvider
+                                                             └─ AwsBatchStemSeparationProvider
+   Batch (Spot g4dn.xlarge, scale to 0) → workers/stem-separator (audio-separator, htdemucs)
+   → private S3: karaoke/{song}/{fingerprint}/{version}/{vocals,instrumental}.m4a + manifest.json
+   → GET /api/stream/karaoke/:id/{vocals,instrumental}  (Range → 206 preserved)
+   → browser Web Audio: two GainNodes, sliders are local-only
+```
 
-Browser never sees Scarleta. Instrumental plays via `/api/stream/karaoke/:songId` (Range → 206 preserved).
+## Why it is stateless
 
-## Enable locally
+The API runs as Vercel functions: they freeze after responding and each instance has its own memory.
+So there is no background polling and no in-process lock. AWS is the source of truth:
 
-1. Get a free key (`sk_free_*`) from Scarleta.
-2. Set in `apps/api/.env`:
-   ```
-   SCARLETA_API_KEY=sk_free_...
-   ```
-3. Restart API. Immersive player shows a pill **Karaoke** control (DESIGN.md chartreuse when on).
-4. Use one song under ~5 minutes (300 free tokens ≈ 5 minutes).
+- **Ready** = `manifest.json` exists (the worker writes it after both stems).
+- **In flight / failed** = `karaoke-state/…json` marker + `DescribeJobs`, reconciled on every status read.
+- **One job per song** = S3 conditional write (`If-None-Match` / `If-Match`) is the cross-instance lock.
+  A claimer that dies before submitting is taken over after 120 s. Proven by the 20-concurrent test.
+- The in-memory cache only remembers *ready* results as a speed-up.
 
-## Contract
+## Failure classes
 
-See `docs/api-contract.md` § Karaoke. Shared DTO: `KaraokePayload` in `packages/shared/types.ts`.
+Worker exit codes → API error codes: 10 `INVALID_AUDIO`, 11 `MODEL_FAILURE`, 12 `UPLOAD_FAILURE`,
+13 `OUTPUT_MISMATCH`; Batch reasons → `SPOT_INTERRUPTION`, `TIMEOUT`, `AWS_CAPACITY`.
+Batch retries only Spot host loss; a job stuck without capacity is cancelled after 30 min. A failed song is retryable
+(POST again takes over the claim atomically).
 
-## Honest limits
+## Legacy data
 
-- Without `SCARLETA_API_KEY`, routes return 503 and the button stays hidden.
-- Saavn CDN URLs may be short-lived; if Scarleta cannot fetch, status becomes `failed` and original audio keeps playing.
-- S3 persist is best-effort when cover-upload AWS config exists; otherwise the stream proxies the provider result URL server-side only.
+No Scarleta-generated assets ever shipped, so there is nothing to migrate. Stem identity includes the separation
+version, so bumping `STEM_SEPARATION_VERSION` regenerates once per song.
+
+## Deploy / test
+
+See `docs/karaoke-aws-deploy.md`. Nothing has been deployed or measured yet: `docs/karaoke-aws-cost-benchmark.md`
+is intentionally all `TBD` until a real run fills it.

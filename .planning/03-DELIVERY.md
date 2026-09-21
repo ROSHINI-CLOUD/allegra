@@ -157,5 +157,9 @@ Cut in this order — decided now, while calm:
 3. `/api/home` → one hardcoded curated playlist ID
 4. Gaana fallback → Saavn only
 5. Lyrics → LRCLIB `/get` only, no `/search`, no interpolation
+6. **Sing / Karaoke Batch deploy** (code can stay; leave env unset → control hidden) — do not burn demo time on GPU quota mid-freeze
 
 **Never cut:** the deployed URL, audio playback + seek, or the motion polish on the *one* screen the video features. Those are the three tracks.
+
+### Addendum 2026-09-21 — Sing on AWS Batch
+Stretch work on `fe/karaoke-aws`: Scarleta removed; dual-stem Sing via Batch Spot GPU. Human still owns CFN/ECR/quota. Full log: `docs/karaoke-aws-decisions.md`.

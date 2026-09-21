@@ -22,8 +22,11 @@
 | Secrets | **SSM Parameter Store** (SecureString) | Free. Secrets Manager costs per secret for no benefit here. |
 | Logs | **CloudWatch** | Log group + one dashboard. Cheap credibility on the architecture score. |
 | AI ★ | **Bedrock** | Stretch. Replaces the unused `@google/genai` placeholder with something on-AWS and judgeable. |
+| Sing / Karaoke ★ | **Batch (Spot GPU) + ECR + S3** | On-demand dual-stem separation; CE scales to **0**. CFN: `infra/aws/karaoke-batch.yaml`. Decisions: `docs/karaoke-aws-decisions.md`. |
 
 **Why not Lambda + API Gateway?** The audio proxy. Byte-range streaming through Lambda means fighting response size limits and streaming invoke modes. At 2 AM that's a night lost. **This is the single best "explain your decision" answer in the whole project — make sure whoever presents can give it.**
+
+**Why not SageMaker / always-on GPU for Sing?** Cost and ops. Batch Spot `g4dn.xlarge` runs only while a job exists; empty queue → zero GPU instances.
 
 ## Runbook
 

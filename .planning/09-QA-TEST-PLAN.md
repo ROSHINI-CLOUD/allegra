@@ -42,6 +42,22 @@ For every endpoint in `docs/api-contract.md`: does the live API return the docum
 | 3-second track | End-of-track / auto-next edge |
 | Zero search results | Empty state copy |
 
+## Sing / Karaoke (when Batch env is live)
+
+See `docs/karaoke-aws-decisions.md`. Automate what you can; the rest is one filmed happy path.
+
+| Check | Expected |
+|---|---|
+| Batch env unset | `GET/POST .../karaoke` → **503**; Sing control **hidden** |
+| First Sing on uncached song | Exactly **one** Batch job; UI stays usable; original keeps playing |
+| Ready | Both stem proxies answer; **Range → 206** on vocals + instrumental |
+| Sliders | Voice / Instrumental change mix **without** new network calls |
+| Second Sing (same song) | **Zero** new Batch jobs (cache hit) |
+| 20× concurrent POST same song | One claim / one job |
+| Spot interrupt mid-job | Not permanently failed on first infra blip (retry/poll) |
+
+Do **not** demo Sing on a cold Spot pool without a pre-warmed track (risk R15).
+
 ## Manual matrix — once per phase
 
 | Surface | Check |

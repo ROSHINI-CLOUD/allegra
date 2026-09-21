@@ -65,7 +65,8 @@ Keyboard: `Space` play/pause, `←` `→` seek 5 s, `⌘/Ctrl K` search, `Esc` c
 |---|---|
 | Catalog, audio, seek, artwork, lyrics | **Real** |
 | Guest sessions, likes, recently played, playlists | **Real**, persisted in Convex when configured |
-| Karaoke sliders, Premium page | **Not built.** Real stem separation needs GPU processing and there are no payments, so we left them out rather than ship controls that do nothing |
+| **Sing / Karaoke** (dual stems) | **Real when AWS Batch + karaoke bucket env are set** — Spot GPU separates vocals + instrumental once, cached on S3, mixed in the browser with GainNodes. Hidden (API 503) when unset. Decisions: [`docs/karaoke-aws-decisions.md`](docs/karaoke-aws-decisions.md) |
+| Premium page | **UI demo only** — no payments |
 | AI "set the mood" | **Not built.** The mood pills run a plain search |
 
 ## A note on the providers
