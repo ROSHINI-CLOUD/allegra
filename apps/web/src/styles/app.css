@@ -4202,3 +4202,207 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   .hero-banner-art { width: 76px; height: 76px; }
   .tile { flex-basis: 132px; }
 }
+
+/* ---------- Lyrics stage: soft edges, instrumental wave, drifting title ---------- */
+
+/* The lines dissolve into a progressive blur at the top and bottom instead of stopping at a
+ * hard edge: a long alpha ramp on the scroller, plus a blur layer whose strength is masked
+ * to ramp the same way. Transform/opacity are the only things that ever animate here. */
+.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) { position: relative; }
+
+/* Words melt away toward the edges on a long eased alpha curve — nothing is ever cut off. */
+.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__scroll {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, rgba(0, 0, 0, 0.04) 4%, rgba(0, 0, 0, 0.16) 9%, rgba(0, 0, 0, 0.4) 15%, rgba(0, 0, 0, 0.72) 22%, #000 32%, #000 66%, rgba(0, 0, 0, 0.72) 76%, rgba(0, 0, 0, 0.4) 84%, rgba(0, 0, 0, 0.16) 91%, rgba(0, 0, 0, 0.04) 96%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, rgba(0, 0, 0, 0.04) 4%, rgba(0, 0, 0, 0.16) 9%, rgba(0, 0, 0, 0.4) 15%, rgba(0, 0, 0, 0.72) 22%, #000 32%, #000 66%, rgba(0, 0, 0, 0.72) 76%, rgba(0, 0, 0, 0.4) 84%, rgba(0, 0, 0, 0.16) 91%, rgba(0, 0, 0, 0.04) 96%, transparent 100%);
+}
+
+/* Progressive blur (stage only): five stacked layers, each a little stronger and each masked to
+ * a soft window, so the blur ramps up smoothly toward the edge with no visible band. */
+.ytm-lyrics__edge { display: none; }
+
+.ytm-lyrics--nobackdrop.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__edge {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  left: 0;
+  display: block;
+  height: 34%;
+  pointer-events: none;
+}
+.ytm-lyrics__edge--top { top: 0; }
+.ytm-lyrics__edge--bottom { bottom: 0; }
+.ytm-lyrics__edge i { position: absolute; inset: 0; }
+
+.ytm-lyrics__edge--top i:nth-child(1) { -webkit-backdrop-filter: blur(0.6px); backdrop-filter: blur(0.6px); -webkit-mask-image: linear-gradient(180deg, transparent 50%, #000 68%, #000 84%, transparent 100%); mask-image: linear-gradient(180deg, transparent 50%, #000 68%, #000 84%, transparent 100%); }
+.ytm-lyrics__edge--top i:nth-child(2) { -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px); -webkit-mask-image: linear-gradient(180deg, transparent 32%, #000 50%, #000 66%, transparent 84%); mask-image: linear-gradient(180deg, transparent 32%, #000 50%, #000 66%, transparent 84%); }
+.ytm-lyrics__edge--top i:nth-child(3) { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); -webkit-mask-image: linear-gradient(180deg, transparent 14%, #000 32%, #000 48%, transparent 66%); mask-image: linear-gradient(180deg, transparent 14%, #000 32%, #000 48%, transparent 66%); }
+.ytm-lyrics__edge--top i:nth-child(4) { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14%, #000 30%, transparent 48%); mask-image: linear-gradient(180deg, transparent 0, #000 14%, #000 30%, transparent 48%); }
+.ytm-lyrics__edge--top i:nth-child(5) { -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); -webkit-mask-image: linear-gradient(180deg, #000 0, #000 10%, transparent 32%); mask-image: linear-gradient(180deg, #000 0, #000 10%, transparent 32%); }
+
+.ytm-lyrics__edge--bottom i:nth-child(1) { -webkit-backdrop-filter: blur(0.6px); backdrop-filter: blur(0.6px); -webkit-mask-image: linear-gradient(0deg, transparent 50%, #000 68%, #000 84%, transparent 100%); mask-image: linear-gradient(0deg, transparent 50%, #000 68%, #000 84%, transparent 100%); }
+.ytm-lyrics__edge--bottom i:nth-child(2) { -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px); -webkit-mask-image: linear-gradient(0deg, transparent 32%, #000 50%, #000 66%, transparent 84%); mask-image: linear-gradient(0deg, transparent 32%, #000 50%, #000 66%, transparent 84%); }
+.ytm-lyrics__edge--bottom i:nth-child(3) { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); -webkit-mask-image: linear-gradient(0deg, transparent 14%, #000 32%, #000 48%, transparent 66%); mask-image: linear-gradient(0deg, transparent 14%, #000 32%, #000 48%, transparent 66%); }
+.ytm-lyrics__edge--bottom i:nth-child(4) { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); -webkit-mask-image: linear-gradient(0deg, transparent 0, #000 14%, #000 30%, transparent 48%); mask-image: linear-gradient(0deg, transparent 0, #000 14%, #000 30%, transparent 48%); }
+.ytm-lyrics__edge--bottom i:nth-child(5) { -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); -webkit-mask-image: linear-gradient(0deg, #000 0, #000 10%, transparent 32%); mask-image: linear-gradient(0deg, #000 0, #000 10%, transparent 32%); }
+
+/* Instrumental break: a live equaliser that plays while the break is the active line. */
+.lyric-wave { display: inline-flex; height: 40px; align-items: center; gap: 6px; }
+.lyric-wave i {
+  display: block;
+  width: 5px;
+  height: 30px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff, rgba(255, 255, 255, 0.55));
+  transform: scaleY(0.22);
+  transform-origin: center;
+}
+.ytm-lyrics__line.is-active .lyric-wave i { animation: lyric-wave 1.15s ease-in-out infinite; }
+.ytm-lyrics__line.is-active .lyric-wave i:nth-child(2) { animation-delay: -0.85s; }
+.ytm-lyrics__line.is-active .lyric-wave i:nth-child(3) { animation-delay: -0.55s; }
+.ytm-lyrics__line.is-active .lyric-wave i:nth-child(4) { animation-delay: -0.3s; }
+.ytm-lyrics__line.is-active .lyric-wave i:nth-child(5) { animation-delay: -0.7s; }
+@keyframes lyric-wave { 0%, 100% { transform: scaleY(0.22); } 45% { transform: scaleY(1); } 70% { transform: scaleY(0.5); } }
+
+/* Track title: one line; when it is longer than the column it drifts right to left, forever. */
+.np-title { overflow: hidden; }
+.np-marquee { display: block; overflow: hidden; white-space: nowrap; }
+.np-marquee__track { display: inline-flex; gap: 48px; }
+.np-marquee__item { flex: 0 0 auto; }
+.np-marquee .np-link--title { white-space: nowrap; }
+.np-marquee.is-scrolling {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
+}
+.np-marquee.is-scrolling .np-marquee__track { animation: np-marquee var(--marquee-duration, 14s) linear infinite; }
+@keyframes np-marquee { from { transform: translateX(0); } to { transform: translateX(calc(var(--marquee-shift, 50%) * -1)); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ytm-lyrics__line.is-active .lyric-wave i { animation: none; transform: scaleY(0.6); }
+  .np-marquee.is-scrolling { -webkit-mask-image: none; mask-image: none; }
+  .np-marquee.is-scrolling .np-marquee__track { animation: none; }
+  .np-marquee { text-overflow: ellipsis; }
+}
+
+/* ---------- Player sheet legibility: title as wide as the cover, everything white ---------- */
+.listening-world .now-playing { min-width: 0; }
+/* Size containment: a long, scrolling title must never widen the column and squeeze the lyrics. */
+.listening-world .np-meta { width: min(100%, 380px); max-width: none; min-width: 0; contain: inline-size; }
+.listening-world .np-title { color: #fff; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.28); }
+.listening-world .np-artist,
+.listening-world .np-artist .np-link,
+.listening-world .np-artist-sep { color: rgba(255, 255, 255, 0.9); text-shadow: 0 1px 14px rgba(0, 0, 0, 0.35); }
+.listening-world .np-artist .np-link:hover { color: #fff; }
+.listening-world .listening-progress .progress-time { color: rgba(255, 255, 255, 0.92); text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35); }
+.listening-world .np-controls svg,
+.listening-world .np-actions svg,
+.listening-world .np-btns svg { color: #fff; filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.35)); }
+.listening-world .np-actions .tactile-icon-control,
+.listening-world .np-btns .tactile-icon-control { color: #fff; border-color: rgba(255, 255, 255, 0.28); background: rgba(255, 255, 255, 0.14); }
+.listening-world .np-actions .tactile-icon-control:hover,
+.listening-world .np-btns .tactile-icon-control:hover { background: rgba(255, 255, 255, 0.24); color: #fff; }
+
+/* Artist with no photo yet: a monogram plate, never a song cover masquerading as a face. */
+.artist-portrait--monogram { display: grid; place-items: center; background: linear-gradient(150deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)); }
+.artist-portrait--monogram span { color: rgba(255, 255, 255, 0.85); font-size: clamp(64px, 9cqw, 104px); font-weight: 800; letter-spacing: -0.04em; }
+.artist-portrait--monogram.is-loading span { animation: portrait-breathe 1.6s ease-in-out infinite; }
+@keyframes portrait-breathe { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .artist-portrait--monogram.is-loading span { animation: none; } }
+
+/* ---------- Player bar: liquid glass + hover micro-interactions ----------
+ * Lighter fill, deeper blur and a specular rim so the artwork behind shows through; every
+ * hover is transform / opacity only (glows are opacity-faded layers, never animated shadows). */
+.mini-player {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0.04) 42%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(26, 28, 34, 0.36);
+  box-shadow:
+    0 34px 80px -28px rgba(0, 0, 0, 0.78),
+    0 10px 24px -14px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.07);
+  -webkit-backdrop-filter: blur(46px) saturate(210%) brightness(1.06);
+  backdrop-filter: blur(46px) saturate(210%) brightness(1.06);
+}
+
+/* A soft specular sheen that brightens as the pointer arrives. */
+.mini-player::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(120% 150% at 10% -40%, rgba(255, 255, 255, 0.24), transparent 56%);
+  opacity: 0.65;
+  pointer-events: none;
+  transition: opacity var(--d-base) var(--ease-standard);
+  content: '';
+}
+.mini-player:hover::before { opacity: 1; }
+
+.am-transport,
+.am-right,
+.am-now {
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+.am-now { transition: background-color var(--d-base) var(--ease-standard); }
+.am-now:hover { background: linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.07)); }
+
+/* Buttons: lift on hover, press in on click, and icons carry their own little gesture. */
+.am-btn,
+.tactile-icon-control {
+  transition: transform var(--d-fast) var(--ease-press), color var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard);
+}
+.am-btn:hover { transform: translateY(-1px) scale(1.08); background: rgba(255, 255, 255, 0.16); }
+.am-btn:active { transform: scale(0.9); background: rgba(255, 255, 255, 0.22); }
+.am-btn svg { transition: transform var(--d-base) var(--ease-press); }
+.am-btn[aria-label="Previous track"]:hover svg { transform: translateX(-2px); }
+.am-btn[aria-label="Next track"]:hover svg { transform: translateX(2px); }
+.am-btn[aria-label^="Shuffle"]:hover svg { transform: rotate(-12deg) scale(1.1); }
+.am-btn[aria-label^="Repeat"]:hover svg { transform: rotate(18deg) scale(1.1); }
+.am-now .tactile-icon-control:hover { transform: scale(1.14); }
+.am-now .tactile-icon-control:active { transform: scale(0.88); }
+
+/* Play: springs up, glows through a faded layer, presses down. */
+.am-play { position: relative; isolation: isolate; transition: transform var(--d-fast) var(--ease-press); }
+.am-play::after {
+  position: absolute;
+  z-index: -1;
+  inset: -10px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--wave) 60%, transparent), transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--d-base) var(--ease-standard);
+  content: '';
+}
+.am-play:hover { transform: scale(1.09); }
+.am-play:hover::after { opacity: 1; }
+.am-play:active { transform: scale(0.92); }
+.am-play svg { transition: transform var(--d-base) var(--ease-press); }
+.am-play:hover svg { transform: scale(1.08); }
+
+/* Cover art: breathes forward on hover so it reads as the way into the player. */
+.am-art { position: relative; transition: transform var(--d-base) var(--ease-press); }
+.am-art:hover { transform: scale(1.07); }
+.am-art:active { transform: scale(0.96); }
+
+/* Scrubbers: the rail thickens and the handle appears under the pointer. */
+.am-range:hover::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; }
+.am-range:hover::-webkit-slider-thumb,
+.am-range:focus-visible::-webkit-slider-thumb { width: 13px; height: 13px; margin-top: -3.5px; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45); }
+.am-range:hover::-moz-range-track { height: 6px; }
+.am-range:hover::-moz-range-thumb,
+.am-range:focus-visible::-moz-range-thumb { width: 13px; height: 13px; background: #fff; }
+
+.am-meta strong,
+.am-meta span { text-shadow: 0 1px 10px rgba(0, 0, 0, 0.3); }
+.am-meta span,
+.am-scrub time { color: rgba(255, 255, 255, 0.78); }
+
+@media (prefers-reduced-motion: reduce) {
+  .am-btn:hover, .am-btn:active, .am-play:hover, .am-play:active, .am-art:hover, .am-art:active,
+  .am-now .tactile-icon-control:hover, .am-now .tactile-icon-control:active { transform: none; }
+  .am-btn:hover svg, .am-play:hover svg { transform: none; }
+}

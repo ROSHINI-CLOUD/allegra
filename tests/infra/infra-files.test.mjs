@@ -8,10 +8,35 @@ async function text(path) {
   return readFile(new URL(path, root), 'utf8');
 }
 
-test('Vercel build config targets the web app and outputs dist', async () => {
-  const vercel = JSON.parse(await text('vercel.json'));
+async function json(path) {
+  return JSON.parse(await text(path));
+}
+
+test('Vercel builds the Next.js app', async () => {
+  const vercel = await json('vercel.json');
+  assert.equal(vercel.framework, 'nextjs');
   assert.match(vercel.buildCommand, /apps\/web/);
-  assert.equal(vercel.outputDirectory, 'apps/web/dist');
+  assert.equal(vercel.outputDirectory, 'apps/web/.next');
+});
+
+test('the /api rewrite still points at the Express function', async () => {
+  // Next's optional catch-all route matches every path, including /api/*. Without
+  // this rewrite the Express function is shadowed and the whole API 404s behind a
+  // page that renders fine — so the failure looks like a frontend bug.
+  const vercel = await json('vercel.json');
+  const apiRewrite = vercel.rewrites?.find((rule) => rule.source.startsWith('/api'));
+  assert.ok(apiRewrite, 'vercel.json must rewrite /api/* to the Express function');
+  assert.equal(apiRewrite.destination, '/api');
+});
+
+test('one lockfile: every workspace installs from the root', async () => {
+  // Vercel resolves function dependencies from the repo root. Per-app lockfiles let
+  // a package exist locally but be missing in production (ERR_MODULE_NOT_FOUND).
+  const pkg = await json('package.json');
+  assert.deepEqual(pkg.workspaces, ['apps/*', 'packages/*']);
+  for (const stale of ['apps/api/package-lock.json', 'apps/web/package-lock.json']) {
+    await assert.rejects(text(stale), 'per-workspace lockfiles must not come back');
+  }
 });
 
 test('Convex schema and functions exist for the UserStore seam', async () => {
@@ -22,26 +47,30 @@ test('Convex schema and functions exist for the UserStore seam', async () => {
   assert.match(users, /export const save = mutation/);
 });
 
-test('the API Dockerfile still builds (App Runner deploys from source, but the image stays CI-checked)', async () => {
-  const dockerfile = await text('apps/api/Dockerfile');
-  assert.match(dockerfile, /EXPOSE 8080/);
-  assert.match(dockerfile, /\/api\/health/);
-});
-
-test('CI runs the release gates, builds the web app and the API image', async () => {
+test('CI runs the release gates', async () => {
   const ci = await text('.github/workflows/ci.yml');
   assert.match(ci, /npm run typecheck/);
   assert.match(ci, /npm run lint/);
   assert.match(ci, /npm test/);
   assert.match(ci, /npm run build/);
-  assert.match(ci, /docker build/);
+  assert.match(ci, /cfn-lint/);
 });
 
 test('API only allows the karaoke Batch/S3 AWS SDK clients', async () => {
   // Karaoke stem separation needs Batch SubmitJob/DescribeJobs and S3 GetObject
   // with Range. Everything else stays hand-rolled SigV4 (covers, Dynamo, Bedrock).
-  const allowed = new Set(['@aws-sdk/client-batch', '@aws-sdk/client-s3']);
-  const pkg = JSON.parse(await text('apps/api/package.json'));
+  const allowed = ['@aws-sdk/client-batch', '@aws-sdk/client-s3'];
+  const pkg = await json('apps/api/package.json');
   const awsDeps = Object.keys(pkg.dependencies).filter((name) => name.startsWith('@aws-sdk'));
-  assert.deepEqual(awsDeps.sort(), [...allowed].sort());
+  assert.deepEqual(awsDeps.sort(), allowed);
+});
+
+test('no provider secrets are reachable from the browser bundle', async () => {
+  // Anything NEXT_PUBLIC_* is inlined into public JavaScript.
+  const env = await text('apps/api/.env.example');
+  const publicKeys = env
+    .split(/\r?\n/)
+    .map((line) => line.match(/^\s*(NEXT_PUBLIC_[A-Z0-9_]+)=/)?.[1])
+    .filter(Boolean);
+  assert.deepEqual(publicKeys, [], 'server .env.example must not define NEXT_PUBLIC_* keys');
 });

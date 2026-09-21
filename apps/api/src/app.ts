@@ -132,7 +132,7 @@ export function createApp(options: AppOptions): Express {
 
 function createRateLimiter(config: AppOptions['rateLimit']): (request: Request, response: Response, next: NextFunction) => void {
   const limits = config === false || config === undefined ? {} : config;
-  const api = limiter(limits.api ?? { windowMs: 60_000, limit: 120 });
+  const api = limiter(limits.api ?? { windowMs: 60_000, limit: 300 });
   const stream = limiter(limits.stream ?? { windowMs: 60_000, limit: 300 });
   const auth = limiter(limits.auth ?? { windowMs: 60_000, limit: 30 });
   // Bedrock/translate are the spendy paths — keep them well under the general API budget.

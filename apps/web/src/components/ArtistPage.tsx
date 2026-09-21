@@ -22,6 +22,8 @@ interface ArtistPageProps {
   readonly name: string;
   /** Provider profile: real photo, followers, verified flag, albums. Null while loading or when unavailable. */
   readonly profile: ArtistProfile | null;
+  /** The artist's photo from the face lookup, used when the full profile did not load. Never a song cover. */
+  readonly photoFallback?: string | null;
   /** This artist's tracks, most popular first. */
   readonly songs: readonly UnifiedSong[];
   readonly related: readonly RelatedArtist[];
@@ -70,6 +72,7 @@ function formatFollowers(count: number): string {
 export function ArtistPage({
   name,
   profile,
+  photoFallback = null,
   songs,
   related,
   loading,
@@ -92,9 +95,9 @@ export function ArtistPage({
   const [stuck, setStuck] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const queue = useMemo(() => [...songs], [songs]);
-  const lead = songs[0] ?? null;
-  const photo = profile?.image ?? null;
-  const heroImage = photo ?? lead?.artwork ?? null;
+  // The portrait is the artist, never a song cover: without a photo it is a monogram.
+  const photo = profile?.image ?? photoFallback;
+  const heroImage = photo;
   const displayName = profile?.name ?? name;
 
   // Once the hero has scrolled off the top, a compact bar (name + play) takes over so the controls stay reachable.
@@ -181,9 +184,11 @@ export function ArtistPage({
         <div className="artist-hero__inner">
           {photo ? (
             <figure className="artist-portrait"><img src={photo} alt="" crossOrigin="anonymous" /></figure>
-          ) : lead ? (
-            <figure className="artist-portrait"><Artwork song={lead} size="large" /></figure>
-          ) : null}
+          ) : (
+            <figure className={`artist-portrait artist-portrait--monogram${loading ? ' is-loading' : ''}`} aria-hidden="true">
+              <span>{displayName.trim().slice(0, 1).toLocaleUpperCase()}</span>
+            </figure>
+          )}
           <div className="artist-hero-copy">
             <span className="artist-hero-eyebrow">{profile?.isVerified ? 'Verified artist' : 'Artist'}</span>
             <h1>

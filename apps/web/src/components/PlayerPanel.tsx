@@ -11,8 +11,8 @@ import {
   Waves
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import type { CSSProperties } from 'react';
-import { useEffect, useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { UnifiedSong } from '@shared/types';
 
@@ -233,18 +233,20 @@ export function PlayerPanel({
                 </motion.div>
                 <div className="np-meta">
                   <h2 id="player-title" className="np-title">
-                    {onOpenAlbum ? (
-                      <button
-                        type="button"
-                        className="np-link np-link--title"
-                        title={song.album ? `Open album ${song.album}` : `Open ${song.title}`}
-                        onClick={() => onOpenAlbum(song)}
-                      >
-                        {song.title}
-                      </button>
-                    ) : (
-                      song.title
-                    )}
+                    <MarqueeText text={song.title}>
+                      {onOpenAlbum ? (
+                        <button
+                          type="button"
+                          className="np-link np-link--title"
+                          title={song.album ? `Open album ${song.album}` : `Open ${song.title}`}
+                          onClick={() => onOpenAlbum(song)}
+                        >
+                          {song.title}
+                        </button>
+                      ) : (
+                        song.title
+                      )}
+                    </MarqueeText>
                   </h2>
                   <p className="np-artist">
                     {onOpenArtist && artists.length > 0
@@ -519,3 +521,43 @@ function Scrubber({
 }
 
 
+
+/** Pixels per second the title drifts at: slow enough to read, fast enough to finish a lap. */
+const MARQUEE_SPEED = 36;
+/** Space between the end of one lap and the start of the next; keep in step with .np-marquee__track gap. */
+const MARQUEE_GAP = 48;
+
+/**
+ * One-line title. When it fits it sits still; when it does not, two copies drift right to
+ * left in a seamless loop (translateX only). Reduced motion falls back to an ellipsis.
+ */
+function MarqueeText({ text, children }: { readonly text: string; readonly children: ReactNode }) {
+  const frameRef = useRef<HTMLSpanElement | null>(null);
+  const measureRef = useRef<HTMLSpanElement | null>(null);
+  const [overflow, setOverflow] = useState<number | null>(null);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    const measure = measureRef.current;
+    if (!frame || !measure) return undefined;
+    const update = (): void => {
+      const width = measure.getBoundingClientRect().width;
+      setOverflow(width > frame.clientWidth + 1 ? width : null);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [text]);
+
+  const style = overflow ? ({ '--marquee-duration': `${Math.max(8, (overflow + MARQUEE_GAP) / MARQUEE_SPEED)}s`, '--marquee-shift': `${overflow + MARQUEE_GAP}px` } as CSSProperties) : undefined;
+
+  return (
+    <span ref={frameRef} className={`np-marquee${overflow ? ' is-scrolling' : ''}`} style={style}>
+      <span className="np-marquee__track">
+        <span ref={measureRef} className="np-marquee__item">{children}</span>
+        {overflow ? <span className="np-marquee__item" aria-hidden="true">{text}</span> : null}
+      </span>
+    </span>
+  );
+}
