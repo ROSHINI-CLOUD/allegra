@@ -1,4 +1,4 @@
-import type { AiConfig, UploadsConfig } from './config.js';
+import type { AiConfig, KaraokeAwsConfig, UploadsConfig } from './config.js';
 import { AiClient } from './ai/aiClient.js';
 import { GeminiProvider } from './ai/providers/gemini.js';
 import { OpenAiCompatibleProvider } from './ai/providers/openaiCompatible.js';
@@ -6,7 +6,8 @@ import { BedrockProvider } from './ai/providers/bedrock.js';
 import { ArtworkService } from './services/artwork.js';
 import { CacheKaraokeAssetStore } from './services/karaoke/asset-store.js';
 import { KaraokeService } from './services/karaoke/karaoke.service.js';
-import { ScarletaKaraokeProvider } from './services/karaoke/providers/scarleta.provider.js';
+import { AwsBatchStemSeparationProvider } from './services/karaoke/providers/aws-batch.provider.js';
+import { DEFAULT_SEPARATION_VERSION } from './services/karaoke/types.js';
 import { LyricsService } from './services/lyrics.js';
 import { RecommendationService } from './services/recommendations.js';
 import { TranslationService } from './services/translation.js';
@@ -33,8 +34,7 @@ export interface ServiceOptions {
   readonly betterLyricsApiUrl?: string;
   /** Optional key: without it only already-cached songs resolve. */
   readonly betterLyricsApiKey?: string;
-  readonly scarletaApiKey?: string;
-  readonly scarletaApiBaseUrl?: string;
+  readonly karaoke?: KaraokeAwsConfig;
   readonly uploads?: UploadsConfig;
   readonly cacheStore?: CacheStore;
   readonly userStore?: UserStore;
@@ -136,10 +136,17 @@ export function createServices(options: ServiceOptions): AppServices {
 
   const ai = buildAiClient(options.ai, options.fetchImpl);
   const stream = new StreamResolver({ saavn, cache, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) });
-  const karaokeProvider = options.scarletaApiKey
-    ? new ScarletaKaraokeProvider({
-        apiKey: options.scarletaApiKey,
-        ...(options.scarletaApiBaseUrl ? { baseUrl: options.scarletaApiBaseUrl } : {}),
+  const karaokeProvider = options.karaoke
+    ? new AwsBatchStemSeparationProvider({
+        region: options.karaoke.region,
+        jobQueue: options.karaoke.jobQueue,
+        jobDefinition: options.karaoke.jobDefinition,
+        bucket: options.karaoke.bucket,
+        separationVersion: options.karaoke.separationVersion,
+        stemModel: options.karaoke.stemModel,
+        ...(options.karaoke.accessKeyId ? { accessKeyId: options.karaoke.accessKeyId } : {}),
+        ...(options.karaoke.secretAccessKey ? { secretAccessKey: options.karaoke.secretAccessKey } : {}),
+        ...(options.karaoke.sessionToken ? { sessionToken: options.karaoke.sessionToken } : {}),
         ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
       })
     : undefined;
@@ -158,10 +165,8 @@ export function createServices(options: ServiceOptions): AppServices {
     recommendations: new RecommendationService(ai, catalog, cache),
     karaoke: new KaraokeService({
       stream,
-      store: new CacheKaraokeAssetStore(cache),
-      ...(karaokeProvider ? { provider: karaokeProvider } : {}),
-      ...(options.uploads ? { uploads: options.uploads } : {}),
-      ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
+      store: new CacheKaraokeAssetStore(cache, options.karaoke?.separationVersion ?? DEFAULT_SEPARATION_VERSION),
+      ...(karaokeProvider ? { provider: karaokeProvider } : {})
     })
   };
 }

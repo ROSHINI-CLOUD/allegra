@@ -112,11 +112,13 @@ Also sets `Cross-Origin-Resource-Policy: cross-origin` (needed for Web Audio).
 **A `206` must never be collapsed to `200` — seeking dies silently.**
 Frontend usage: `<audio src={`${API}/api/stream/${song.id}`} crossOrigin="anonymous" />`
 
-### Karaoke (vocal removal) — additive, stretch 2026-09-21
+### Karaoke / Sing (stem separation) — additive, updated 2026-09-21
 
-On-demand instrumental generation via Scarleta. **Never** call Scarleta from the browser.
-Blank `SCARLETA_API_KEY` → both JSON routes answer `503` with friendly copy; the rest of the API is unaffected.
-Processing is **lazy**: only when the user presses Karaoke. Same song+source fingerprint is generated once and reused.
+Decisions & migration notes: [`docs/karaoke-aws-decisions.md`](./karaoke-aws-decisions.md).
+
+On-demand dual-stem generation via **AWS Batch GPU** (vocals + instrumental). **Never** call AWS or the separator from the browser.
+Unset Batch/karaoke env (`AWS_BATCH_JOB_QUEUE` + `AWS_BATCH_JOB_DEFINITION` + `KARAOKE_S3_BUCKET`) → JSON routes answer `503`; the rest of the API is unaffected.
+Processing is **lazy**: only when the user presses Sing. Same song + source fingerprint + separation version is generated once and reused.
 
 Shared DTO (`packages/shared/types.ts`):
 
@@ -125,20 +127,23 @@ export type KaraokeStatus = 'none' | 'queued' | 'processing' | 'ready' | 'failed
 
 export interface KaraokePayload {
   status: KaraokeStatus;
-  /** Our proxy when ready — NEVER a Scarleta CDN URL. */
-  instrumentalUrl?: string;   // `/api/stream/karaoke/:songId`
+  /** Our proxy when ready — NEVER a raw S3 URL. */
+  instrumentalUrl?: string;   // `/api/stream/karaoke/:songId/instrumental`
+  vocalsUrl?: string;         // `/api/stream/karaoke/:songId/vocals` (Sing mode)
   retryable?: boolean;
-  separationVersion?: string; // e.g. 'scarleta-v1'
+  separationVersion?: string; // e.g. 'aws-batch-htdemucs-v1'
 }
 ```
 
 | Method | Path | Behaviour |
 |---|---|---|
 | `GET` | `/api/songs/:songId/karaoke` | Current cache state. `none` if never requested. |
-| `POST` | `/api/songs/:songId/karaoke` | Claim generation or join in-flight job. Returns `200` when `ready`/`failed`/`none`-after-error; **`202`** while `queued`/`processing`. Server resolves the source audio — the body must **not** include an audio URL. |
-| `GET` | `/api/stream/karaoke/:songId` | Instrumental bytes when `ready`. Same Range → **`206`** rule as `/api/stream/:songId`. `404` if not ready. |
+| `POST` | `/api/songs/:songId/karaoke` | Claim generation or join in-flight job. Returns `200` when `ready`/`failed`; **`202`** while `queued`/`processing`. Server resolves the source audio — the body must **not** include an audio URL. |
+| `GET` | `/api/stream/karaoke/:songId` | Instrumental bytes alias when `ready`. Same Range → **`206`** rule. |
+| `GET` | `/api/stream/karaoke/:songId/instrumental` | Instrumental stem. Range → **`206`**. |
+| `GET` | `/api/stream/karaoke/:songId/vocals` | Vocals stem. Range → **`206`**. |
 
-Frontend: poll `GET` every ~2–3 s while processing; swap `<audio src>` to `instrumentalUrl` at the same `currentTime`; lyrics stay keyed to the song id.
+Frontend: poll `GET` every ~2–3 s while processing; when ready, load **both** stems into Web Audio GainNodes at the same `currentTime`; lyrics stay keyed to the song id. Stem volume sliders are local-only.
 
 ### `POST /api/auth/anon`
 `→ ApiResponse<{ token: string; userId: string }>`

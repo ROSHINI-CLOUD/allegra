@@ -6,7 +6,7 @@ import { createApp } from '../app.js';
 import { MemoryCacheStore } from '../lib/cache.js';
 import { createServices } from '../services.js';
 
-test('karaoke routes answer 503 when Scarleta is not configured', async () => {
+test('karaoke routes answer 503 when AWS Batch karaoke is not configured', async () => {
   const app = createApp({
     version: 'test',
     jwtSecret: 'test-secret-at-least-16',

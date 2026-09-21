@@ -32,7 +32,7 @@ export class StreamResolver {
     this.timeoutMs = options.timeoutMs ?? STREAM_HEADER_TIMEOUT_MS;
   }
 
-  /** Server-only source CDN URL for Scarleta etc. Never send this to the browser. */
+  /** Server-only source CDN URL for stem separation etc. Never send this to the browser. */
   public async resolveSourceUrl(songId: string, force = false): Promise<string> {
     return this.resolve(songId, force);
   }

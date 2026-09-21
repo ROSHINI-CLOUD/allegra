@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import type { KaraokeService } from '../services/karaoke/karaoke.service.js';
+import type { KaraokeService, KaraokeStem } from '../services/karaoke/karaoke.service.js';
 import { sendFailure, sendSuccess, songId } from './common.js';
 
 export function karaokeRouter(karaoke: KaraokeService): Router {
@@ -8,7 +8,7 @@ export function karaokeRouter(karaoke: KaraokeService): Router {
 
   router.get('/songs/:songId/karaoke', async (request, response) => {
     if (!karaoke.isAvailable) {
-      response.status(503).json({ success: false, data: null, error: 'Karaoke is not available right now.' });
+      response.status(503).json({ success: false, data: null, error: 'Sing is not available right now.' });
       return;
     }
     const id = songId(request.params.songId);
@@ -25,7 +25,7 @@ export function karaokeRouter(karaoke: KaraokeService): Router {
 
   router.post('/songs/:songId/karaoke', async (request, response) => {
     if (!karaoke.isAvailable) {
-      response.status(503).json({ success: false, data: null, error: 'Karaoke is not available right now.' });
+      response.status(503).json({ success: false, data: null, error: 'Sing is not available right now.' });
       return;
     }
     const id = songId(request.params.songId);
@@ -48,11 +48,31 @@ export function karaokeRouter(karaoke: KaraokeService): Router {
       return;
     }
     try {
-      await karaoke.pipeInstrumental(id, request.header('range'), response);
+      await karaoke.pipeStem(id, 'instrumental', request.header('range'), response);
+    } catch (error) {
+      sendFailure(response, error);
+    }
+  });
+
+  router.get('/stream/karaoke/:songId/:stem', async (request, response) => {
+    const id = songId(request.params.songId);
+    const stem = parseStem(request.params.stem);
+    if (!id || !stem) {
+      response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
+      return;
+    }
+    try {
+      await karaoke.pipeStem(id, stem, request.header('range'), response);
     } catch (error) {
       sendFailure(response, error);
     }
   });
 
   return router;
+}
+
+function parseStem(value: string | string[] | undefined): KaraokeStem | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw === 'instrumental' || raw === 'vocals') return raw;
+  return null;
 }

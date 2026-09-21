@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 
-import type { AiConfig, UploadsConfig } from './config.js';
+import type { AiConfig, KaraokeAwsConfig, UploadsConfig } from './config.js';
 import { createServices, type AppServices } from './services.js';
 import type { CacheStore } from './lib/cache.js';
 import { createLogger, REDACTED_PATHS } from './lib/logger.js';
@@ -39,8 +39,7 @@ export interface AppOptions {
   readonly lyricaApiUrl?: string;
   readonly betterLyricsApiUrl?: string;
   readonly betterLyricsApiKey?: string;
-  readonly scarletaApiKey?: string;
-  readonly scarletaApiBaseUrl?: string;
+  readonly karaoke?: KaraokeAwsConfig;
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
   readonly ai?: AiConfig;
@@ -92,8 +91,7 @@ export function createApp(options: AppOptions): Express {
     ...(options.lyricaApiUrl ? { lyricaApiUrl: options.lyricaApiUrl } : {}),
     ...(options.betterLyricsApiUrl ? { betterLyricsApiUrl: options.betterLyricsApiUrl } : {}),
     ...(options.betterLyricsApiKey ? { betterLyricsApiKey: options.betterLyricsApiKey } : {}),
-    ...(options.scarletaApiKey ? { scarletaApiKey: options.scarletaApiKey } : {}),
-    ...(options.scarletaApiBaseUrl ? { scarletaApiBaseUrl: options.scarletaApiBaseUrl } : {}),
+    ...(options.karaoke ? { karaoke: options.karaoke } : {}),
     ...(options.uploads ? { uploads: options.uploads } : {}),
     ...(options.convexUrl ? { convexUrl: options.convexUrl } : {}),
     ...(options.convexServerSecret ? { convexServerSecret: options.convexServerSecret } : {}),

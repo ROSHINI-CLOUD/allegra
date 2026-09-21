@@ -1,81 +1,35 @@
 import { cacheKey, type CacheStore } from '../../lib/cache.js';
 import type { KaraokeAssetRecord } from './types.js';
-import { SEPARATION_VERSION } from './types.js';
 
-const TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
-
-export interface KaraokeAssetStore {
-  get(songId: string, fingerprint: string): Promise<KaraokeAssetRecord | null>;
-  /** Latest asset for a song across fingerprints (for stream route). */
-  getLatest(songId: string): Promise<KaraokeAssetRecord | null>;
-  save(record: KaraokeAssetRecord): Promise<void>;
-  /**
-   * Claim generation for a missing asset. Returns the existing record if another
-   * caller already claimed, otherwise the new queued record.
-   */
-  claim(songId: string, fingerprint: string): Promise<{ readonly record: KaraokeAssetRecord; readonly created: boolean }>;
-}
+/** Stems are immutable once ready, so a long TTL is safe. */
+const READY_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 /**
- * Cache-backed karaoke asset store. Deep enough for local + Dynamo layered cache.
- * Swap later for Convex without changing KaraokeService callers.
+ * Read-through cache of *ready* stem records so a warm instance skips the AWS
+ * round trip. It is an optimisation only: the provider (S3 manifest + Batch) is
+ * the source of truth, which is what lets stateless serverless instances agree.
  */
-export class CacheKaraokeAssetStore implements KaraokeAssetStore {
-  private readonly claims = new Map<string, Promise<{ record: KaraokeAssetRecord; created: boolean }>>();
+export interface KaraokeAssetStore {
+  get(songId: string, fingerprint: string): Promise<KaraokeAssetRecord | null>;
+  save(record: KaraokeAssetRecord): Promise<void>;
+}
 
-  public constructor(private readonly cache: CacheStore) {}
+export class CacheKaraokeAssetStore implements KaraokeAssetStore {
+  public constructor(
+    private readonly cache: CacheStore,
+    private readonly separationVersion: string
+  ) {}
 
   public async get(songId: string, fingerprint: string): Promise<KaraokeAssetRecord | null> {
-    return this.cache.get<KaraokeAssetRecord>(assetKey(songId, fingerprint));
-  }
-
-  public async getLatest(songId: string): Promise<KaraokeAssetRecord | null> {
-    const pointer = await this.cache.get<string>(latestKey(songId));
-    if (!pointer) return null;
-    return this.cache.get<KaraokeAssetRecord>(pointer);
+    return this.cache.get<KaraokeAssetRecord>(this.key(songId, fingerprint));
   }
 
   public async save(record: KaraokeAssetRecord): Promise<void> {
-    const key = assetKey(record.songId, record.sourceFingerprint);
-    await this.cache.set(key, record, TTL_SECONDS);
-    await this.cache.set(latestKey(record.songId), key, TTL_SECONDS);
+    if (record.status !== 'ready') return;
+    await this.cache.set(this.key(record.songId, record.sourceFingerprint), record, READY_TTL_SECONDS);
   }
 
-  public async claim(
-    songId: string,
-    fingerprint: string
-  ): Promise<{ readonly record: KaraokeAssetRecord; readonly created: boolean }> {
-    const key = assetKey(songId, fingerprint);
-    const inflight = this.claims.get(key);
-    if (inflight) return inflight;
-
-    const run = (async () => {
-      const existing = await this.get(songId, fingerprint);
-      if (existing && existing.status !== 'failed') {
-        return { record: existing, created: false };
-      }
-      const record: KaraokeAssetRecord = {
-        songId,
-        sourceFingerprint: fingerprint,
-        separationVersion: SEPARATION_VERSION,
-        status: 'queued',
-        updatedAt: new Date().toISOString()
-      };
-      await this.save(record);
-      return { record, created: true };
-    })().finally(() => {
-      this.claims.delete(key);
-    });
-
-    this.claims.set(key, run);
-    return run;
+  private key(songId: string, fingerprint: string): string {
+    return cacheKey('karaoke', 'asset', songId, fingerprint, this.separationVersion);
   }
-}
-
-function assetKey(songId: string, fingerprint: string): string {
-  return cacheKey('karaoke', 'asset', songId, fingerprint, SEPARATION_VERSION);
-}
-
-function latestKey(songId: string): string {
-  return cacheKey('karaoke', 'latest', songId);
 }

@@ -37,7 +37,11 @@ test('CI runs the release gates, builds the web app and the API image', async ()
   assert.match(ci, /docker build/);
 });
 
-test('no AWS SDK code remains in the API', async () => {
+test('API only allows the karaoke Batch/S3 AWS SDK clients', async () => {
+  // Karaoke stem separation needs Batch SubmitJob/DescribeJobs and S3 GetObject
+  // with Range. Everything else stays hand-rolled SigV4 (covers, Dynamo, Bedrock).
+  const allowed = new Set(['@aws-sdk/client-batch', '@aws-sdk/client-s3']);
   const pkg = JSON.parse(await text('apps/api/package.json'));
-  assert.equal(Object.keys(pkg.dependencies).some((name) => name.startsWith('@aws-sdk')), false);
+  const awsDeps = Object.keys(pkg.dependencies).filter((name) => name.startsWith('@aws-sdk'));
+  assert.deepEqual(awsDeps.sort(), [...allowed].sort());
 });

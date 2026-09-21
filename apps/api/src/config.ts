@@ -1,4 +1,5 @@
 import { parseTrustedProviderUrl } from './lib/publicUrl.js';
+import { DEFAULT_SEPARATION_VERSION } from './services/karaoke/types.js';
 
 export interface AppConfig {
   readonly nodeEnv: 'development' | 'test' | 'production';
@@ -15,9 +16,8 @@ export interface AppConfig {
   readonly lyricaApiUrl?: string;
   readonly betterLyricsApiUrl?: string;
   readonly betterLyricsApiKey?: string;
-  /** Scarleta vocal-removal. Unset disables karaoke routes (503). */
-  readonly scarletaApiKey?: string;
-  readonly scarletaApiBaseUrl?: string;
+  /** AWS Batch karaoke. Unset disables karaoke routes (503). */
+  readonly karaoke?: KaraokeAwsConfig;
   /** Convex deployment URL. Unset means user data stays in memory. */
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
@@ -27,6 +27,19 @@ export interface AppConfig {
   readonly uploads?: UploadsConfig;
   /** DynamoDB TTL cache. Unset keeps an in-process memory cache only. */
   readonly cache?: CacheConfig;
+}
+
+/** AWS Batch + S3 stem separation. Creds optional when the host has an IAM role. */
+export interface KaraokeAwsConfig {
+  readonly region: string;
+  readonly jobQueue: string;
+  readonly jobDefinition: string;
+  readonly bucket: string;
+  readonly separationVersion: string;
+  readonly stemModel: string;
+  readonly accessKeyId?: string;
+  readonly secretAccessKey?: string;
+  readonly sessionToken?: string;
 }
 
 /** Hand-rolled DynamoDB cache (no AWS SDK). Instance-role creds work via container URI. */
@@ -115,9 +128,6 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
   const lyricaApiUrl = isOff(env.LYRICA_API_URL) ? undefined : readOptionalProviderUrl(env.LYRICA_API_URL, production, 'LYRICA_API_URL') ?? DEFAULT_LYRICA;
   const betterLyricsApiUrl = isOff(env.BETTERLYRICS_API_URL) ? undefined : readOptionalProviderUrl(env.BETTERLYRICS_API_URL, production, 'BETTERLYRICS_API_URL') ?? DEFAULT_BETTER_LYRICS;
   const betterLyricsApiKey = env.BETTERLYRICS_API_KEY?.trim() || undefined;
-  const scarletaApiKey = env.SCARLETA_API_KEY?.trim() || undefined;
-  const scarletaApiBaseUrl = env.SCARLETA_API_BASE_URL?.trim() || undefined;
-
   const ai: AiConfig = {
     ...(env.GEMINI_API_KEY?.trim() ? { geminiApiKey: env.GEMINI_API_KEY.trim() } : {}),
     ...(env.GEMINI_MODEL?.trim() ? { geminiModel: env.GEMINI_MODEL.trim() } : {}),
@@ -151,6 +161,7 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
 
   const uploads = loadUploadsConfig(env, ai);
   const cache = loadCacheConfig(env, ai);
+  const karaoke = loadKaraokeConfig(env, ai);
 
   const config: AppConfig = {
     nodeEnv,
@@ -164,8 +175,7 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     ...(lyricaApiUrl ? { lyricaApiUrl } : {}),
     ...(betterLyricsApiUrl ? { betterLyricsApiUrl } : {}),
     ...(betterLyricsApiKey ? { betterLyricsApiKey } : {}),
-    ...(scarletaApiKey ? { scarletaApiKey } : {}),
-    ...(scarletaApiBaseUrl ? { scarletaApiBaseUrl } : {}),
+    ...(karaoke ? { karaoke } : {}),
     ...(convexUrl && convexServerSecret ? { convexUrl, convexServerSecret } : {}),
     enableRequestLogging: nodeEnv === 'production',
     ai,
@@ -204,6 +214,41 @@ function loadCacheConfig(env: NodeJS.Dict<string>, ai: AiConfig): CacheConfig | 
     ...(ai.awsAccessKeyId ? { accessKeyId: ai.awsAccessKeyId } : {}),
     ...(ai.awsSecretAccessKey ? { secretAccessKey: ai.awsSecretAccessKey } : {}),
     ...(ai.awsSessionToken ? { sessionToken: ai.awsSessionToken } : {})
+  };
+}
+
+/**
+ * Karaoke needs Batch queue + job definition + stem bucket. Missing any piece
+ * leaves karaoke disabled (503) rather than half-configured.
+ */
+function loadKaraokeConfig(env: NodeJS.Dict<string>, ai: AiConfig): KaraokeAwsConfig | undefined {
+  const jobQueue = env.AWS_BATCH_JOB_QUEUE?.trim();
+  const jobDefinition = env.AWS_BATCH_JOB_DEFINITION?.trim();
+  const bucket = env.KARAOKE_S3_BUCKET?.trim();
+  if (!jobQueue && !jobDefinition && !bucket) return undefined;
+  if (!jobQueue || !jobDefinition || !bucket) {
+    throw new Error(
+      'Karaoke needs AWS_BATCH_JOB_QUEUE, AWS_BATCH_JOB_DEFINITION, and KARAOKE_S3_BUCKET together (or leave all blank to disable).'
+    );
+  }
+  const region = (env.AWS_REGION?.trim() || ai.awsRegion || '').trim();
+  if (!region) {
+    throw new Error('Karaoke needs AWS_REGION.');
+  }
+  // Dedicated keys: the shared AWS_* pair on Vercel is a short-lived Bedrock session token.
+  const accessKeyId = env.KARAOKE_AWS_ACCESS_KEY_ID?.trim() || ai.awsAccessKeyId;
+  const secretAccessKey = env.KARAOKE_AWS_SECRET_ACCESS_KEY?.trim() || ai.awsSecretAccessKey;
+  const sessionToken = env.KARAOKE_AWS_ACCESS_KEY_ID?.trim() ? env.KARAOKE_AWS_SESSION_TOKEN?.trim() : ai.awsSessionToken;
+  return {
+    region,
+    jobQueue,
+    jobDefinition,
+    bucket,
+    separationVersion: env.STEM_SEPARATION_VERSION?.trim() || DEFAULT_SEPARATION_VERSION,
+    stemModel: env.STEM_MODEL?.trim() || 'htdemucs',
+    ...(accessKeyId ? { accessKeyId } : {}),
+    ...(secretAccessKey ? { secretAccessKey } : {}),
+    ...(sessionToken ? { sessionToken } : {})
   };
 }
 
