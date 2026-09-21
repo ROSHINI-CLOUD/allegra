@@ -2,7 +2,7 @@
 
 > A music-streaming web app with a real catalog, real audio, time-synced lyrics, and an interface built to feel like an instrument rather than a list.
 
-**Live (preview):** [allegra on Vercel](https://allegra-bl9bqh6w1-pratzys-projects.vercel.app) · **Ship It target:** AWS Amplify (web) + App Runner (API) — run `bash scripts/aws-ship-it-wizard.sh` · Built for **First Commit** (Bharat Builds Tour · WeMakeDevs × AWS), 17–20 Sept 2026
+**Live (preview):** [allegra-green.vercel.app](https://allegra-green.vercel.app) · **Ship It target:** AWS Amplify (web) + App Runner (API) — run `bash scripts/aws-ship-it-wizard.sh` · Built for **First Commit** (Bharat Builds Tour · WeMakeDevs × AWS), 17–20 Sept 2026
 
 ## What this is
 
