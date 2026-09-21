@@ -3,10 +3,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KaraokePayload, KaraokeStatus, UnifiedSong } from '@shared/types';
 
 import { ApiError, fetchKaraokeStatus, requestKaraoke } from '../lib/api';
+import { clamp } from '../lib/utils';
 
 const POLL_MS = 2_500;
 
 export type KaraokeMode = 'off' | 'on';
+
+export interface KaraokePlayback {
+  readonly enterSingMode: (stems: { vocalsUrl: string; instrumentalUrl: string }) => Promise<void>;
+  readonly exitSingMode: () => Promise<void>;
+  readonly setSingGains: (vocals: number, instrumental: number) => void;
+  readonly swapAudioSource: (streamUrl: string) => Promise<void>;
+}
 
 export interface KaraokeController {
   readonly status: KaraokeStatus;
@@ -15,26 +23,37 @@ export interface KaraokeController {
   readonly busy: boolean;
   readonly error: string | null;
   readonly instrumentalUrl: string | null;
+  readonly vocalsUrl: string | null;
+  /** 0–1 local GainNode level — never hits the network. */
+  readonly vocalsLevel: number;
+  /** 0–1 local GainNode level — never hits the network. */
+  readonly instrumentalLevel: number;
+  readonly setVocalsLevel: (value: number) => void;
+  readonly setInstrumentalLevel: (value: number) => void;
   readonly toggle: () => Promise<void>;
   readonly clearError: () => void;
 }
 
 /**
- * Player-facing karaoke controller. Talks only to our API; never Scarleta.
- * Swapping audio is injected so the playback invariants stay in useAudioPlayer.
+ * Player-facing Sing / Karaoke controller. Talks only to our API.
+ * Dual-stem mixing stays in the audio player via Web Audio gains.
  */
-export function useKaraoke(
-  song: UnifiedSong | null,
-  swapAudioSource: (streamUrl: string) => Promise<void>
-): KaraokeController {
+export function useKaraoke(song: UnifiedSong | null, playback: KaraokePlayback): KaraokeController {
   const [status, setStatus] = useState<KaraokeStatus>('none');
   const [mode, setMode] = useState<KaraokeMode>('off');
   const [available, setAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [instrumentalUrl, setInstrumentalUrl] = useState<string | null>(null);
+  const [vocalsUrl, setVocalsUrl] = useState<string | null>(null);
+  const [vocalsLevel, setVocalsLevelState] = useState(0.4);
+  const [instrumentalLevel, setInstrumentalLevelState] = useState(1);
   const songIdRef = useRef<string | null>(null);
   const pollRef = useRef<number | null>(null);
+  /** Set only when the listener tapped Sing; a resumed poll after reload must not yank them into it. */
+  const wantSingRef = useRef(false);
+  const vocalsLevelRef = useRef(0.4);
+  const instrumentalLevelRef = useRef(1);
 
   const stopPolling = useCallback((): void => {
     if (pollRef.current !== null) {
@@ -46,12 +65,29 @@ export function useKaraoke(
   const applyPayload = useCallback((payload: KaraokePayload): void => {
     setStatus(payload.status);
     setInstrumentalUrl(payload.instrumentalUrl ?? null);
+    setVocalsUrl(payload.vocalsUrl ?? null);
     if (payload.status === 'failed') {
-      setError("Couldn't prepare Karaoke. Try again.");
+      setError("Couldn't prepare Sing. Try again.");
       setBusy(false);
       stopPolling();
     }
   }, [stopPolling]);
+
+  const activateReady = useCallback(async (payload: KaraokePayload): Promise<void> => {
+    if (payload.status !== 'ready' || !payload.instrumentalUrl) return;
+    setBusy(false);
+    setMode('on');
+    if (payload.vocalsUrl) {
+      await playback.enterSingMode({
+        vocalsUrl: payload.vocalsUrl,
+        instrumentalUrl: payload.instrumentalUrl
+      });
+      playback.setSingGains(vocalsLevelRef.current, instrumentalLevelRef.current);
+      return;
+    }
+    // Legacy instrumental-only cache (pre dual-stem).
+    await playback.swapAudioSource(payload.instrumentalUrl);
+  }, [playback]);
 
   const startPolling = useCallback((songId: string): void => {
     stopPolling();
@@ -63,9 +99,8 @@ export function useKaraoke(
           applyPayload(payload);
           if (payload.status === 'ready' && payload.instrumentalUrl) {
             stopPolling();
-            setBusy(false);
-            setMode('on');
-            await swapAudioSource(payload.instrumentalUrl);
+            if (wantSingRef.current) await activateReady(payload);
+            else setBusy(false);
           }
         } catch (err) {
           if (songIdRef.current !== songId) return;
@@ -73,20 +108,22 @@ export function useKaraoke(
             setAvailable(false);
             setBusy(false);
             stopPolling();
-            setError('Karaoke is not available right now.');
+            setError('Sing is not available right now.');
           }
         }
       })();
     }, POLL_MS);
-  }, [applyPayload, stopPolling, swapAudioSource]);
+  }, [activateReady, applyPayload, stopPolling]);
 
   useEffect(() => {
     songIdRef.current = song?.id ?? null;
+    wantSingRef.current = false;
     setStatus('none');
     setMode('off');
     setBusy(false);
     setError(null);
     setInstrumentalUrl(null);
+    setVocalsUrl(null);
     stopPolling();
     if (!song) return undefined;
 
@@ -115,6 +152,20 @@ export function useKaraoke(
     };
   }, [song?.id, applyPayload, startPolling, stopPolling]);
 
+  const setVocalsLevel = useCallback((value: number): void => {
+    const next = clamp(value, 0, 1);
+    vocalsLevelRef.current = next;
+    setVocalsLevelState(next);
+    playback.setSingGains(next, instrumentalLevelRef.current);
+  }, [playback]);
+
+  const setInstrumentalLevel = useCallback((value: number): void => {
+    const next = clamp(value, 0, 1);
+    instrumentalLevelRef.current = next;
+    setInstrumentalLevelState(next);
+    playback.setSingGains(vocalsLevelRef.current, next);
+  }, [playback]);
+
   const toggle = useCallback(async (): Promise<void> => {
     const current = song;
     if (!current || !available || busy) return;
@@ -122,17 +173,22 @@ export function useKaraoke(
     if (mode === 'on') {
       setMode('off');
       setError(null);
-      await swapAudioSource(current.streamUrl);
+      if (vocalsUrl) await playback.exitSingMode();
+      else await playback.swapAudioSource(current.streamUrl);
       return;
     }
 
     if (status === 'ready' && instrumentalUrl) {
-      setMode('on');
       setError(null);
-      await swapAudioSource(instrumentalUrl);
+      await activateReady({
+        status: 'ready',
+        instrumentalUrl,
+        ...(vocalsUrl ? { vocalsUrl } : {})
+      });
       return;
     }
 
+    wantSingRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -140,9 +196,7 @@ export function useKaraoke(
       if (songIdRef.current !== current.id) return;
       applyPayload(payload);
       if (payload.status === 'ready' && payload.instrumentalUrl) {
-        setBusy(false);
-        setMode('on');
-        await swapAudioSource(payload.instrumentalUrl);
+        await activateReady(payload);
         return;
       }
       if (payload.status === 'queued' || payload.status === 'processing') {
@@ -154,12 +208,24 @@ export function useKaraoke(
       setBusy(false);
       if (err instanceof ApiError && err.status === 503) {
         setAvailable(false);
-        setError('Karaoke is not available right now.');
+        setError('Sing is not available right now.');
         return;
       }
-      setError("Couldn't prepare Karaoke. Try again.");
+      setError("Couldn't prepare Sing. Try again.");
     }
-  }, [available, applyPayload, busy, instrumentalUrl, mode, song, startPolling, status, swapAudioSource]);
+  }, [
+    activateReady,
+    applyPayload,
+    available,
+    busy,
+    instrumentalUrl,
+    mode,
+    playback,
+    song,
+    startPolling,
+    status,
+    vocalsUrl
+  ]);
 
   return {
     status,
@@ -168,6 +234,11 @@ export function useKaraoke(
     busy,
     error,
     instrumentalUrl,
+    vocalsUrl,
+    vocalsLevel,
+    instrumentalLevel,
+    setVocalsLevel,
+    setInstrumentalLevel,
     toggle,
     clearError: () => setError(null)
   };

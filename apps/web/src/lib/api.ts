@@ -134,7 +134,7 @@ export async function fetchLyrics(song: UnifiedSong, signal?: AbortSignal): Prom
   );
 }
 
-/** Current karaoke cache state. Throws ApiError 503 when Scarleta is not configured. */
+/** Current karaoke / Sing cache state. Throws ApiError 503 when Batch karaoke is not configured. */
 export async function fetchKaraokeStatus(songId: string, signal?: AbortSignal): Promise<KaraokePayload> {
   return request(`/api/songs/${encodeURIComponent(songId)}/karaoke`, { signal });
 }

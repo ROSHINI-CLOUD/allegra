@@ -173,7 +173,12 @@ export default function App() {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const lyricsGeneration = useRef(0);
   const audio = useAudioPlayer();
-  const karaoke = useKaraoke(audio.currentSong, audio.swapAudioSource);
+  const karaoke = useKaraoke(audio.currentSong, {
+    enterSingMode: audio.enterSingMode,
+    exitSingMode: audio.exitSingMode,
+    setSingGains: audio.setSingGains,
+    swapAudioSource: audio.swapAudioSource
+  });
   const hasSongLoaded = audio.currentSong !== null;
   const playlists = usePlaylists();
   const transportRef = useRef(audio);

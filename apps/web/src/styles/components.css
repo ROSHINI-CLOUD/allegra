@@ -1660,6 +1660,32 @@ body::before { display: none; }
   max-width: 16rem;
 }
 
+.np-karaoke-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(100%, 16rem);
+}
+
+.np-karaoke-slider {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr 2.25rem;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+}
+
+.np-karaoke-slider input[type='range'] {
+  width: 100%;
+  accent-color: var(--wave, #7c6cff);
+}
+
+.np-karaoke-pct {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .player-sidepanel {
   display: flex;
   flex-direction: column;

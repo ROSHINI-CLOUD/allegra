@@ -301,14 +301,49 @@ export function PlayerPanel({
                           void karaoke.toggle();
                         }}
                       >
-                        {karaoke.busy ? 'Preparing Karaoke…' : karaoke.mode === 'on' ? 'Karaoke on' : 'Karaoke'}
+                        {karaoke.busy
+                          ? 'Preparing Sing…'
+                          : karaoke.mode === 'on'
+                            ? 'Sing on'
+                            : 'Sing'}
                       </TactileButton>
                       {karaoke.error ? (
                         <p className="np-karaoke-error" role="alert">
                           {karaoke.error}
                         </p>
                       ) : null}
-                      {karaoke.mode === 'on' && !karaoke.busy ? (
+                      {karaoke.busy ? (
+                        <p className="np-karaoke-hint">Separating vocals and instruments…</p>
+                      ) : null}
+                      {karaoke.mode === 'on' && !karaoke.busy && karaoke.vocalsUrl ? (
+                        <div className="np-karaoke-sliders">
+                          <label className="np-karaoke-slider">
+                            <span>Voice</span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={Math.round(karaoke.vocalsLevel * 100)}
+                              aria-valuetext={`${Math.round(karaoke.vocalsLevel * 100)}%`}
+                              onChange={(event) => karaoke.setVocalsLevel(Number(event.target.value) / 100)}
+                            />
+                            <span className="np-karaoke-pct">{Math.round(karaoke.vocalsLevel * 100)}%</span>
+                          </label>
+                          <label className="np-karaoke-slider">
+                            <span>Instrumental</span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={Math.round(karaoke.instrumentalLevel * 100)}
+                              aria-valuetext={`${Math.round(karaoke.instrumentalLevel * 100)}%`}
+                              onChange={(event) => karaoke.setInstrumentalLevel(Number(event.target.value) / 100)}
+                            />
+                            <span className="np-karaoke-pct">{Math.round(karaoke.instrumentalLevel * 100)}%</span>
+                          </label>
+                        </div>
+                      ) : null}
+                      {karaoke.mode === 'on' && !karaoke.busy && !karaoke.vocalsUrl ? (
                         <p className="np-karaoke-hint">Instrumental playing — sing along with the lyrics.</p>
                       ) : null}
                     </div>
