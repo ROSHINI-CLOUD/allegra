@@ -21,8 +21,13 @@ export interface AccountApi {
  * taste profile the server learns from their behaviour, which is what makes Home theirs.
  *
  * `onSessionChange` fires after any change of who is signed in, so the rest of the app can reload likes and playlists.
+ *
+ * `signedIn` is Convex Auth's own view of whether this browser has a Google session. Convex resolves that
+ * asynchronously (a redirect round trip, then a token), well after this hook's first mount, so the profile
+ * fetched on mount is only ever the guest one. Refreshing again whenever `signedIn` flips is what turns that
+ * guest profile into the real account — without it the navbar and onboarding never learn sign-in happened.
  */
-export function useAccount(onSessionChange: () => void): AccountApi {
+export function useAccount(signedIn: boolean, onSessionChange: () => void): AccountApi {
   const [profile, setProfile] = useState<AccountProfile | null>(null);
   const [taste, setTaste] = useState<TasteSummary | null>(null);
   const [ready, setReady] = useState(false);
@@ -45,6 +50,13 @@ export function useAccount(onSessionChange: () => void): AccountApi {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const wasSignedIn = useRef(signedIn);
+  useEffect(() => {
+    if (wasSignedIn.current === signedIn) return;
+    wasSignedIn.current = signedIn;
+    void refresh().then(() => changed.current());
+  }, [signedIn, refresh]);
 
   const afterSessionChange = useCallback(async (): Promise<void> => {
     await refresh();

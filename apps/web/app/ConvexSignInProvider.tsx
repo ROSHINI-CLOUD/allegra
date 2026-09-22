@@ -34,10 +34,11 @@ function SignInBridge({ children }: { readonly children: ReactNode }) {
   const [linked, setLinked] = useState(false);
 
   // Every API call carries the Convex token once signed in, so the server sees the
-  // account rather than the guest this browser started as.
-  useEffect(() => {
-    setAccountToken(token ?? null);
-  }, [token]);
+  // account rather than the guest this browser started as. Set during render, not in
+  // an effect: accountToken is a plain module variable a child's effect (useAccount's
+  // sign-in-triggered refresh) can run before a parent's effect does, so an effect
+  // here would race that refresh and still hand it the stale guest token.
+  setAccountToken(token ?? null);
 
   // Right after the first sign-in, hand the old guest token over once so the likes
   // and playlists made before signing in follow the listener into their account.

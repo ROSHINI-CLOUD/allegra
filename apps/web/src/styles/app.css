@@ -3663,14 +3663,15 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .auth-submit:not(:disabled):hover { transform: translateY(-1px); }
 .auth-submit:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .auth-submit:disabled { opacity: 0.55; }
-.auth-hint { margin: -6px 0 0; color: rgba(255, 255, 255, 0.5); font-size: 12px; }
+.auth-hint { margin: 8px 0 0; color: rgba(255, 255, 255, 0.5); font-size: 12px; }
+.auth-form .auth-hint { margin-top: -6px; }
 /* Google requires its mark to keep its own colours, so the button stays light. */
-.auth-google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 50px; margin-top: 4px; padding-inline: 24px; border-radius: 999px; background: #fff; color: #1f1f1f; font-size: 15px; font-weight: 500; white-space: nowrap; transition: transform var(--d-fast) var(--ease-press), box-shadow var(--d-base) var(--ease-standard), filter var(--d-fast) var(--ease-standard); }
+.auth-google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 50px; margin: 4px 0 16px; padding-inline: 24px; border-radius: 999px; background: #fff; color: #1f1f1f; font-size: 15px; font-weight: 500; white-space: nowrap; transition: transform var(--d-fast) var(--ease-press), box-shadow var(--d-base) var(--ease-standard), filter var(--d-fast) var(--ease-standard); }
 .auth-google:not(:disabled):hover { transform: translateY(-1px); filter: brightness(0.97); }
 .auth-google:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .auth-google:disabled { opacity: 0.55; }
 .auth-google svg { flex: none; }
-.auth-error { margin: 0; color: #ff8f86; font-size: 13px; }
+.auth-error { margin: 0 0 12px; color: #ff8f86; font-size: 13px; }
 .auth-signout { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 8px 0; border: 0; background: none; color: rgba(255, 255, 255, 0.62); font: inherit; font-size: 14px; cursor: pointer; }
 .auth-signout:hover { color: #fff; }
 .auth-avatar { display: grid; width: 60px; height: 60px; place-items: center; border-radius: 50%; background: linear-gradient(135deg, var(--wave), #7fb0ff); color: var(--wave-ink); font-size: 24px; font-weight: 700; }

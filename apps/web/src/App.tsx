@@ -18,6 +18,7 @@ import { LyricsPanel } from './components/LyricsPanel';
 import { LibraryPage } from './components/LibraryPage';
 import { DynamicAura } from './components/DynamicAura';
 import { AuthDialog } from './components/AuthDialog';
+import { useSignIn } from './auth/SignInContext';
 import { CommandPalette } from './components/CommandPalette';
 import { HomePage } from './components/HomePage';
 import { PlayerPanel } from './components/PlayerPanel';
@@ -365,7 +366,8 @@ export default function App() {
   }, [loadPersonalSpace]);
 
   // Who is listening (guest or account) and what we have learned about their taste. Signing in or out reloads everything personal.
-  const account = useAccount(() => {
+  const signIn = useSignIn();
+  const account = useAccount(signIn.signedIn, () => {
     void loadPersonalSpace();
   });
   useListenTracker(audio.currentSong ?? null, audio.currentTime, account.refresh);
