@@ -379,7 +379,6 @@ export function PlayerPanel({
                           {karaoke.error}
                         </p>
                       ) : null}
-
                   {song ? (
                     <div className="np-live-karaoke">
                       <TactileButton
@@ -405,6 +404,7 @@ export function PlayerPanel({
                           {liveKaraoke.error}
                         </p>
                       ) : null}
+
                       {liveKaraoke?.monoWarning && liveKaraoke.active ? (
                         <p className="np-live-karaoke-hint">
                           This track is mono — vocal removal may be weak. Prefer stereo or Sing.
@@ -465,6 +465,18 @@ export function PlayerPanel({
                       hideBackdrop
                       softFocus
                       artworkUrl={lyrics.artworkUrl ?? song.artwork}
+                      karaokeActive={liveKaraoke?.active ?? false}
+                      karaokeBusy={liveKaraoke?.busy ?? false}
+                      karaokeDisabled={karaoke?.mode === 'on'}
+                      karaokeError={liveKaraoke?.error ?? null}
+                      onToggleKaraoke={
+                        song
+                          ? () => {
+                              tapHaptic(10);
+                              void liveKaraoke?.toggle();
+                            }
+                          : undefined
+                      }
                     />
                   </>
                 ) : null}

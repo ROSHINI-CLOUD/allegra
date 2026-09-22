@@ -1,4 +1,4 @@
-import { Languages, LoaderCircle, RefreshCw } from 'lucide-react';
+import { Languages, LoaderCircle, Mic, RefreshCw } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
 import {
   memo,
@@ -37,6 +37,11 @@ interface LyricsPanelProps {
   /** Soft-focus stage: active line stays near the optical center (default true). */
   readonly softFocus?: boolean;
   readonly karaokeProgress?: boolean;
+  readonly karaokeActive?: boolean;
+  readonly karaokeBusy?: boolean;
+  readonly karaokeDisabled?: boolean;
+  readonly karaokeError?: string | null;
+  readonly onToggleKaraoke?: () => void;
 }
 
 const FOLLOW_RESUME_MS = 2200;
@@ -67,7 +72,12 @@ export function LyricsPanel({
   onToggleTranslate,
   hideBackdrop = false,
   softFocus = true,
-  karaokeProgress = false
+  karaokeProgress = false,
+  karaokeActive = false,
+  karaokeBusy = false,
+  karaokeDisabled = false,
+  karaokeError = null,
+  onToggleKaraoke
 }: LyricsPanelProps) {
   const reduced = useReducedMotion();
   const lineRefs = useRef<Record<number, HTMLButtonElement | null>>({});
@@ -231,17 +241,44 @@ export function LyricsPanel({
           <h2 id="lyrics-heading">Lyrics</h2>
           <span className="ytm-lyrics__hint">{lines.length > 0 ? 'Tap any line to jump audio' : 'Waiting for track'}</span>
         </div>
-        {onToggleTranslate && lines.length > 0 ? (
-          <TactileButton
-            variant="ghost"
-            icon={translating ? LoaderCircle : Languages}
-            onClick={onToggleTranslate}
-            aria-label={translated ? 'Show original lyrics' : 'Translate lyrics to English'}
-          >
-            {translating ? 'Translating…' : translated ? 'Original' : 'Translate'}
-          </TactileButton>
-        ) : null}
+        <div className="ytm-lyrics__chrome-actions">
+          {onToggleKaraoke ? (
+            <TactileButton
+              variant={karaokeActive ? 'primary' : 'ghost'}
+              icon={Mic}
+              onClick={onToggleKaraoke}
+              disabled={karaokeBusy || karaokeDisabled}
+              aria-pressed={karaokeActive}
+              aria-busy={karaokeBusy || undefined}
+              aria-label={
+                karaokeBusy
+                  ? 'Preparing karaoke'
+                  : karaokeActive
+                    ? 'Turn karaoke off'
+                    : 'Turn karaoke on'
+              }
+              className={`ytm-lyrics__karaoke-btn${karaokeActive ? ' is-on' : ''}${karaokeBusy ? ' is-busy' : ''}`}
+            >
+              {karaokeBusy ? 'Preparing…' : karaokeActive ? 'Karaoke on' : 'Karaoke'}
+            </TactileButton>
+          ) : null}
+          {onToggleTranslate && lines.length > 0 ? (
+            <TactileButton
+              variant="ghost"
+              icon={translating ? LoaderCircle : Languages}
+              onClick={onToggleTranslate}
+              aria-label={translated ? 'Show original lyrics' : 'Translate lyrics to English'}
+            >
+              {translating ? 'Translating…' : translated ? 'Original' : 'Translate'}
+            </TactileButton>
+          ) : null}
+        </div>
       </div>
+      {karaokeError ? (
+        <p className="ytm-lyrics__alert" role="alert">
+          {karaokeError}
+        </p>
+      ) : null}
 
       {translateError ? <p className="ytm-lyrics__alert" role="alert">{translateError}</p> : null}
       {translated && translateProvider ? (
