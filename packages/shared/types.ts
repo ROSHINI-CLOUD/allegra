@@ -62,6 +62,19 @@ export type ApiResponse<T> =
   | { readonly success: true; readonly data: T }
   | { readonly success: false; readonly data: null; readonly error: string };
 
+/** Lazy stem-separation cache state for one song+source fingerprint. */
+export type KaraokeStatus = 'none' | 'queued' | 'processing' | 'ready' | 'failed';
+
+export interface KaraokePayload {
+  readonly status: KaraokeStatus;
+  /** Our proxy when ready — never a raw S3/provider URL. */
+  readonly instrumentalUrl?: string;
+  /** Our proxy for the isolated vocal stem when ready (Sing mode). */
+  readonly vocalsUrl?: string;
+  readonly retryable?: boolean;
+  readonly separationVersion?: string;
+}
+
 export interface AccountProfile {
   readonly userId: string;
   readonly isGuest: boolean;

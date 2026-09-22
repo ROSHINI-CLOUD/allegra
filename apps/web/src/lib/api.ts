@@ -1,4 +1,4 @@
-import type { AccountProfile, ApiResponse, ArtistProfile, ArtistSummary, HomePayload, LyricLine, LyricsPayload, SharedPlaylist, TasteSummary, UnifiedSong } from '@shared/types';
+import type { AccountProfile, ApiResponse, ArtistProfile, ArtistSummary, HomePayload, KaraokePayload, LyricLine, LyricsPayload, SharedPlaylist, TasteSummary, UnifiedSong } from '@shared/types';
 
 export interface LibraryRecord {
   readonly id: string;
@@ -14,11 +14,12 @@ export interface LibraryRecord {
 }
 
 /*
- * Local dev: leave VITE_API_BASE_URL blank so requests hit same-origin `/api`
- * and Vite proxies to the API (see vite.config.ts). That avoids CORS and the
- * Windows localhost vs 127.0.0.1 trap. Production sets the Render URL explicitly.
+ * Leave NEXT_PUBLIC_API_BASE_URL blank everywhere: requests then hit same-origin
+ * `/api`. In dev Next rewrites that to the Express server (see next.config.ts); on
+ * Vercel the same path is the Express function. That avoids CORS and the Windows
+ * localhost vs 127.0.0.1 trap. Set it only to point a build at a remote API.
  */
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '');
 
 export class ApiError extends Error {
   public readonly status: number;
@@ -44,6 +45,27 @@ const TOKEN_KEY = 'allegra-session-token';
 let renewing: Promise<void> | null = null;
 
 /*
+ * Set by the sign-in provider once Convex Auth has a session. It wins over the
+ * stored guest token, so the API sees the account. Kept as a module value rather
+ * than a React context because non-component callers (this module) need it too.
+ */
+let accountToken: string | null = null;
+
+export function setAccountToken(token: string | null): void {
+  accountToken = token;
+}
+
+/** The token this browser should present right now: the account's, else the guest's. */
+function currentToken(): string | null {
+  if (accountToken) return accountToken;
+  try {
+    return window.localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/*
  * A stored token can outlive its user (API restarted on the in-memory store, or a
  * fresh Convex deployment). The API answers 401, and without this the Library
  * sat on an error forever. Renew once, deduped across parallel calls, and retry.
@@ -62,7 +84,7 @@ function renewSession(): Promise<void> {
 async function send(path: string, init?: RequestInit, canRenew = true): Promise<Response> {
   let response: Response;
   try {
-    const token = window.localStorage.getItem(TOKEN_KEY);
+    const token = currentToken();
     response = await fetch(resolveApiUrl(path), {
       ...init,
       headers: {
@@ -75,7 +97,9 @@ async function send(path: string, init?: RequestInit, canRenew = true): Promise<
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
     throw new ApiError('We could not reach the music service. Check your connection and try again.', 0);
   }
-  if (response.status === 401 && canRenew && !path.startsWith('/api/auth/')) {
+  // A signed-in 401 is a real authorization failure; starting a guest session would
+  // silently drop the listener out of their own account.
+  if (response.status === 401 && canRenew && !accountToken && !path.startsWith('/api/auth/')) {
     await renewSession().catch(() => undefined);
     return send(path, init, false);
   }
@@ -132,6 +156,16 @@ export async function fetchLyrics(song: UnifiedSong, signal?: AbortSignal): Prom
     }).toString()}`,
     { signal }
   );
+}
+
+/** Current karaoke / Sing cache state. Throws ApiError 503 when Batch karaoke is not configured. */
+export async function fetchKaraokeStatus(songId: string, signal?: AbortSignal): Promise<KaraokePayload> {
+  return request(`/api/songs/${encodeURIComponent(songId)}/karaoke`, { signal });
+}
+
+/** Claim or join karaoke generation. May return 202 while processing. */
+export async function requestKaraoke(songId: string, signal?: AbortSignal): Promise<KaraokePayload> {
+  return request(`/api/songs/${encodeURIComponent(songId)}/karaoke`, { method: 'POST', signal });
 }
 
 export async function createAnonymousSession(): Promise<{ token: string; userId: string }> {
@@ -313,7 +347,7 @@ let ensuring: Promise<void> | null = null;
 
 /** Makes sure this browser has a session (guest until they sign up). Parallel callers share one request. */
 export function ensureSession(): Promise<void> {
-  if (hasStoredSession()) return Promise.resolve();
+  if (accountToken || hasStoredSession()) return Promise.resolve();
   ensuring ??= createAnonymousSession().then(storeSession).finally(() => {
     ensuring = null;
   });
@@ -324,23 +358,42 @@ export async function fetchProfile(signal?: AbortSignal): Promise<AccountProfile
   return request('/api/auth/me', { signal });
 }
 
-/** Turns this device's guest session into an account, keeping everything the guest had. */
-export async function registerAccount(input: { email: string; password: string; displayName?: string }): Promise<AccountProfile> {
-  const session = await request<{ token: string; userId: string }>('/api/auth/register', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) });
-  storeSession(session);
-  return fetchProfile();
+/**
+ * Hands this browser's guest token to the account that just signed in, so the likes
+ * and playlists built before signing in are not stranded. Safe to call more than
+ * once — merging is a union — and a no-op when there was never a guest session.
+ */
+export async function linkGuestSession(): Promise<AccountProfile | null> {
+  let guestToken: string | null = null;
+  try {
+    guestToken = window.localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+  if (!guestToken) return null;
+  try {
+    const profile = await request<AccountProfile>('/api/auth/link', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ guestToken })
+    });
+    // The guest is now part of the account; keeping the token around would let a
+    // sign-out silently land back in the old half-populated guest session.
+    window.localStorage.removeItem(TOKEN_KEY);
+    return profile;
+  } catch {
+    return null;
+  }
 }
 
-/** Signs in; whatever this device did as a guest is folded into the account. */
-export async function loginAccount(input: { email: string; password: string }): Promise<AccountProfile> {
-  const session = await request<{ token: string; userId: string }>('/api/auth/login', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) });
-  storeSession(session);
-  return fetchProfile();
-}
-
-/** Signs out by starting a fresh guest session; the account stays safe on the server. */
-export async function logoutAccount(): Promise<AccountProfile> {
-  window.localStorage.removeItem(TOKEN_KEY);
+/** Starts a fresh guest session after signing out, so the app is never token-less. */
+export async function startGuestSession(): Promise<AccountProfile> {
+  setAccountToken(null);
+  try {
+    window.localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Private mode: the session simply will not persist across reloads.
+  }
   storeSession(await createAnonymousSession());
   return fetchProfile();
 }

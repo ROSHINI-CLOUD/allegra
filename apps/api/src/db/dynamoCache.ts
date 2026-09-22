@@ -17,7 +17,7 @@ interface AttributeMap {
 }
 
 /**
- * Persistent cache adapter for App Runner. Hand-rolled DynamoDB JSON protocol +
+ * Persistent cache adapter. Hand-rolled DynamoDB JSON protocol +
  * SigV4 — no AWS SDK (enforced by tests/infra). Soft-fails on outages so the
  * layered memory cache keeps serving.
  */

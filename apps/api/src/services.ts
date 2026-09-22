@@ -1,15 +1,20 @@
-import type { AiConfig } from './config.js';
+import type { AiConfig, KaraokeAwsConfig, MusicBrainzConfig, UploadsConfig } from './config.js';
 import { AiClient } from './ai/aiClient.js';
 import { GeminiProvider } from './ai/providers/gemini.js';
 import { OpenAiCompatibleProvider } from './ai/providers/openaiCompatible.js';
 import { BedrockProvider } from './ai/providers/bedrock.js';
 import { ArtworkService } from './services/artwork.js';
+import { CacheKaraokeAssetStore } from './services/karaoke/asset-store.js';
+import { KaraokeService } from './services/karaoke/karaoke.service.js';
+import { AwsBatchStemSeparationProvider } from './services/karaoke/providers/aws-batch.provider.js';
+import { DEFAULT_SEPARATION_VERSION } from './services/karaoke/types.js';
 import { LyricsService } from './services/lyrics.js';
 import { RecommendationService } from './services/recommendations.js';
 import { TranslationService } from './services/translation.js';
 import { CatalogService } from './catalog/catalog.js';
 import { ConvexUserStore } from './db/convex.js';
 import { AuthService } from './auth/auth.js';
+import { ConvexTokenVerifier, FirstMatchVerifier, GuestTokenVerifier, type TokenVerifier } from './auth/verifier.js';
 import { MemoryCacheStore, type CacheStore } from './lib/cache.js';
 import { StreamResolver } from './lib/streamResolver.js';
 import { GaanaProvider } from './providers/gaana.js';
@@ -17,6 +22,7 @@ import { ItunesProvider } from './providers/itunes.js';
 import { LrclibProvider } from './providers/lrclib.js';
 import { BetterLyricsProvider } from './providers/betterlyrics.js';
 import { LyricaProvider } from './providers/lyrica.js';
+import { MusicBrainzReleaseAuthority, type ReleaseAuthority } from './providers/musicbrainz.js';
 import { SaavnProvider } from './providers/saavn.js';
 import { MemoryUserStore, type UserStore } from './user/store.js';
 
@@ -28,13 +34,23 @@ export interface ServiceOptions {
   readonly lyricaApiUrl?: string;
   /** Better Lyrics API base URL. Unset disables that tier. */
   readonly betterLyricsApiUrl?: string;
+  readonly musicBrainz?: MusicBrainzConfig;
+  /** Injected in tests so the election runs without reaching MusicBrainz. */
+  readonly releaseAuthority?: ReleaseAuthority;
+  readonly version?: string;
   /** Optional key: without it only already-cached songs resolve. */
   readonly betterLyricsApiKey?: string;
+  readonly karaoke?: KaraokeAwsConfig;
+  readonly uploads?: UploadsConfig;
   readonly cacheStore?: CacheStore;
   readonly userStore?: UserStore;
   /** With both set, user data lives in Convex; otherwise it stays in memory. */
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
+  /** Convex site origin (…convex.site) — the issuer of Convex Auth session tokens. */
+  readonly convexSiteUrl?: string;
+  /** Verifier for signed-in accounts. Built from convexSiteUrl unless supplied (tests). */
+  readonly accountVerifier?: TokenVerifier;
   readonly fetchImpl?: typeof fetch;
   readonly jwtSecret: string;
   readonly ai?: AiConfig;
@@ -48,6 +64,7 @@ export interface AppServices {
   readonly auth: AuthService;
   readonly translation: TranslationService;
   readonly recommendations: RecommendationService;
+  readonly karaoke: KaraokeService;
 }
 
 /**
@@ -122,24 +139,67 @@ export function createServices(options: ServiceOptions): AppServices {
     baseUrl: options.gaanaApiUrl ?? 'https://example.invalid/api',
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
   });
-  const catalog = new CatalogService({ saavn, gaana, cache });
-  const userStore = options.userStore ?? (options.convexUrl && options.convexServerSecret
+  // Names the record behind a row the provider only has on a playlist.
+  const releaseAuthority = options.releaseAuthority
+    ?? (options.musicBrainz
+      ? new MusicBrainzReleaseAuthority({
+          baseUrl: options.musicBrainz.baseUrl,
+          coverArtUrl: options.musicBrainz.coverArtUrl,
+          contact: options.musicBrainz.contact,
+          ...(options.version ? { appVersion: options.version } : {}),
+          ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
+        })
+      : undefined);
+  const catalog = new CatalogService({ saavn, gaana, cache, ...(releaseAuthority ? { releaseAuthority } : {}) });
+  const convexStore = options.convexUrl && options.convexServerSecret
     ? new ConvexUserStore({ url: options.convexUrl, serverSecret: options.convexServerSecret })
-    : new MemoryUserStore());
+    : undefined;
+  const userStore = options.userStore ?? convexStore ?? new MemoryUserStore();
+
+  // Guest tokens are ours; Convex Auth signs the ones that come back from Google.
+  // Without a Convex site URL only guest sessions exist, which is how local dev runs.
+  const guestVerifier = new GuestTokenVerifier(options.jwtSecret);
+  const convexVerifier = options.accountVerifier
+    ?? (options.convexSiteUrl ? new ConvexTokenVerifier({ siteUrl: options.convexSiteUrl }) : undefined);
 
   const ai = buildAiClient(options.ai, options.fetchImpl);
+  const stream = new StreamResolver({ saavn, cache, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) });
+  const karaokeProvider = options.karaoke
+    ? new AwsBatchStemSeparationProvider({
+        region: options.karaoke.region,
+        jobQueue: options.karaoke.jobQueue,
+        jobDefinition: options.karaoke.jobDefinition,
+        bucket: options.karaoke.bucket,
+        separationVersion: options.karaoke.separationVersion,
+        stemModel: options.karaoke.stemModel,
+        ...(options.karaoke.accessKeyId ? { accessKeyId: options.karaoke.accessKeyId } : {}),
+        ...(options.karaoke.secretAccessKey ? { secretAccessKey: options.karaoke.secretAccessKey } : {}),
+        ...(options.karaoke.sessionToken ? { sessionToken: options.karaoke.sessionToken } : {}),
+        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
+      })
+    : undefined;
 
   return {
     catalog,
-    stream: new StreamResolver({ saavn, cache, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) }),
+    stream,
     artwork: new ArtworkService(new ItunesProvider({ ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) }), catalog, cache),
     lyrics: new LyricsService(new LrclibProvider({
       ...(options.lrclibApiUrl ? { baseUrl: options.lrclibApiUrl } : {}),
       ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
     }), cache, options.lyricaApiUrl ? new LyricaProvider({ baseUrl: options.lyricaApiUrl, timeoutMs: 25_000, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) }) : undefined,
       options.betterLyricsApiUrl ? new BetterLyricsProvider({ baseUrl: options.betterLyricsApiUrl, ...(options.betterLyricsApiKey ? { apiKey: options.betterLyricsApiKey } : {}), ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) }) : undefined),
-    auth: new AuthService(userStore, options.jwtSecret),
+    auth: new AuthService({
+      store: userStore,
+      guest: guestVerifier,
+      verifier: new FirstMatchVerifier(guestVerifier, convexVerifier),
+      ...(convexStore ? { directory: convexStore } : {})
+    }),
     translation: new TranslationService(ai, cache),
-    recommendations: new RecommendationService(ai, catalog, cache)
+    recommendations: new RecommendationService(ai, catalog, cache),
+    karaoke: new KaraokeService({
+      stream,
+      store: new CacheKaraokeAssetStore(cache, options.karaoke?.separationVersion ?? DEFAULT_SEPARATION_VERSION),
+      ...(karaokeProvider ? { provider: karaokeProvider } : {})
+    })
   };
 }

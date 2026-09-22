@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { paths } from '../lib/routes';
 import { ArrowUpRight, Clock3, Heart, ListMusic, Play, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { useState } from 'react';
@@ -117,12 +119,12 @@ function PlaylistCard({ playlist, songs, likedIds, currentSongId, isPlaying, onP
     <article className="playlist-card" aria-label={`Playlist ${playlist.name}`}>
       <header className="playlist-card-head">
         {playlist.coverUrl ? (
-          <a className="playlist-card-cover" href={`#playlist/${encodeURIComponent(playlist.id)}`} aria-hidden="true" tabIndex={-1}>
+          <Link className="playlist-card-cover" href={paths.playlist(playlist.id)} aria-hidden="true" tabIndex={-1}>
             <img src={playlist.coverUrl} alt="" />
-          </a>
+          </Link>
         ) : null}
         <div>
-          <h3 title={playlist.name}><a className="playlist-open" href={`#playlist/${encodeURIComponent(playlist.id)}`}>{playlist.name}</a></h3>
+          <h3 title={playlist.name}><Link className="playlist-open" href={paths.playlist(playlist.id)}>{playlist.name}</Link></h3>
           <span>{playlist.songIds.length} {playlist.songIds.length === 1 ? 'track' : 'tracks'}</span>
         </div>
         <div className="playlist-card-actions">

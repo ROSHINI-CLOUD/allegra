@@ -2,7 +2,7 @@
 
 > A music-streaming web app with a real catalog, real audio, time-synced lyrics, and an interface built to feel like an instrument rather than a list.
 
-**Live (preview):** [allegra-green.vercel.app](https://allegra-green.vercel.app) · **Ship It target:** AWS Amplify (web) + App Runner (API) — run `bash scripts/aws-ship-it-wizard.sh` · Built for **First Commit** (Bharat Builds Tour · WeMakeDevs × AWS), 17–20 Sept 2026
+**Live:** [allegravibe.vercel.app](https://allegravibe.vercel.app)
 
 ## What this is
 
@@ -11,37 +11,45 @@ Allegra began as a fully mocked front-end: hardcoded songs, playback faked with 
 ## Architecture
 
 ```
-Browser  (React 19 · Vite · Motion)
+Browser  (Next.js App Router · React 19 · Motion)
    |
-   |-- AWS Amplify Hosting       static SPA, CDN
-   |
-   `-- AWS App Runner            Express API, container, long-lived
-         |-- JioSaavn -> Gaana   catalog + audio (server-side, because of CORS)
-         |-- iTunes Search       artwork
-         |-- LRCLIB (+ Lyrica)   time-synced lyrics
-         `-- Convex              guest users, likes, recents, playlists
+   `-- Vercel                    one deployment
+         |-- apps/web            the app shell: one <audio>, player, routes
+         `-- /api -> Express     apps/api, as a Vercel Function
+               |-- JioSaavn -> Gaana   catalog + audio (server-side, because of CORS)
+               |-- iTunes Search       artwork
+               |-- LRCLIB (+ Lyrica)   time-synced lyrics
+               |-- Convex              Google sign-in, likes, recents, playlists
+               `-- AWS Batch           GPU stem separation for Sing (S3-cached)
 ```
 
-**Why the app is hosted on AWS:** Ship It (one of the event's three judged tracks) requires a live AWS URL. Amplify Hosting serves the SPA; App Runner runs the API as a normal container with no VPC or ALB to wrangle.
+**Why the API is still Express and not route handlers:** `GET /api/stream/:id` proxies audio and must
+forward `Range` and preserve `206 Partial Content`. That path works; rewriting it would risk the
+least-visible bug in the product for no gain. Vercel builds both halves from one `vercel.json`.
 
-**Why the API is a real server and not Convex functions or serverless:** `GET /api/stream/:id` proxies audio and has to forward `Range` and preserve `206 Partial Content`. That is ordinary long-lived HTTP; function runtimes (Lambda included) make it awkward. Convex is used for what it is good at, durable user data — DynamoDB would have been pure rework for no judging benefit, so the data layer uses Convex while the compute layer stays on AWS.
+**Why the browser never talks to a provider:** these providers' reference client is a mobile app,
+which has no origin and no preflight. A browser has both. Every provider call is server-side — that
+is why the backend exists.
 
-**Why the browser never talks to Convex:** the API owns auth (an anonymous JWT issued on first load) and calls Convex with a shared secret that every Convex function checks. The public API contract in [`docs/api-contract.md`](docs/api-contract.md) did not change when the database moved.
+**Why sign-in lives in Convex:** Convex Auth holds the Google secret and signs the session token; the
+API only verifies it against Convex's published keys. No credential ever reaches this repo or the
+browser.
 
-Deployment steps: [`infra/README.md`](infra/README.md) · Convex setup: [`convex/README.md`](convex/README.md)
+Details: [`docs/architecture.md`](docs/architecture.md) · Deploy and verify: [`docs/workflows.md`](docs/workflows.md)
 
 ## Run it
 
 ```bash
 git clone <repo> && cd allegra
-npm install
-npm --prefix apps/api install && npm --prefix apps/web install
+npm install                                  # workspaces: one install covers everything
 
 cp apps/api/.env.example apps/api/.env      # works as-is; no keys needed
 npm run dev                                  # web :5173 · api :8080
 ```
 
-Open http://localhost:5173. Guest data stays in memory until you set `CONVEX_URL` and `CONVEX_SERVER_SECRET` (see `convex/README.md`).
+Open http://localhost:5173. No keys are needed to search and play. Guest data stays in memory until
+you set up Convex, and Sing stays hidden until the AWS karaoke stack is configured — see
+[`docs/workflows.md`](docs/workflows.md).
 
 ```bash
 npm run typecheck && npm run lint && npm test
@@ -65,24 +73,25 @@ Keyboard: `Space` play/pause, `←` `→` seek 5 s, `⌘/Ctrl K` search, `Esc` c
 |---|---|
 | Catalog, audio, seek, artwork, lyrics | **Real** |
 | Guest sessions, likes, recently played, playlists | **Real**, persisted in Convex when configured |
-| Karaoke sliders, Premium page | **Not built.** Real stem separation needs GPU processing and there are no payments, so we left them out rather than ship controls that do nothing |
+| **Google sign-in** | **Real when Convex Auth is configured** — guest data merges into the account on first sign-in. Guest-only otherwise. Setup: [`docs/auth-convex-google.md`](docs/auth-convex-google.md) |
+| **Sing / Karaoke** (dual stems) | **Real when AWS Batch + karaoke bucket env are set** — Spot GPU separates vocals + instrumental once, cached on S3, mixed in the browser with GainNodes. Hidden (API 503) when unset. Decisions: [`docs/karaoke-aws-decisions.md`](docs/karaoke-aws-decisions.md) |
+| Premium page | **UI demo only** — no payments |
 | AI "set the mood" | **Not built.** The mood pills run a plain search |
 
 ## A note on the providers
 
-Allegra uses unofficial community API wrappers and plays licensed audio outside a licensed player. That is appropriate for a learning and hackathon project, which is what this is. It is not a licensed commercial music service and is not pitched as one. The `UnifiedSong` normalisation boundary is deliberately the seam where a licensed provider would swap in without touching the UI.
+Allegra uses unofficial community API wrappers and plays licensed audio outside a licensed player.
+That is appropriate for a personal learning project, which is what this is. It is not a licensed
+commercial music service and is not pitched as one. The `UnifiedSong` normalisation boundary is deliberately the seam where a licensed provider would swap in without touching the UI.
 
-## Team
+## Where things live
 
-| | Role |
-|---|---|
-| P1 | Backend & data |
-| P2 | Frontend & motion |
-| P3 | Infra & integration |
-| P4 | QA & submission |
-
-Planning: [`.planning/`](.planning/) · Reference: [`docs/`](docs/) · Learning log: [`.planning/LEARNING-LOG.md`](.planning/LEARNING-LOG.md)
+[`docs/`](docs/) — architecture, the API contract, setup guides ·
+[`.planning/`](.planning/) — the PRD and roadmap ·
+[`.planning/LEARNING-LOG.md`](.planning/LEARNING-LOG.md) — things that bit us
 
 ## AI coding tools
 
-- **Claude Code (Anthropic)**: planning, implementation help and code review across the API, the web app and the Convex/deploy setup. Every change was run through typecheck, lint and tests, and the seek behaviour was checked against the running app.
+- **Claude Code (Anthropic)**: planning, implementation and review across the API, the web app, the
+  Convex setup and the AWS karaoke pipeline. Every change was run through typecheck, lint and tests,
+  and behaviour that is visible in a browser was checked in a browser.

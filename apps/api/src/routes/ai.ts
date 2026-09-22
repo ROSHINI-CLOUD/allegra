@@ -45,7 +45,7 @@ export function aiRouter(translation: TranslationService, recommendations: Recom
       response.status(503).json({ success: false, data: null, error: 'Recommendations are not available right now.' });
       return;
     }
-    const userId = getUserId(auth, request);
+    const userId = await getUserId(auth, request);
     if (!userId) {
       sendUnauthorized(response);
       return;

@@ -1337,7 +1337,7 @@ body::after,
 
   .panel-topbar .mood-pills-label { display: none; }
   .home-page { gap: 28px; }
-  .home-hero-copy h1 { font-size: clamp(28px, 8vw, 40px); }
+  .home-spotlight-lead h1 { font-size: clamp(28px, 8vw, 40px); }
   .tile { flex-basis: 148px; }
   .artist-card { flex: 0 0 140px; height: 184px; }
   .now-panel { grid-template-columns: 96px minmax(0, 1fr); }
@@ -1405,6 +1405,7 @@ body::after,
 .artist-hero {
   position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-height: var(--hero-h, clamp(260px, 32cqw, 380px));
   align-items: end;
   padding: clamp(24px, 3cqw, 40px);
@@ -1446,21 +1447,18 @@ body::after,
   content: '';
 }
 
-.artist-hero__inner { display: flex; min-width: 0; align-items: flex-end; gap: clamp(22px, 2.8cqw, 40px); }
+.artist-hero__inner { display: flex; width: 100%; min-width: 0; align-items: center; gap: clamp(22px, 2.8cqw, 40px); }
 
 /* Framed on purpose: the portrait's edge reads as a card, never as a crop. */
 .artist-portrait {
   position: relative;
   width: clamp(160px, 21cqw, 248px);
   flex: 0 0 auto;
-  /* Cancels the hero's own floor padding, so the portrait stands on the plate rather than
-   * floating in it — the frame is a deliberate edge, never an accidental crop. */
-  margin: 0 0 calc(clamp(26px, 2.6vw, 44px) * -1);
+  margin: 0;
   overflow: hidden;
   aspect-ratio: 4 / 5;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-bottom: 0;
-  border-radius: 22px 22px 0 0;
+  border-radius: 22px;
   background: rgba(255, 255, 255, 0.06);
   box-shadow: 0 34px 60px -30px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
@@ -2130,6 +2128,8 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .artist-verified--inline svg { width: 15px; height: 15px; }
 .artist-hero-copy h1 .artist-verified--inline { width: 28px; height: 28px; margin-left: 10px; vertical-align: 0.16em; }
 .artist-bio { max-width: 72ch; margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 1.7; }
+.artist-bio-block { display: flex; max-width: 72ch; flex-direction: column; align-items: flex-start; gap: 6px; }
+.artist-bio.is-clamped { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; }
 
 /* ---------- Apple Music player bar ----------
  * Floating frosted capsule: transport left, a track capsule with scrubber in the middle,
@@ -2817,7 +2817,7 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .is-detail .search-box:focus-within { background: rgba(14, 14, 18, 0.7); }
 
 .is-detail .artist-hero {
-  --hero-h: clamp(300px, 38vw, 420px);
+  --hero-h: auto;
   margin: 0;
   padding: clamp(26px, 2.6vw, 44px);
 }
@@ -3344,40 +3344,115 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 /* ---------- Home ---------- */
 .home-page { display: flex; min-width: 0; flex-direction: column; gap: 38px; container: browse / inline-size; animation: page-in 0.4s var(--ease-decelerate) both; }
 
-.home-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; padding-top: 6px; }
-.home-hero-copy { min-width: 0; max-width: 640px; }
-.home-hero-copy h1 { margin: 6px 0 10px; color: var(--ink); font-size: clamp(30px, 4.4cqw, 58px); font-weight: 700; letter-spacing: -0.045em; line-height: 1.02; text-wrap: balance; }
-.home-hero-copy p { max-width: 52ch; margin: 0; color: var(--ink-muted); font-size: 15px; line-height: 1.5; }
-
-.home-resume {
-  display: flex;
-  width: min(320px, 100%);
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 16px 10px 10px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--surface);
-  box-shadow: var(--glass-edge);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+/* ---------- Spotlight: one song worth pressing play on, plus six quick picks ----------
+ * Full-bleed band at the top of Home. The cover is blown up, blurred and veiled behind the
+ * copy, so the page takes its colour from whatever they are about to hear. Both layers are
+ * static (no transition), so nothing here animates a non-compositor property. */
+.home-spotlight {
+  --spotlight-veil: rgba(10, 11, 14, 0.62);
+  --spotlight-veil-deep: rgba(10, 11, 14, 0.9);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin: -6px calc(var(--page-gutter, 36px) * -1) 0;
+  padding: clamp(20px, 2.6cqw, 34px) var(--page-gutter, 36px) clamp(22px, 2.8cqw, 36px);
+  border-bottom: 1px solid var(--border-subtle);
 }
+.home-spotlight-wash {
+  position: absolute;
+  z-index: -2;
+  inset: -20%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(64px) saturate(1.7);
+  opacity: 0.45;
+  transform: scale(1.12);
+}
+.home-spotlight::after {
+  position: absolute;
+  z-index: -1;
+  background: linear-gradient(170deg, var(--spotlight-veil), var(--spotlight-veil-deep) 78%);
+  content: '';
+  inset: 0;
+}
+.app-shell[data-theme='light'] .home-spotlight {
+  --spotlight-veil: rgba(246, 249, 252, 0.56);
+  --spotlight-veil-deep: rgba(246, 249, 252, 0.86);
+}
+.app-shell[data-theme='light'] .home-spotlight-wash { opacity: 0.6; filter: blur(64px) saturate(1.5) brightness(1.1); }
 
-.home-resume-art { position: relative; display: block; width: 72px; height: 72px; flex: 0 0 72px; padding: 0; overflow: hidden; border: 0; border-radius: 14px; background: var(--surface-raised); cursor: pointer; box-shadow: 0 14px 30px -14px rgba(0, 0, 0, 0.8); }
-.home-resume-art .artwork { width: 100%; height: 100%; border-radius: 0; }
-.home-resume-play { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.32); color: #fff; opacity: 0; transition: opacity var(--d-fast) var(--ease-standard); }
-.home-resume-art:hover .home-resume-play,
-.home-resume-art:focus-visible .home-resume-play { opacity: 1; }
-.home-resume-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.home-resume-copy span { color: var(--ink-faint); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-.home-resume-copy strong { overflow: hidden; color: var(--ink); font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.home-resume-copy small { overflow: hidden; color: var(--ink-muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.home-spotlight-inner { display: grid; align-items: center; gap: clamp(18px, 2.6cqw, 36px); grid-template-columns: minmax(0, 1fr) minmax(0, 400px); }
+.home-spotlight-lead { min-width: 0; }
+.home-spotlight-lead h1 { margin: 6px 0 10px; color: var(--ink); font-size: clamp(30px, 4.2cqw, 54px); font-weight: 700; letter-spacing: -0.045em; line-height: 1.02; text-wrap: balance; }
+.home-spotlight-lead p { max-width: 52ch; margin: 0; color: var(--ink-muted); font-size: 15px; line-height: 1.5; }
+
+.home-feature { display: flex; align-items: center; gap: 16px; margin-top: 22px; }
+.home-feature-art { position: relative; display: block; width: 104px; height: 104px; flex: 0 0 104px; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--surface-raised); cursor: pointer; box-shadow: 0 22px 44px -20px rgba(0, 0, 0, 0.85); transition: transform var(--d-base) var(--ease-decelerate); }
+.home-feature-art .artwork { width: 100%; height: 100%; border-radius: 0; }
+@media (hover: hover) { .home-feature-art:hover { transform: translateY(-3px); }}
+.home-feature-play { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.36); color: #fff; opacity: 0; transition: opacity var(--d-fast) var(--ease-standard); }
+.home-feature-art:hover .home-feature-play,
+.home-feature-art:focus-visible .home-feature-play { opacity: 1; }
+.home-feature-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.home-feature-copy > span { color: var(--ink-faint); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.home-feature-copy strong { overflow: hidden; color: var(--ink); font-size: 19px; font-weight: 700; letter-spacing: -0.02em; text-overflow: ellipsis; white-space: nowrap; }
+.home-feature-copy small { overflow: hidden; color: var(--ink-muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.home-feature-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.home-feature-actions .tactile-control { display: inline-flex; min-height: 38px; flex: 0 0 auto; align-items: center; justify-content: center; gap: 7px; padding-inline: 18px; border-radius: var(--radius-pill); font-size: 13px; white-space: nowrap; }
+.home-feature-actions .tactile-control:disabled { cursor: default; opacity: 0.45; }
+
+/* Quick picks: the compact half of the band — two columns of what they reach for. */
+.home-quick { display: grid; min-width: 0; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.home-quick-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 0 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background-color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-decelerate);
+}
+@media (hover: hover) { .home-quick-card:hover { border-color: var(--border-strong); background: rgba(255, 255, 255, 0.12); transform: translateY(-2px); }}
+.home-quick-card:active { transform: scale(0.99); }
+.home-quick-card.is-current { border-color: color-mix(in srgb, var(--wave) 55%, transparent); }
+.home-quick-card .artwork { width: 48px; height: 48px; flex: 0 0 48px; border-radius: 0; }
+.home-quick-copy { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; gap: 1px; }
+.home-quick-copy strong { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.home-quick-copy small { overflow: hidden; color: var(--ink-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.home-quick-play { display: grid; width: 26px; height: 26px; flex: 0 0 26px; place-items: center; border-radius: 50%; background: var(--wave); color: var(--wave-ink); opacity: 0; transition: opacity var(--d-fast) var(--ease-standard); }
+.home-quick-card:hover .home-quick-play,
+.home-quick-card:focus-visible .home-quick-play,
+.home-quick-card.is-current .home-quick-play { opacity: 1; }
+
+@container browse (max-width: 900px) {
+  .home-spotlight-inner { grid-template-columns: minmax(0, 1fr); }
+}
+@container browse (max-width: 560px) {
+  .home-quick { grid-template-columns: minmax(0, 1fr); }
+  .home-feature { flex-wrap: wrap; }
+}
 
 .home-section { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
 .home-section .section-heading { margin: 0; }
 .shelf-link { color: var(--ink-muted); font-size: 13px; font-weight: 500; text-decoration: none; transition: color var(--d-fast) var(--ease-standard); }
 .shelf-link:hover { color: var(--ink); }
+
+.section-heading-end { display: flex; align-items: center; gap: 12px; }
+/* Arrow paging is an extra on top of the native scroll, so it only exists where a pointer does. */
+.shelf-arrows { display: none; gap: 6px; }
+@media (hover: hover) and (pointer: fine) { .shelf-arrows { display: flex; }}
+.shelf-arrow { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--ink-muted); cursor: pointer; transition: color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard), opacity var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-decelerate); }
+.shelf-arrow:hover:not(:disabled) { border-color: var(--border-strong); color: var(--ink); transform: scale(1.06); }
+.shelf-arrow:active:not(:disabled) { transform: scale(0.94); }
+.shelf-arrow:disabled { cursor: default; opacity: 0.32; }
 
 .guest-nudge { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px 12px 18px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); box-shadow: var(--glass-edge); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); color: var(--ink-soft); font-size: 14px; }
 .guest-nudge .tactile-control {
@@ -3431,6 +3506,74 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .playlist-tile--new.is-editing input:focus { border-color: color-mix(in srgb, var(--wave) 60%, transparent); }
 .playlist-tile--new.is-editing div { display: flex; gap: 8px; }
 .playlist-tile--new.is-editing .tactile-control { min-height: 36px; padding: 0 14px; font-size: 13px; }
+
+/* ---------- Browse by mood ----------
+ * Six doors into Discover. Each one runs a real query, so none of these is decoration. */
+.mood-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.mood-card {
+  position: relative;
+  display: flex;
+  min-height: 96px;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 14px 16px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--mood-tint) 34%, transparent);
+  border-radius: 18px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--mood-tint) 46%, transparent), color-mix(in srgb, var(--mood-tint) 12%, transparent));
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color var(--d-base) var(--ease-standard), transform var(--d-base) var(--ease-decelerate);
+}
+@media (hover: hover) { .mood-card:hover { border-color: color-mix(in srgb, var(--mood-tint) 70%, transparent); transform: translateY(-3px); }}
+.mood-card:active { transform: scale(0.985); }
+.mood-card-label { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+.mood-card-note { color: var(--ink-soft); font-size: 12px; }
+/* The tilted square is the genre-card signature: a cover that never quite fits in the corner. */
+.mood-card-chip { position: absolute; top: 14px; right: -14px; width: 56px; height: 56px; border-radius: 10px; background: color-mix(in srgb, var(--mood-tint) 88%, #000); box-shadow: 0 12px 26px -12px rgba(0, 0, 0, 0.85); transform: rotate(24deg); }
+
+/* ---------- Chart: the numbered top ten ---------- */
+.chart-grid { display: grid; margin: 0; padding: 0; gap: 4px 20px; grid-auto-flow: column; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(5, auto); list-style: none; }
+.chart-row { display: flex; min-width: 0; align-items: center; gap: 4px; border-radius: 14px; transition: background-color var(--d-fast) var(--ease-standard); }
+@media (hover: hover) { .chart-row:hover { background: var(--active-wash); }}
+.chart-row.is-current { background: color-mix(in srgb, var(--wave) 10%, transparent); }
+.chart-row-main { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: 12px; padding: 8px 6px 8px 10px; border: 0; background: none; color: var(--ink); cursor: pointer; font: inherit; text-align: left; }
+.chart-rank { width: 26px; flex: 0 0 26px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; }
+.chart-row.is-current .chart-rank { color: var(--wave); }
+.chart-art { position: relative; display: block; width: 44px; height: 44px; flex: 0 0 44px; overflow: hidden; border-radius: 10px; }
+.chart-art .artwork { width: 100%; height: 100%; border-radius: 0; }
+.chart-play { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.4); color: #fff; opacity: 0; transition: opacity var(--d-fast) var(--ease-standard); }
+.chart-row-main:hover .chart-play,
+.chart-row-main:focus-visible .chart-play,
+.chart-row.is-current .chart-play { opacity: 1; }
+.chart-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.chart-copy strong { overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.chart-copy small { overflow: hidden; color: var(--ink-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.chart-row .chart-like { width: 34px; height: 34px; flex: 0 0 34px; margin-right: 6px; border: 0; background: transparent; color: var(--ink-faint); }
+.chart-row .chart-like:hover { background: var(--active-wash); color: var(--ink); }
+.chart-row .chart-like[aria-label^='Remove'] { color: var(--accent, #ee6b5f); }
+
+@container browse (max-width: 760px) {
+  .chart-grid { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+}
+
+/* Reduced motion keeps every one of these controls — it only takes the travel out of them. */
+@media (prefers-reduced-motion: reduce) {
+  .home-feature-art,
+  .home-quick-card,
+  .mood-card,
+  .shelf-arrow { transition: opacity var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard); }
+  .home-feature-art:hover,
+  .home-quick-card:hover,
+  .home-quick-card:active,
+  .mood-card:hover,
+  .mood-card:active,
+  .shelf-arrow:hover:not(:disabled),
+  .shelf-arrow:active:not(:disabled) { transform: none; }
+}
 
 /* ---------- Taste onboarding ---------- */
 /* Full-screen takeover: portalled to <body>, so it sits above the header, mini player and the command palette. */
@@ -3521,6 +3664,12 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .auth-submit:not(:disabled):active { transform: translateY(1px) scale(0.985); }
 .auth-submit:disabled { opacity: 0.55; }
 .auth-hint { margin: -6px 0 0; color: rgba(255, 255, 255, 0.5); font-size: 12px; }
+/* Google requires its mark to keep its own colours, so the button stays light. */
+.auth-google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 50px; margin-top: 4px; padding-inline: 24px; border-radius: 999px; background: #fff; color: #1f1f1f; font-size: 15px; font-weight: 500; white-space: nowrap; transition: transform var(--d-fast) var(--ease-press), box-shadow var(--d-base) var(--ease-standard), filter var(--d-fast) var(--ease-standard); }
+.auth-google:not(:disabled):hover { transform: translateY(-1px); filter: brightness(0.97); }
+.auth-google:not(:disabled):active { transform: translateY(1px) scale(0.985); }
+.auth-google:disabled { opacity: 0.55; }
+.auth-google svg { flex: none; }
 .auth-error { margin: 0; color: #ff8f86; font-size: 13px; }
 .auth-signout { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 8px 0; border: 0; background: none; color: rgba(255, 255, 255, 0.62); font: inherit; font-size: 14px; cursor: pointer; }
 .auth-signout:hover { color: #fff; }
@@ -3678,8 +3827,8 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
     scrollbar-width: none;
   }
   .panel-topbar .mood-pills::-webkit-scrollbar { display: none; }
-  .home-hero { flex-direction: column; align-items: stretch; }
-  .home-resume { width: 100%; }
+  .home-spotlight { margin-top: 0; }
+  .mood-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
   .guest-nudge { flex-direction: column; align-items: flex-start; }
   .taste-card { padding: 20px; }
   .taste-foot { flex-wrap: wrap; }}
@@ -3897,7 +4046,7 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
 }
 
 /* The artist the search was about, ahead of the supporting credits. */
-.artist-hero {
+.artist-spotlight {
   display: grid;
   grid-template-columns: 148px minmax(0, 1fr) auto;
   align-items: center;
@@ -3914,10 +4063,10 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   transition: transform var(--d-fast) var(--ease-press), background var(--d-fast) var(--ease-standard);
 }
 
-.artist-hero:hover { background: var(--surface-raised); }
-.artist-hero:active { transform: scale(0.995); }
+.artist-spotlight:hover { background: var(--surface-raised); }
+.artist-spotlight:active { transform: scale(0.995); }
 
-.artist-hero-photo {
+.artist-spotlight-photo {
   display: block;
   width: 148px;
   height: 148px;
@@ -3926,7 +4075,7 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   background: var(--surface-raised);
 }
 
-.artist-hero-photo img {
+.artist-spotlight-photo img {
   display: block;
   width: 100%;
   height: 100%;
@@ -3934,10 +4083,10 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   object-position: 50% 20%;
 }
 
-.artist-hero-photo .artist-card-initial { font-size: 48px; }
+.artist-spotlight-photo .artist-card-initial { font-size: 48px; }
 
-.artist-hero-copy { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
-.artist-hero-copy em {
+.artist-spotlight-copy { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
+.artist-spotlight-copy em {
   color: var(--ink-faint);
   font-size: 12px;
   font-style: normal;
@@ -3945,7 +4094,7 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.artist-hero-copy strong {
+.artist-spotlight-copy strong {
   overflow: hidden;
   color: var(--ink);
   font-size: clamp(26px, 3.4vw, 44px);
@@ -3954,9 +4103,9 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   line-height: 1.05;
   text-overflow: ellipsis;
 }
-.artist-hero-copy span { color: var(--ink-muted); font-size: 13px; }
+.artist-spotlight-copy span { color: var(--ink-muted); font-size: 13px; }
 
-.artist-hero-go {
+.artist-spotlight-go {
   display: flex;
   width: 44px;
   height: 44px;
@@ -3968,18 +4117,18 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   transition: transform var(--d-fast) var(--ease-press), background var(--d-fast) var(--ease-standard);
 }
 
-.artist-hero:hover .artist-hero-go { background: var(--wave, #d9e66a); color: #101014; transform: translateX(3px); }
+.artist-spotlight:hover .artist-spotlight-go { background: var(--wave, #d9e66a); color: #101014; transform: translateX(3px); }
 
 @media (max-width: 640px) {
-  .artist-hero { grid-template-columns: 84px minmax(0, 1fr); gap: 14px; padding: 14px; }
-  .artist-hero-photo { width: 84px; height: 84px; }
-  .artist-hero-photo .artist-card-initial { font-size: 30px; }
-  .artist-hero-go { display: none; }
+  .artist-spotlight { grid-template-columns: 84px minmax(0, 1fr); gap: 14px; padding: 14px; }
+  .artist-spotlight-photo { width: 84px; height: 84px; }
+  .artist-spotlight-photo .artist-card-initial { font-size: 30px; }
+  .artist-spotlight-go { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .artist-hero,
-  .artist-hero-go { transition: none; }
+  .artist-spotlight,
+  .artist-spotlight-go { transition: none; }
 }
 
 /* ---------- Player transport ----------
@@ -4202,3 +4351,536 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   .hero-banner-art { width: 76px; height: 76px; }
   .tile { flex-basis: 132px; }
 }
+
+/* ---------- Lyrics stage: soft edges, instrumental wave, drifting title ---------- */
+
+/* The lines dissolve into a progressive blur at the top and bottom instead of stopping at a
+ * hard edge: a long alpha ramp on the scroller, plus a blur layer whose strength is masked
+ * to ramp the same way. Transform/opacity are the only things that ever animate here. */
+.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) { position: relative; }
+
+/* Words melt away toward the edges on a long eased alpha curve — nothing is ever cut off. */
+.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__scroll {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, rgba(0, 0, 0, 0.04) 4%, rgba(0, 0, 0, 0.16) 9%, rgba(0, 0, 0, 0.4) 15%, rgba(0, 0, 0, 0.72) 22%, #000 32%, #000 66%, rgba(0, 0, 0, 0.72) 76%, rgba(0, 0, 0, 0.4) 84%, rgba(0, 0, 0, 0.16) 91%, rgba(0, 0, 0, 0.04) 96%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, rgba(0, 0, 0, 0.04) 4%, rgba(0, 0, 0, 0.16) 9%, rgba(0, 0, 0, 0.4) 15%, rgba(0, 0, 0, 0.72) 22%, #000 32%, #000 66%, rgba(0, 0, 0, 0.72) 76%, rgba(0, 0, 0, 0.4) 84%, rgba(0, 0, 0, 0.16) 91%, rgba(0, 0, 0, 0.04) 96%, transparent 100%);
+}
+
+/* Progressive blur (stage only): five stacked layers, each a little stronger and each masked to
+ * a soft window, so the blur ramps up smoothly toward the edge with no visible band. */
+.ytm-lyrics__edge { display: none; }
+
+.ytm-lyrics--nobackdrop.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__edge {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  left: 0;
+  display: block;
+  height: 34%;
+  pointer-events: none;
+}
+.ytm-lyrics__edge--top { top: 0; }
+.ytm-lyrics__edge--bottom { bottom: 0; }
+.ytm-lyrics__edge i { position: absolute; inset: 0; }
+
+.ytm-lyrics__edge--top i:nth-child(1) { -webkit-backdrop-filter: blur(0.6px); backdrop-filter: blur(0.6px); -webkit-mask-image: linear-gradient(180deg, transparent 50%, #000 68%, #000 84%, transparent 100%); mask-image: linear-gradient(180deg, transparent 50%, #000 68%, #000 84%, transparent 100%); }
+.ytm-lyrics__edge--top i:nth-child(2) { -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px); -webkit-mask-image: linear-gradient(180deg, transparent 32%, #000 50%, #000 66%, transparent 84%); mask-image: linear-gradient(180deg, transparent 32%, #000 50%, #000 66%, transparent 84%); }
+.ytm-lyrics__edge--top i:nth-child(3) { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); -webkit-mask-image: linear-gradient(180deg, transparent 14%, #000 32%, #000 48%, transparent 66%); mask-image: linear-gradient(180deg, transparent 14%, #000 32%, #000 48%, transparent 66%); }
+.ytm-lyrics__edge--top i:nth-child(4) { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14%, #000 30%, transparent 48%); mask-image: linear-gradient(180deg, transparent 0, #000 14%, #000 30%, transparent 48%); }
+.ytm-lyrics__edge--top i:nth-child(5) { -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); -webkit-mask-image: linear-gradient(180deg, #000 0, #000 10%, transparent 32%); mask-image: linear-gradient(180deg, #000 0, #000 10%, transparent 32%); }
+
+.ytm-lyrics__edge--bottom i:nth-child(1) { -webkit-backdrop-filter: blur(0.6px); backdrop-filter: blur(0.6px); -webkit-mask-image: linear-gradient(0deg, transparent 50%, #000 68%, #000 84%, transparent 100%); mask-image: linear-gradient(0deg, transparent 50%, #000 68%, #000 84%, transparent 100%); }
+.ytm-lyrics__edge--bottom i:nth-child(2) { -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px); -webkit-mask-image: linear-gradient(0deg, transparent 32%, #000 50%, #000 66%, transparent 84%); mask-image: linear-gradient(0deg, transparent 32%, #000 50%, #000 66%, transparent 84%); }
+.ytm-lyrics__edge--bottom i:nth-child(3) { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); -webkit-mask-image: linear-gradient(0deg, transparent 14%, #000 32%, #000 48%, transparent 66%); mask-image: linear-gradient(0deg, transparent 14%, #000 32%, #000 48%, transparent 66%); }
+.ytm-lyrics__edge--bottom i:nth-child(4) { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); -webkit-mask-image: linear-gradient(0deg, transparent 0, #000 14%, #000 30%, transparent 48%); mask-image: linear-gradient(0deg, transparent 0, #000 14%, #000 30%, transparent 48%); }
+.ytm-lyrics__edge--bottom i:nth-child(5) { -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); -webkit-mask-image: linear-gradient(0deg, #000 0, #000 10%, transparent 32%); mask-image: linear-gradient(0deg, #000 0, #000 10%, transparent 32%); }
+
+/* Instrumental break: a live equaliser that plays while the break is the active line. */
+.lyric-wave { display: inline-flex; height: 40px; align-items: center; gap: 6px; }
+.lyric-wave i {
+  display: block;
+  width: 5px;
+  height: 30px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff, rgba(255, 255, 255, 0.55));
+  transform: scaleY(0.22);
+  transform-origin: center;
+}
+.ytm-lyrics__line.is-active .lyric-wave i { animation: lyric-wave 1.15s ease-in-out infinite; }
+.ytm-lyrics__line.is-active .lyric-wave i:nth-child(2) { animation-delay: -0.85s; }
+.ytm-lyrics__line.is-active .lyric-wave i:nth-child(3) { animation-delay: -0.55s; }
+.ytm-lyrics__line.is-active .lyric-wave i:nth-child(4) { animation-delay: -0.3s; }
+.ytm-lyrics__line.is-active .lyric-wave i:nth-child(5) { animation-delay: -0.7s; }
+@keyframes lyric-wave { 0%, 100% { transform: scaleY(0.22); } 45% { transform: scaleY(1); } 70% { transform: scaleY(0.5); } }
+
+/* Track title: one line; when it is longer than the column it drifts right to left, forever. */
+.np-title { overflow: hidden; }
+.np-marquee { display: block; overflow: hidden; white-space: nowrap; }
+.np-marquee__track { display: inline-flex; gap: 48px; }
+.np-marquee__item { flex: 0 0 auto; }
+.np-marquee .np-link--title { white-space: nowrap; }
+.np-marquee.is-scrolling {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
+}
+.np-marquee.is-scrolling .np-marquee__track { animation: np-marquee var(--marquee-duration, 14s) linear infinite; }
+@keyframes np-marquee { from { transform: translateX(0); } to { transform: translateX(calc(var(--marquee-shift, 50%) * -1)); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ytm-lyrics__line.is-active .lyric-wave i { animation: none; transform: scaleY(0.6); }
+  .np-marquee.is-scrolling { -webkit-mask-image: none; mask-image: none; }
+  .np-marquee.is-scrolling .np-marquee__track { animation: none; }
+  .np-marquee { text-overflow: ellipsis; }
+}
+
+/* ---------- Player sheet legibility: title as wide as the cover, everything white ---------- */
+.listening-world .now-playing { min-width: 0; }
+/* Size containment: a long, scrolling title must never widen the column and squeeze the lyrics. */
+.listening-world .np-meta { width: min(100%, 380px); max-width: none; min-width: 0; contain: inline-size; }
+.listening-world .np-title { color: #fff; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.28); }
+.listening-world .np-artist,
+.listening-world .np-artist .np-link,
+.listening-world .np-artist-sep { color: rgba(255, 255, 255, 0.9); text-shadow: 0 1px 14px rgba(0, 0, 0, 0.35); }
+.listening-world .np-artist .np-link:hover { color: #fff; }
+.listening-world .listening-progress .progress-time { color: rgba(255, 255, 255, 0.92); text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35); }
+.listening-world .np-controls svg,
+.listening-world .np-actions svg,
+.listening-world .np-btns svg { color: #fff; filter: drop-shadow(0 1px 6px rgba(0, 0, 0, 0.35)); }
+.listening-world .np-actions .tactile-icon-control,
+.listening-world .np-btns .tactile-icon-control { color: #fff; border-color: rgba(255, 255, 255, 0.28); background: rgba(255, 255, 255, 0.14); }
+.listening-world .np-actions .tactile-icon-control:hover,
+.listening-world .np-btns .tactile-icon-control:hover { background: rgba(255, 255, 255, 0.24); color: #fff; }
+
+/* Artist with no photo yet: a monogram plate, never a song cover masquerading as a face. */
+.artist-portrait--monogram { display: grid; place-items: center; background: linear-gradient(150deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)); }
+.artist-portrait--monogram span { color: rgba(255, 255, 255, 0.85); font-size: clamp(64px, 9cqw, 104px); font-weight: 800; letter-spacing: -0.04em; }
+.artist-portrait--monogram.is-loading span { animation: portrait-breathe 1.6s ease-in-out infinite; }
+@keyframes portrait-breathe { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .artist-portrait--monogram.is-loading span { animation: none; } }
+
+/* ---------- Player bar: liquid glass + hover micro-interactions ----------
+ * Lighter fill, deeper blur and a specular rim so the artwork behind shows through; every
+ * hover is transform / opacity only (glows are opacity-faded layers, never animated shadows). */
+.mini-player {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0.04) 42%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(26, 28, 34, 0.36);
+  box-shadow:
+    0 34px 80px -28px rgba(0, 0, 0, 0.78),
+    0 10px 24px -14px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.07);
+  -webkit-backdrop-filter: blur(46px) saturate(210%) brightness(1.06);
+  backdrop-filter: blur(46px) saturate(210%) brightness(1.06);
+}
+
+/* A soft specular sheen that brightens as the pointer arrives. */
+.mini-player::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(120% 150% at 10% -40%, rgba(255, 255, 255, 0.24), transparent 56%);
+  opacity: 0.65;
+  pointer-events: none;
+  transition: opacity var(--d-base) var(--ease-standard);
+  content: '';
+}
+.mini-player:hover::before { opacity: 1; }
+
+.am-transport,
+.am-right,
+.am-now {
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+.am-now { transition: background-color var(--d-base) var(--ease-standard); }
+.am-now:hover { background: linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.07)); }
+
+/* Buttons: lift on hover, press in on click, and icons carry their own little gesture. */
+.am-btn,
+.tactile-icon-control {
+  transition: transform var(--d-fast) var(--ease-press), color var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard);
+}
+.am-btn:hover { transform: translateY(-1px) scale(1.08); background: rgba(255, 255, 255, 0.16); }
+.am-btn:active { transform: scale(0.9); background: rgba(255, 255, 255, 0.22); }
+.am-btn svg { transition: transform var(--d-base) var(--ease-press); }
+.am-btn[aria-label="Previous track"]:hover svg { transform: translateX(-2px); }
+.am-btn[aria-label="Next track"]:hover svg { transform: translateX(2px); }
+.am-btn[aria-label^="Shuffle"]:hover svg { transform: rotate(-12deg) scale(1.1); }
+.am-btn[aria-label^="Repeat"]:hover svg { transform: rotate(18deg) scale(1.1); }
+.am-now .tactile-icon-control:hover { transform: scale(1.14); }
+.am-now .tactile-icon-control:active { transform: scale(0.88); }
+
+/* Play: springs up, glows through a faded layer, presses down. */
+.am-play { position: relative; isolation: isolate; transition: transform var(--d-fast) var(--ease-press); }
+.am-play::after {
+  position: absolute;
+  z-index: -1;
+  inset: -10px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--wave) 60%, transparent), transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--d-base) var(--ease-standard);
+  content: '';
+}
+.am-play:hover { transform: scale(1.09); }
+.am-play:hover::after { opacity: 1; }
+.am-play:active { transform: scale(0.92); }
+.am-play svg { transition: transform var(--d-base) var(--ease-press); }
+.am-play:hover svg { transform: scale(1.08); }
+
+/* Cover art: breathes forward on hover so it reads as the way into the player. */
+.am-art { position: relative; transition: transform var(--d-base) var(--ease-press); }
+.am-art:hover { transform: scale(1.07); }
+.am-art:active { transform: scale(0.96); }
+
+/* Scrubbers: the rail thickens and the handle appears under the pointer. */
+.am-range:hover::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; }
+.am-range:hover::-webkit-slider-thumb,
+.am-range:focus-visible::-webkit-slider-thumb { width: 13px; height: 13px; margin-top: -3.5px; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45); }
+.am-range:hover::-moz-range-track { height: 6px; }
+.am-range:hover::-moz-range-thumb,
+.am-range:focus-visible::-moz-range-thumb { width: 13px; height: 13px; background: #fff; }
+
+.am-meta strong,
+.am-meta span { text-shadow: 0 1px 10px rgba(0, 0, 0, 0.3); }
+.am-meta span,
+.am-scrub time { color: rgba(255, 255, 255, 0.78); }
+
+@media (prefers-reduced-motion: reduce) {
+  .am-btn:hover, .am-btn:active, .am-play:hover, .am-play:active, .am-art:hover, .am-art:active,
+  .am-now .tactile-icon-control:hover, .am-now .tactile-icon-control:active { transform: none; }
+  .am-btn:hover svg, .am-play:hover svg { transform: none; }
+}
+
+/* ---------- Artist "about" sheet ---------- */
+.artist-about {
+  position: fixed;
+  z-index: 70;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(12px, 3vw, 40px);
+  background: rgba(6, 6, 9, 0.5);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+}
+
+.artist-about__sheet {
+  position: relative;
+  display: grid;
+  width: min(940px, 100%);
+  max-height: min(680px, 100%);
+  grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 30px;
+  background:
+    radial-gradient(90% 70% at 8% 0%, color-mix(in oklab, var(--art-primary, #3a3d45) 46%, transparent), transparent 70%),
+    radial-gradient(70% 60% at 100% 100%, color-mix(in oklab, var(--art-secondary, #2c2f36) 36%, transparent), transparent 70%),
+    rgba(18, 19, 24, 0.82);
+  box-shadow: 0 50px 120px -30px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.artist-about__close {
+  position: absolute;
+  z-index: 3;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+  transition: transform var(--d-fast) var(--ease-press), background-color var(--d-fast) var(--ease-standard);
+}
+.artist-about__close:hover { transform: rotate(90deg) scale(1.06); background: rgba(255, 255, 255, 0.22); }
+.artist-about__close:active { transform: scale(0.92); }
+
+.artist-about__side { display: flex; min-width: 0; flex-direction: column; gap: 10px; padding: 34px 26px 30px 34px; overflow-y: auto; scrollbar-width: none; }
+.artist-about__portrait {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  margin: 0 0 8px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 30px 50px -28px rgba(0, 0, 0, 0.8);
+}
+.artist-about__portrait img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 16%; }
+.artist-about__portrait span { font-size: 84px; font-weight: 800; color: rgba(255, 255, 255, 0.8); }
+.artist-about__eyebrow { color: rgba(255, 255, 255, 0.6); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; }
+.artist-about__side h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: clamp(28px, 3.4vw, 40px); font-weight: 800; letter-spacing: -0.04em; line-height: 1; overflow-wrap: anywhere; }
+.artist-about__side h2 svg { flex: 0 0 auto; color: var(--wave, #d9e66a); }
+.artist-about__facts { display: flex; flex-wrap: wrap; gap: 7px; margin: 6px 0 0; padding: 0; list-style: none; }
+.artist-about__facts li { padding: 5px 11px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.88); font-size: 12px; }
+
+.artist-about__story { display: flex; min-width: 0; min-height: 0; flex-direction: column; padding: 34px 40px 0 6px; }
+.artist-about__kicker { margin-bottom: 14px; color: var(--wave, #d9e66a); font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+.artist-about__scroll {
+  min-height: 0;
+  flex: 1;
+  padding: 4px 6px 48px 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 22px, #000 calc(100% - 56px), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 22px, #000 calc(100% - 56px), transparent 100%);
+}
+.artist-about__scroll::-webkit-scrollbar { display: none; }
+.artist-about__scroll p { max-width: 62ch; margin: 0 0 1.15em; color: rgba(255, 255, 255, 0.82); font-size: 16px; line-height: 1.75; }
+.artist-about__scroll p.is-lead { color: #fff; font-size: 19px; line-height: 1.65; }
+.artist-about__scroll p.is-lead::first-letter { float: left; margin: 0.06em 0.12em 0 0; color: var(--wave, #d9e66a); font-size: 3.5em; font-weight: 800; line-height: 0.8; }
+
+@media (max-width: 720px) {
+  .artist-about { place-items: end center; padding: 0; }
+  .artist-about__sheet { max-height: 88vh; grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); border-radius: 28px 28px 0 0; }
+  .artist-about__side { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 22px 60px 8px 22px; overflow: visible; }
+  .artist-about__portrait { width: 84px; flex: 0 0 84px; aspect-ratio: 1; margin: 0; border-radius: 18px; }
+  .artist-about__portrait span { font-size: 40px; }
+  .artist-about__eyebrow { flex-basis: calc(100% - 100px); }
+  .artist-about__side h2 { flex-basis: calc(100% - 100px); font-size: 28px; }
+  .artist-about__facts { flex-basis: 100%; }
+  .artist-about__story { padding: 14px 22px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artist-about__close:hover, .artist-about__close:active { transform: none; }
+}
+
+/* Room for glow and blur: lines never touch the scroller's clip edge, so the active line's halo
+ * and the progressive blur fade out in open space instead of being sliced by overflow-x. */
+.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__scroll { padding-inline: clamp(28px, 4vw, 48px); }
+.ytm-lyrics--nobackdrop.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__edge { right: -32px; left: -32px; }
+.ytm-lyrics--softfocus .ytm-lyrics__line.is-active { text-shadow: 0 0 22px rgba(255, 255, 255, 0.2) !important; }
+
+/* ---------- Big player controls: dark glass card, crisp white, clear grouping ---------- */
+.listening-world .np-controls {
+  align-items: stretch;
+  gap: 14px;
+  width: min(100%, 420px);
+  padding: 18px 22px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(10, 12, 16, 0.44), rgba(10, 12, 16, 0.34));
+  box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  backdrop-filter: blur(26px) saturate(150%);
+}
+
+.listening-world .listening-progress { gap: 8px 12px; }
+.listening-world .listening-progress .progress-range { --track-height: 8px; --thumb-size: 16px; --track-rest: rgba(255, 255, 255, 0.3); --track-done: #fff; }
+.listening-world .listening-progress .progress-time {
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-shadow: none;
+  opacity: 0.95;
+}
+
+/* Transport: skip buttons are bare icons, play is the one solid, bright shape. */
+.listening-world .np-btns { gap: 22px; }
+.listening-world .np-btns .tactile-icon-control {
+  width: 52px;
+  height: 52px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+}
+.listening-world .np-btns .tactile-icon-control:hover { background: rgba(255, 255, 255, 0.16); }
+.listening-world .np-btns .tactile-icon-control svg { width: 24px; height: 24px; filter: none; }
+.listening-world .ctrl-play { width: 68px; height: 68px; background: #fff; color: #0b0c10; box-shadow: 0 14px 30px -10px rgba(0, 0, 0, 0.55); }
+.listening-world .ctrl-play svg { width: 26px; height: 26px; }
+.listening-world .ctrl-play:hover { transform: scale(1.06); }
+
+/* Actions: one quiet pill holding the three secondary controls. */
+.listening-world .np-actions {
+  align-self: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.listening-world .np-actions .tactile-icon-control,
+.listening-world .np-actions button {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+}
+.listening-world .np-actions .tactile-icon-control:hover,
+.listening-world .np-actions button:hover { background: rgba(255, 255, 255, 0.16); }
+.listening-world .np-actions .tactile-icon-control.text-accent-deep { color: var(--wave, #d9e66a); }
+.listening-world .np-actions svg { width: 20px; height: 20px; filter: none; }
+
+.listening-world .np-title .np-link,
+.listening-world .np-title .np-link--title { color: #fff; opacity: 1; }
+
+/* ---------- Big player controls, unwrapped: bare controls, even rhythm ---------- */
+.listening-world .np-controls {
+  gap: 26px;
+  width: min(100%, 420px);
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.listening-world .np-controls { --np-lift: drop-shadow(0 1px 8px rgba(0, 0, 0, 0.32)); }
+.listening-world .listening-progress { gap: 10px 12px; }
+.listening-world .listening-progress .progress-range { --track-rest: rgba(255, 255, 255, 0.4); }
+.listening-world .listening-progress .progress-time { text-shadow: 0 1px 10px rgba(0, 0, 0, 0.4); }
+
+.listening-world .np-btns { justify-content: center; gap: 30px; }
+.listening-world .np-btns svg { filter: var(--np-lift); }
+
+/* The one solid shape: a white disc with a black glyph. */
+.listening-world .ctrl-play svg { color: #0b0c10; filter: none; }
+
+.listening-world .np-actions {
+  align-self: center;
+  gap: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.listening-world .np-actions svg { filter: var(--np-lift); }
+.listening-world .np-actions .tactile-icon-control,
+.listening-world .np-actions button { width: 44px; height: 44px; }
+
+/* ---------- Lyrics stage: the cover's colour over black, and a background that visibly moves ---------- */
+.listening-world .music-bg-base {
+  background: linear-gradient(
+    152deg,
+    color-mix(in srgb, var(--music-primary, #5b9dff) 26%, #050608) 0%,
+    color-mix(in srgb, var(--music-secondary, #7f6bff) 18%, #050608) 48%,
+    #040507 100%
+  );
+}
+.listening-world .ambient-blob { opacity: 0.6; }
+.listening-world .blob-5 { opacity: 0.4; }
+.listening-world .music-background__darkness {
+  background:
+    linear-gradient(180deg, rgba(3, 4, 7, 0.34) 0%, rgba(3, 4, 7, 0.16) 30%, rgba(3, 4, 7, 0.2) 66%, rgba(3, 4, 7, 0.5) 100%),
+    radial-gradient(ellipse 110% 90% at 50% 46%, rgba(3, 4, 7, 0) 0%, rgba(3, 4, 7, 0.36) 100%);
+}
+.listening-world .music-background__lyric-field { background: linear-gradient(to right, transparent 0%, rgba(3, 4, 7, 0.22) 46%, rgba(3, 4, 7, 0.4) 100%); }
+.listening-world .listening-world__glow { opacity: 0.28; }
+
+/* Same closed loops, roughly three times quicker, so the colour is seen to travel. */
+.listening-world .blob-1 { animation-duration: 15s; }
+.listening-world .blob-2 { animation-duration: 19s; }
+.listening-world .blob-3 { animation-duration: 23s; }
+.listening-world .blob-4 { animation-duration: 27s; }
+.listening-world .blob-5 { animation-duration: 31s; }
+
+/* Loading: one quiet, centred line — no card, no blur. */
+.ytm-lyrics__state--loading { display: grid; height: 100%; place-items: center; }
+.lyrics-fetch { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+.lyrics-fetch p { margin: 0; color: rgba(255, 255, 255, 0.85); font-size: 15px; font-weight: 500; letter-spacing: 0.02em; }
+.lyric-wave--live i { animation: lyric-wave 1.15s ease-in-out infinite; }
+.lyric-wave--live i:nth-child(2) { animation-delay: -0.85s; }
+.lyric-wave--live i:nth-child(3) { animation-delay: -0.55s; }
+.lyric-wave--live i:nth-child(4) { animation-delay: -0.3s; }
+.lyric-wave--live i:nth-child(5) { animation-delay: -0.7s; }
+@media (prefers-reduced-motion: reduce) { .lyric-wave--live i { animation: none; transform: scaleY(0.6); } }
+
+/* ---------- Lyrics stage colour fields, rebuilt to survive zoom and resize ----------
+ * The old fields were 30vmax elements whose blurred child was scaled 3.4x and screen-blended.
+ * Browsers rasterise that in tiles, and after a zoom change the tile seams showed as hard
+ * rectangles. These are plain gradients that fade to zero before their own edge: no filter,
+ * no scale on the paint layer, no blend mode. Motion is translate only, in viewport units. */
+.listening-world .ambient-blob {
+  width: 84vmax;
+  height: 84vmax;
+  margin: -42vmax 0 0 -42vmax;
+  mix-blend-mode: normal;
+  backface-visibility: visible;
+}
+.listening-world .ambient-blob::before {
+  inset: 0;
+  border-radius: 0;
+  filter: none;
+  transform: none;
+}
+.listening-world .blob-1::before { background: radial-gradient(closest-side, rgba(var(--music-primary-rgb, 91, 157, 255), 0.62) 0%, rgba(var(--music-primary-rgb, 91, 157, 255), 0.3) 45%, rgba(var(--music-primary-rgb, 91, 157, 255), 0) 100%); }
+.listening-world .blob-2::before { background: radial-gradient(closest-side, rgba(var(--music-secondary-rgb, 127, 107, 255), 0.58) 0%, rgba(var(--music-secondary-rgb, 127, 107, 255), 0.28) 45%, rgba(var(--music-secondary-rgb, 127, 107, 255), 0) 100%); }
+.listening-world .blob-3::before { background: radial-gradient(closest-side, rgba(var(--music-accent-rgb, 65, 216, 255), 0.5) 0%, rgba(var(--music-accent-rgb, 65, 216, 255), 0.24) 45%, rgba(var(--music-accent-rgb, 65, 216, 255), 0) 100%); }
+.listening-world .blob-4::before { background: radial-gradient(closest-side, rgba(var(--music-primary-rgb, 91, 157, 255), 0.5) 0%, rgba(var(--music-secondary-rgb, 127, 107, 255), 0.26) 45%, rgba(var(--music-secondary-rgb, 127, 107, 255), 0) 100%); }
+.listening-world .blob-5::before { background: radial-gradient(closest-side, rgba(var(--music-deep-rgb, 8, 9, 11), 0.7) 0%, rgba(var(--music-deep-rgb, 8, 9, 11), 0.32) 45%, rgba(var(--music-deep-rgb, 8, 9, 11), 0) 100%); }
+.listening-world .ambient-blob { opacity: 1; }
+
+.listening-world .blob-1 { animation-name: lyric-drift-1; animation-duration: 16s; }
+.listening-world .blob-2 { animation-name: lyric-drift-2; animation-duration: 20s; }
+.listening-world .blob-3 { animation-name: lyric-drift-3; animation-duration: 24s; }
+.listening-world .blob-4 { animation-name: lyric-drift-4; animation-duration: 28s; }
+.listening-world .blob-5 { animation-name: lyric-drift-5; animation-duration: 32s; }
+
+@keyframes lyric-drift-1 { 0%, 100% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(34vw, 14vh, 0); } 50% { transform: translate3d(12vw, 40vh, 0); } 75% { transform: translate3d(-22vw, 22vh, 0); } }
+@keyframes lyric-drift-2 { 0%, 100% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(-30vw, -20vh, 0); } 50% { transform: translate3d(-44vw, 12vh, 0); } 75% { transform: translate3d(-12vw, 28vh, 0); } }
+@keyframes lyric-drift-3 { 0%, 100% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(-32vw, 22vh, 0); } 50% { transform: translate3d(-48vw, -8vh, 0); } 75% { transform: translate3d(-14vw, -26vh, 0); } }
+@keyframes lyric-drift-4 { 0%, 100% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(34vw, -20vh, 0); } 50% { transform: translate3d(48vw, 10vh, 0); } 75% { transform: translate3d(16vw, 30vh, 0); } }
+@keyframes lyric-drift-5 { 0%, 100% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(-24vw, 20vh, 0); } 50% { transform: translate3d(18vw, 34vh, 0); } 75% { transform: translate3d(30vw, -14vh, 0); } }
+
+/* ---------- Fluid cover backdrop (Apple Music style, raw CSS) ----------
+ * Not the picture — two colours pulled out of it, plus black. Four blurred orbs, each
+ * orbiting its own anchor while turning; a zero-size .fluid__spin rotates (transform only,
+ * compositor), its .fluid__orb child offset from that anchor, so it both orbits and twists.
+ * Colour orbs blend with mix-blend-mode: screen, so where two cross they fuse into a third,
+ * brighter hue instead of just overlapping — the same trick a real mesh gradient uses. The
+ * black orb blends normally and gives the field somewhere to recede to. */
+.fluid { position: absolute; inset: 0; overflow: hidden; background: #050608; contain: paint; }
+.fluid__scene { position: absolute; inset: 0; opacity: 1; }
+.fluid__scene.is-incoming { opacity: 0; animation: fluid-in 1.3s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes fluid-in { to { opacity: 1; } }
+
+.fluid__spin { position: absolute; left: var(--ax); top: var(--ay); width: 0; height: 0; will-change: transform; animation: fluid-turn var(--turn) linear infinite; animation-direction: var(--dir, normal); }
+.fluid__orb {
+  position: absolute;
+  width: var(--size);
+  height: var(--size);
+  left: calc(var(--size) / -2);
+  top: calc(var(--size) / -2);
+  border-radius: 50%;
+  filter: blur(30px);
+  opacity: var(--alpha, 0.92);
+  transform: translate(var(--ox), var(--oy));
+}
+.fluid__orb--a { background: radial-gradient(circle, rgba(var(--fluid-a), 0.9) 0%, rgba(var(--fluid-a), 0.5) 42%, transparent 74%); mix-blend-mode: screen; }
+.fluid__orb--b { background: radial-gradient(circle, rgba(var(--fluid-b), 0.9) 0%, rgba(var(--fluid-b), 0.5) 42%, transparent 74%); mix-blend-mode: screen; }
+.fluid__orb--dark { background: radial-gradient(circle, rgba(3, 4, 7, 0.95) 0%, rgba(3, 4, 7, 0.6) 46%, transparent 78%); mix-blend-mode: normal; }
+@keyframes fluid-turn { to { transform: rotate(360deg); } }
+
+.fluid__spin--1 { --ax: 30%; --ay: 34%; --size: 74vmax; --ox: 12vmax; --oy: -6vmax; --turn: 34s; --alpha: 0.95; }
+.fluid__spin--2 { --ax: 72%; --ay: 30%; --size: 66vmax; --ox: -14vmax; --oy: 8vmax; --turn: 42s; --dir: reverse; --alpha: 0.85; }
+.fluid__spin--3 { --ax: 62%; --ay: 80%; --size: 70vmax; --ox: 10vmax; --oy: 10vmax; --turn: 50s; --alpha: 0.7; }
+.fluid__spin--4 { --ax: 24%; --ay: 78%; --size: 76vmax; --ox: -10vmax; --oy: -12vmax; --turn: 58s; --dir: reverse; --alpha: 0.9; }
+
+/* Seat the lyrics: an even dark veil, heavier under the text column and at the floor. */
+.fluid__shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, rgba(3, 4, 7, 0.06) 0%, rgba(3, 4, 7, 0.2) 55%, rgba(3, 4, 7, 0.36) 100%),
+    linear-gradient(180deg, rgba(3, 4, 7, 0.24) 0%, rgba(3, 4, 7, 0.06) 34%, rgba(3, 4, 7, 0.1) 66%, rgba(3, 4, 7, 0.46) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) { .fluid__spin { animation: none; } }
+.app-shell[data-motion-paused='true'] .fluid__spin { animation-play-state: paused; }

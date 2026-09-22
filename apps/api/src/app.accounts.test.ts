@@ -26,8 +26,24 @@ function fakeFetch(input: RequestInfo | URL): Promise<Response> {
   return Promise.resolve(jsonResponse({ success: true, data: { results: [rawSong] } }));
 }
 
+/**
+ * Stands in for Convex Auth: `convex:<userId>` is a signed-in account. The real
+ * RS256/JWKS verification is proved against generated keys in auth/verifier.test.ts;
+ * here we only need a caller the API treats as signed in.
+ */
+const fakeAccountVerifier = {
+  verify: async (token: string) =>
+    token.startsWith('convex:') ? { userId: token.slice('convex:'.length), source: 'convex' as const } : null
+};
+
 function app() {
-  const services = createServices({ jwtSecret: 'test-secret', fetchImpl: fakeFetch, saavnApiUrl: 'https://saavn.test/api', gaanaApiUrl: 'https://gaana.test/api' });
+  const services = createServices({
+    jwtSecret: 'test-secret',
+    fetchImpl: fakeFetch,
+    saavnApiUrl: 'https://saavn.test/api',
+    gaanaApiUrl: 'https://gaana.test/api',
+    accountVerifier: fakeAccountVerifier
+  });
   return createApp({ version: 'test', jwtSecret: 'test-secret', services, rateLimit: false });
 }
 
@@ -36,54 +52,56 @@ async function guest(server: ReturnType<typeof app>): Promise<string> {
   return response.body.data.token as string;
 }
 
-test('a guest becomes an account and keeps what they had; the email cannot be registered twice', async () => {
+test('signing in with Google keeps the playlists and likes made as a guest', async () => {
   const server = app();
   const token = await guest(server);
   await request(server).post('/api/libraries').set('Authorization', `Bearer ${token}`).send({ name: 'Late night' });
+  await request(server).post('/api/me/liked').set('Authorization', `Bearer ${token}`).send({ songId: 'song-1' });
 
-  const registered = await request(server)
-    .post('/api/auth/register')
-    .set('Authorization', `Bearer ${token}`)
-    .send({ email: 'Asha@Example.com', password: 'correct horse', displayName: 'Asha' });
-  assert.equal(registered.status, 201);
-  const accountToken = registered.body.data.token as string;
+  const account = 'convex:user_asha';
+  const linked = await request(server)
+    .post('/api/auth/link')
+    .set('Authorization', `Bearer ${account}`)
+    .send({ guestToken: token });
+  assert.equal(linked.status, 200);
+  assert.equal(linked.body.data.isGuest, false);
 
-  const me = await request(server).get('/api/auth/me').set('Authorization', `Bearer ${accountToken}`);
-  assert.equal(me.body.data.isGuest, false);
-  assert.equal(me.body.data.displayName, 'Asha');
-  assert.equal(me.body.data.email, 'asha@example.com');
-  assert.equal('passwordHash' in me.body.data, false);
-
-  const libraries = await request(server).get('/api/libraries').set('Authorization', `Bearer ${accountToken}`);
+  const libraries = await request(server).get('/api/libraries').set('Authorization', `Bearer ${account}`);
   assert.equal(libraries.body.data[0].name, 'Late night');
-
-  const again = await request(server).post('/api/auth/register').send({ email: 'asha@example.com', password: 'another one!!' });
-  assert.equal(again.status, 409);
-});
-
-test('login checks the password, and folds a guest session on this device into the account', async () => {
-  const server = app();
-  await request(server).post('/api/auth/register').send({ email: 'ravi@example.com', password: 'a-long-password' });
-
-  const wrong = await request(server).post('/api/auth/login').send({ email: 'ravi@example.com', password: 'not-it-at-all' });
-  assert.equal(wrong.status, 401);
-  const unknown = await request(server).post('/api/auth/login').send({ email: 'nobody@example.com', password: 'a-long-password' });
-  assert.equal(unknown.status, 401);
-  assert.equal(wrong.body.error, unknown.body.error);
-
-  const visitor = await guest(server);
-  await request(server).post('/api/me/liked').set('Authorization', `Bearer ${visitor}`).send({ songId: 'song-1' });
-
-  const login = await request(server).post('/api/auth/login').set('Authorization', `Bearer ${visitor}`).send({ email: 'ravi@example.com', password: 'a-long-password' });
-  assert.equal(login.status, 200);
-  const liked = await request(server).get('/api/me/liked').set('Authorization', `Bearer ${login.body.data.token}`);
+  const liked = await request(server).get('/api/me/liked').set('Authorization', `Bearer ${account}`);
   assert.equal(liked.body.data.length, 1);
 });
 
-test('short passwords and bad emails are refused before anything is stored', async () => {
+test('a signed-in listener is not a guest and never sees credentials', async () => {
   const server = app();
-  assert.equal((await request(server).post('/api/auth/register').send({ email: 'nope', password: 'long-enough-1' })).status, 400);
-  assert.equal((await request(server).post('/api/auth/register').send({ email: 'a@b.co', password: 'short' })).status, 400);
+  const me = await request(server).get('/api/auth/me').set('Authorization', 'Bearer convex:user_ravi');
+  assert.equal(me.status, 200);
+  assert.equal(me.body.data.isGuest, false);
+  assert.equal(me.body.data.userId, 'user_ravi');
+  assert.equal('passwordHash' in me.body.data, false);
+});
+
+test('linking refuses an unverified caller and a missing guest token', async () => {
+  const server = app();
+  const token = await guest(server);
+
+  const noAuth = await request(server).post('/api/auth/link').send({ guestToken: token });
+  assert.equal(noAuth.status, 401);
+
+  const forged = await request(server)
+    .post('/api/auth/link')
+    .set('Authorization', 'Bearer not-a-real-token')
+    .send({ guestToken: token });
+  assert.equal(forged.status, 401);
+
+  const noGuest = await request(server).post('/api/auth/link').set('Authorization', 'Bearer convex:user_x').send({});
+  assert.equal(noGuest.status, 400);
+});
+
+test('an unknown bearer token cannot reach a library at all', async () => {
+  const server = app();
+  const response = await request(server).get('/api/libraries').set('Authorization', 'Bearer made-up');
+  assert.equal(response.status, 401);
 });
 
 test('liking and playing teach the taste profile, and onboarding seeds it', async () => {

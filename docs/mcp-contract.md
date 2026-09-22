@@ -96,7 +96,7 @@ in `src/app.ts`) — there is no MCP-specific bucket yet (plan work item 8).
 
 The SDK's transport supports `allowedHosts`/`allowedOrigins`/`enableDnsRebindingProtection`. That
 guards a server listening on `localhost` from a malicious webpage rebinding DNS to reach it through
-a victim's browser. `/mcp` is a public HTTPS App Runner endpoint called server-to-server (by
+a victim's browser. `/mcp` is a public HTTPS endpoint called server-to-server (by
 ChatGPT's backend, not from inside a user's browser tab), so that attack doesn't apply here — noted
 so this isn't mistaken for an oversight.
 

@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 
-import type { AiConfig, UploadsConfig } from './config.js';
+import type { AiConfig, KaraokeAwsConfig, MusicBrainzConfig, UploadsConfig } from './config.js';
 import { createServices, type AppServices } from './services.js';
 import type { CacheStore } from './lib/cache.js';
 import { createLogger, REDACTED_PATHS } from './lib/logger.js';
@@ -16,6 +16,7 @@ import { sendFailure } from './routes/common.js';
 import { lyricsRouter } from './routes/lyrics.js';
 import { mcpRouter } from './mcp/server.js';
 import { sharedRouter } from './routes/shared.js';
+import { karaokeRouter } from './routes/karaoke.js';
 import { streamRouter } from './routes/stream.js';
 import { uploadsRouter } from './routes/uploads.js';
 import { userRouter } from './routes/user.js';
@@ -35,9 +36,11 @@ export interface AppOptions {
   readonly saavnSecondaryApiUrl?: string;
   readonly gaanaApiUrl?: string;
   readonly lrclibApiUrl?: string;
+  readonly musicBrainz?: MusicBrainzConfig;
   readonly lyricaApiUrl?: string;
   readonly betterLyricsApiUrl?: string;
   readonly betterLyricsApiKey?: string;
+  readonly karaoke?: KaraokeAwsConfig;
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
   readonly ai?: AiConfig;
@@ -86,9 +89,13 @@ export function createApp(options: AppOptions): Express {
     ...(options.saavnSecondaryApiUrl ? { saavnSecondaryApiUrl: options.saavnSecondaryApiUrl } : {}),
     ...(options.gaanaApiUrl ? { gaanaApiUrl: options.gaanaApiUrl } : {}),
     ...(options.lrclibApiUrl ? { lrclibApiUrl: options.lrclibApiUrl } : {}),
+    ...(options.musicBrainz ? { musicBrainz: options.musicBrainz } : {}),
+    ...(options.version ? { version: options.version } : {}),
     ...(options.lyricaApiUrl ? { lyricaApiUrl: options.lyricaApiUrl } : {}),
     ...(options.betterLyricsApiUrl ? { betterLyricsApiUrl: options.betterLyricsApiUrl } : {}),
     ...(options.betterLyricsApiKey ? { betterLyricsApiKey: options.betterLyricsApiKey } : {}),
+    ...(options.karaoke ? { karaoke: options.karaoke } : {}),
+    ...(options.uploads ? { uploads: options.uploads } : {}),
     ...(options.convexUrl ? { convexUrl: options.convexUrl } : {}),
     ...(options.convexServerSecret ? { convexServerSecret: options.convexServerSecret } : {}),
     ...(options.ai ? { ai: options.ai } : {}),
@@ -110,6 +117,7 @@ export function createApp(options: AppOptions): Express {
   app.use('/api', artworkRouter(services.artwork));
   app.use('/api', lyricsRouter(services.lyrics));
   app.use('/api', streamRouter(services.stream));
+  app.use('/api', karaokeRouter(services.karaoke));
   app.use('/api', authRouter(services.auth));
   app.use('/api', userRouter(services.auth, services.catalog, options.uploads?.publicBaseUrl));
   app.use('/api', sharedRouter(services.auth, services.catalog, options.uploads?.publicBaseUrl));
@@ -127,7 +135,7 @@ export function createApp(options: AppOptions): Express {
 
 function createRateLimiter(config: AppOptions['rateLimit']): (request: Request, response: Response, next: NextFunction) => void {
   const limits = config === false || config === undefined ? {} : config;
-  const api = limiter(limits.api ?? { windowMs: 60_000, limit: 120 });
+  const api = limiter(limits.api ?? { windowMs: 60_000, limit: 300 });
   const stream = limiter(limits.stream ?? { windowMs: 60_000, limit: 300 });
   const auth = limiter(limits.auth ?? { windowMs: 60_000, limit: 30 });
   // Bedrock/translate are the spendy paths — keep them well under the general API budget.

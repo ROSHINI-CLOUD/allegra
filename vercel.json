@@ -1,8 +1,8 @@
 {
-  "framework": null,
-  "installCommand": "npm install && npm --prefix apps/web ci",
+  "framework": "nextjs",
+  "installCommand": "npm install",
   "buildCommand": "npm --prefix apps/web run build",
-  "outputDirectory": "apps/web/dist",
+  "outputDirectory": "apps/web/.next",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" }
   ]

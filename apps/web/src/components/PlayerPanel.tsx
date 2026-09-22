@@ -2,6 +2,7 @@ import {
   ChevronDown,
   Heart,
   ListMusic,
+  Mic2,
   SkipBack,
   SkipForward,
   Sparkles,
@@ -10,15 +11,17 @@ import {
   Waves
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import type { CSSProperties } from 'react';
-import { useEffect, useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { UnifiedSong } from '@shared/types';
 
 import { DynamicLyricsBackground } from './DynamicLyricsBackground';
+import { FluidArtBackground } from './FluidArtBackground';
 import { LyricsPanel } from './LyricsPanel';
 import { PlaylistMenu } from './PlaylistMenu';
-import { Artwork, IconButton } from './ui';
+import { Artwork, IconButton, TactileButton } from './ui';
+import type { KaraokeController } from '../hooks/useKaraoke';
 import type { Palette } from '../lib/palette';
 import { tapHaptic } from '../lib/haptics';
 import { creditedArtists, formatTime, clamp } from '../lib/utils';
@@ -43,6 +46,7 @@ interface PlayerPanelProps {
   /** @deprecated Kept for call-site compatibility; atmosphere is CSS artwork now. */
   readonly energy?: number;
   readonly suggestions?: UnifiedSong[];
+  readonly karaoke?: KaraokeController;
   readonly onCollapse: () => void;
   readonly onOpenWorkspace: () => void;
   readonly onOpenImmersive: () => void;
@@ -79,6 +83,7 @@ export function PlayerPanel({
   palette,
   light = false,
   suggestions = [],
+  karaoke,
   onCollapse,
   onOpenWorkspace,
   onOpenImmersive,
@@ -162,7 +167,11 @@ export function PlayerPanel({
           <div className="listening-world__atmosphere" aria-hidden="true">
             {/* Gradient atmosphere, not a blurred cover: two composited layers instead of
                 stacked filter:blur passes, so it stays smooth on a phone. */}
-            <DynamicLyricsBackground artworkUrl={song.artwork} palette={palette} light={light} />
+            {song.artwork ? (
+              <FluidArtBackground artworkUrl={song.artwork} />
+            ) : (
+              <DynamicLyricsBackground artworkUrl={song.artwork} palette={palette} light={light} />
+            )}
             <div className="listening-world__glow" />
           </div>
 
@@ -229,18 +238,20 @@ export function PlayerPanel({
                 </motion.div>
                 <div className="np-meta">
                   <h2 id="player-title" className="np-title">
-                    {onOpenAlbum ? (
-                      <button
-                        type="button"
-                        className="np-link np-link--title"
-                        title={song.album ? `Open album ${song.album}` : `Open ${song.title}`}
-                        onClick={() => onOpenAlbum(song)}
-                      >
-                        {song.title}
-                      </button>
-                    ) : (
-                      song.title
-                    )}
+                    <MarqueeText text={song.title}>
+                      {onOpenAlbum ? (
+                        <button
+                          type="button"
+                          className="np-link np-link--title"
+                          title={song.album ? `Open album ${song.album}` : `Open ${song.title}`}
+                          onClick={() => onOpenAlbum(song)}
+                        >
+                          {song.title}
+                        </button>
+                      ) : (
+                        song.title
+                      )}
+                    </MarqueeText>
                   </h2>
                   <p className="np-artist">
                     {onOpenArtist && artists.length > 0
@@ -283,6 +294,67 @@ export function PlayerPanel({
                     <PlaylistMenu song={song} />
                     <IconButton icon={muted ? VolumeX : Volume2} label={muted ? 'Unmute' : 'Mute'} active={muted} onClick={onMute} />
                   </div>
+                  {karaoke?.available ? (
+                    <div className="np-karaoke">
+                      <TactileButton
+                        variant={karaoke.mode === 'on' ? 'primary' : 'secondary'}
+                        icon={Mic2}
+                        className={`np-karaoke-btn${karaoke.busy ? ' is-busy' : ''}${karaoke.mode === 'on' ? ' is-on' : ''}`}
+                        disabled={karaoke.busy}
+                        aria-pressed={karaoke.mode === 'on'}
+                        aria-busy={karaoke.busy || undefined}
+                        onClick={() => {
+                          tapHaptic(10);
+                          void karaoke.toggle();
+                        }}
+                      >
+                        {karaoke.busy
+                          ? 'Preparing Sing…'
+                          : karaoke.mode === 'on'
+                            ? 'Sing on'
+                            : 'Sing'}
+                      </TactileButton>
+                      {karaoke.error ? (
+                        <p className="np-karaoke-error" role="alert">
+                          {karaoke.error}
+                        </p>
+                      ) : null}
+                      {karaoke.busy ? (
+                        <p className="np-karaoke-hint">Separating vocals and instruments…</p>
+                      ) : null}
+                      {karaoke.mode === 'on' && !karaoke.busy && karaoke.vocalsUrl ? (
+                        <div className="np-karaoke-sliders">
+                          <label className="np-karaoke-slider">
+                            <span>Voice</span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={Math.round(karaoke.vocalsLevel * 100)}
+                              aria-valuetext={`${Math.round(karaoke.vocalsLevel * 100)}%`}
+                              onChange={(event) => karaoke.setVocalsLevel(Number(event.target.value) / 100)}
+                            />
+                            <span className="np-karaoke-pct">{Math.round(karaoke.vocalsLevel * 100)}%</span>
+                          </label>
+                          <label className="np-karaoke-slider">
+                            <span>Instrumental</span>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              value={Math.round(karaoke.instrumentalLevel * 100)}
+                              aria-valuetext={`${Math.round(karaoke.instrumentalLevel * 100)}%`}
+                              onChange={(event) => karaoke.setInstrumentalLevel(Number(event.target.value) / 100)}
+                            />
+                            <span className="np-karaoke-pct">{Math.round(karaoke.instrumentalLevel * 100)}%</span>
+                          </label>
+                        </div>
+                      ) : null}
+                      {karaoke.mode === 'on' && !karaoke.busy && !karaoke.vocalsUrl ? (
+                        <p className="np-karaoke-hint">Instrumental playing — sing along with the lyrics.</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -454,3 +526,43 @@ function Scrubber({
 }
 
 
+
+/** Pixels per second the title drifts at: slow enough to read, fast enough to finish a lap. */
+const MARQUEE_SPEED = 36;
+/** Space between the end of one lap and the start of the next; keep in step with .np-marquee__track gap. */
+const MARQUEE_GAP = 48;
+
+/**
+ * One-line title. When it fits it sits still; when it does not, two copies drift right to
+ * left in a seamless loop (translateX only). Reduced motion falls back to an ellipsis.
+ */
+function MarqueeText({ text, children }: { readonly text: string; readonly children: ReactNode }) {
+  const frameRef = useRef<HTMLSpanElement | null>(null);
+  const measureRef = useRef<HTMLSpanElement | null>(null);
+  const [overflow, setOverflow] = useState<number | null>(null);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    const measure = measureRef.current;
+    if (!frame || !measure) return undefined;
+    const update = (): void => {
+      const width = measure.getBoundingClientRect().width;
+      setOverflow(width > frame.clientWidth + 1 ? width : null);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [text]);
+
+  const style = overflow ? ({ '--marquee-duration': `${Math.max(8, (overflow + MARQUEE_GAP) / MARQUEE_SPEED)}s`, '--marquee-shift': `${overflow + MARQUEE_GAP}px` } as CSSProperties) : undefined;
+
+  return (
+    <span ref={frameRef} className={`np-marquee${overflow ? ' is-scrolling' : ''}`} style={style}>
+      <span className="np-marquee__track">
+        <span ref={measureRef} className="np-marquee__item">{children}</span>
+        {overflow ? <span className="np-marquee__item" aria-hidden="true">{text}</span> : null}
+      </span>
+    </span>
+  );
+}

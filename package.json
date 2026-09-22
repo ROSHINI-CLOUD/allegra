@@ -11,20 +11,20 @@
     "mock": "node mocks/server.mjs",
     "contract-test": "node tests/contract/contract-smoke.mjs",
     "infra:test": "node --test tests/infra/infra-files.test.mjs",
-    "typecheck": "npm --prefix apps/api run typecheck && npm --prefix apps/web run typecheck",
-    "lint": "npm --prefix apps/api run lint && npm --prefix apps/web run lint",
-    "test": "npm --prefix apps/api test && npm --prefix apps/web test && npm run infra:test",
-    "build": "npm --prefix apps/api run build && npm --prefix apps/web run build"
+    "convex:dev": "convex dev",
+    "convex:deploy": "convex deploy",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm test --workspaces --if-present && npm run infra:test",
+    "build": "npm run build --workspaces --if-present"
   },
   "dependencies": {
-    "convex": "^1.46.0",
-    "cors": "^2.8.5",
-    "express": "^5.1.0",
-    "express-rate-limit": "^8.1.0",
-    "helmet": "^8.1.0",
-    "jsonwebtoken": "^9.0.2",
-    "pino": "^9.9.0",
-    "pino-http": "^10.5.0",
-    "zod": "^4.1.5"
-  }
+    "@auth/core": "^0.41.3",
+    "@convex-dev/auth": "^0.0.95",
+    "convex": "^1.46.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }

@@ -43,7 +43,6 @@ export interface UserData {
   readonly settings: Record<string, unknown>;
   readonly displayName?: string;
   readonly email?: string;
-  readonly passwordHash?: string;
   readonly taste?: TasteProfile;
 }
 

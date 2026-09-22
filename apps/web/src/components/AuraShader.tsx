@@ -105,7 +105,7 @@ function compileShader(gl: WebGLRenderingContext, type: number, source: string):
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
   if (gl.getShaderParameter(shader, gl.COMPILE_STATUS)) return shader;
-  if (import.meta.env.DEV) console.warn('[AuraShader] compile failed:', gl.getShaderInfoLog(shader));
+  if (process.env.NODE_ENV !== 'production') console.warn('[AuraShader] compile failed:', gl.getShaderInfoLog(shader));
   gl.deleteShader(shader);
   return null;
 }

@@ -137,6 +137,6 @@ export function sharedRouter(auth: AuthService, catalog: CatalogService, coversP
 }
 
 async function currentUser(auth: AuthService, request: Parameters<typeof getUserId>[1]): Promise<UserData | null> {
-  const userId = getUserId(auth, request);
+  const userId = await getUserId(auth, request);
   return userId ? auth.getUser(userId).catch(() => null) : null;
 }

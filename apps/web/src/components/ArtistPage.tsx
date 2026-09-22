@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react';
 
 import type { ArtistProfile, UnifiedSong } from '@shared/types';
 
+import { ArtistAbout } from './ArtistAbout';
 import { PlaylistMenu } from './PlaylistMenu';
 import { Artwork, EmptyState, IconButton, SkeletonCard, TactileButton } from './ui';
 import { formatAlbumDuration } from '../lib/album';
@@ -22,6 +23,8 @@ interface ArtistPageProps {
   readonly name: string;
   /** Provider profile: real photo, followers, verified flag, albums. Null while loading or when unavailable. */
   readonly profile: ArtistProfile | null;
+  /** The artist's photo from the face lookup, used when the full profile did not load. Never a song cover. */
+  readonly photoFallback?: string | null;
   /** This artist's tracks, most popular first. */
   readonly songs: readonly UnifiedSong[];
   readonly related: readonly RelatedArtist[];
@@ -69,6 +72,7 @@ function formatFollowers(count: number): string {
 export function ArtistPage({
   name,
   profile,
+  photoFallback = null,
   songs,
   related,
   loading,
@@ -86,13 +90,14 @@ export function ArtistPage({
   onOpenArtist
 }: ArtistPageProps) {
   const [expanded, setExpanded] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [palette, setPalette] = useState<Palette | null>(null);
   const [stuck, setStuck] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const queue = useMemo(() => [...songs], [songs]);
-  const lead = songs[0] ?? null;
-  const photo = profile?.image ?? null;
-  const heroImage = photo ?? lead?.artwork ?? null;
+  // The portrait is the artist, never a song cover: without a photo it is a monogram.
+  const photo = profile?.image ?? photoFallback;
+  const heroImage = photo;
   const displayName = profile?.name ?? name;
 
   // Once the hero has scrolled off the top, a compact bar (name + play) takes over so the controls stay reachable.
@@ -179,9 +184,11 @@ export function ArtistPage({
         <div className="artist-hero__inner">
           {photo ? (
             <figure className="artist-portrait"><img src={photo} alt="" crossOrigin="anonymous" /></figure>
-          ) : lead ? (
-            <figure className="artist-portrait"><Artwork song={lead} size="large" /></figure>
-          ) : null}
+          ) : (
+            <figure className={`artist-portrait artist-portrait--monogram${loading ? ' is-loading' : ''}`} aria-hidden="true">
+              <span>{displayName.trim().slice(0, 1).toLocaleUpperCase()}</span>
+            </figure>
+          )}
           <div className="artist-hero-copy">
             <span className="artist-hero-eyebrow">{profile?.isVerified ? 'Verified artist' : 'Artist'}</span>
             <h1>
@@ -206,7 +213,22 @@ export function ArtistPage({
       </header>
       <div ref={sentinelRef} className="detail-sentinel" aria-hidden="true" />
 
-      {profile?.bio ? <p className="artist-bio">{profile.bio}</p> : null}
+      {profile?.bio ? (
+        <div className="artist-bio-block">
+          <p className="artist-bio is-clamped">{profile.bio}</p>
+          <button type="button" className="show-more" aria-haspopup="dialog" onClick={() => setAboutOpen(true)}>Read more</button>
+          <ArtistAbout
+            open={aboutOpen}
+            name={displayName}
+            photo={photo}
+            verified={profile.isVerified}
+            bio={profile.bio}
+            facts={stats}
+            tint={heroStyle}
+            onClose={() => setAboutOpen(false)}
+          />
+        </div>
+      ) : null}
 
       {loading ? (
         <section className="artist-section-block" aria-label="Loading songs" aria-busy="true">

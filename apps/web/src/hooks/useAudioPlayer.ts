@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UnifiedSong } from '@shared/types';
 
 import { resolveApiUrl } from '../lib/api';
+import { SingStemPlayer, type SingStemUrls } from '../lib/singStemPlayer';
 import { songIdentity, uniqueByIdentity } from '../lib/songIdentity';
 import { clamp } from '../lib/utils';
 
@@ -36,6 +37,17 @@ export interface AudioPlayerState {
   readonly setVolume: (value: number) => void;
   readonly toggleShuffle: () => void;
   readonly cycleRepeat: () => void;
+  /**
+   * Swap the element source (e.g. original ↔ karaoke instrumental) while keeping
+   * the same song identity, timestamp, and play/pause intent.
+   */
+  readonly swapAudioSource: (streamUrl: string) => Promise<void>;
+  /** Enter Sing mode with synchronized vocal + instrumental stems (Web Audio gains). */
+  readonly enterSingMode: (stems: SingStemUrls) => Promise<void>;
+  /** Leave Sing mode and restore the original master stream at the same timestamp. */
+  readonly exitSingMode: () => Promise<void>;
+  readonly setSingGains: (vocals: number, instrumental: number) => void;
+  readonly singActive: boolean;
   readonly audioRef: React.RefObject<HTMLAudioElement | null>;
 }
 
@@ -51,6 +63,11 @@ export function useAudioPlayer(): AudioPlayerState {
   const autoAdvancedRef = useRef(false);
   const shuffleRef = useRef(false);
   const repeatRef = useRef<RepeatMode>('off');
+  /** When set, the element plays this URL instead of currentSong.streamUrl. */
+  const sourceOverrideRef = useRef<string | null>(null);
+  const singPlayerRef = useRef<SingStemPlayer | null>(null);
+  const singActiveRef = useRef(false);
+  const [singActive, setSingActive] = useState(false);
   const [currentSong, setCurrentSong] = useState<UnifiedSong | null>(null);
   const [queue, setQueue] = useState<UnifiedSong[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -72,6 +89,23 @@ export function useAudioPlayer(): AudioPlayerState {
 
   const requestPlayback = useCallback(async (playing: boolean): Promise<void> => {
     playbackIntentRef.current = playing;
+    if (singActiveRef.current && singPlayerRef.current) {
+      if (!playing) {
+        singPlayerRef.current.pause();
+        setIsPlaying(false);
+        return;
+      }
+      try {
+        await singPlayerRef.current.play();
+        setIsPlaying(true);
+        setError(null);
+      } catch {
+        setError('Playback needs a tap to begin. Try the play button again.');
+        setIsPlaying(false);
+        setIsBuffering(false);
+      }
+      return;
+    }
     const audio = audioRef.current;
     if (!audio || !currentSongRef.current) return;
     if (!playing) {
@@ -101,6 +135,13 @@ export function useAudioPlayer(): AudioPlayerState {
       playbackIntentRef.current = true;
       void requestPlayback(true);
       return;
+    }
+    sourceOverrideRef.current = null;
+    if (singActiveRef.current) {
+      singActiveRef.current = false;
+      setSingActive(false);
+      void singPlayerRef.current?.stop();
+      singPlayerRef.current = null;
     }
     const source = nextQueue.length > 0 ? nextQueue : [song];
     const withCurrent = source.some((item) => item.id === song.id) ? source : [song, ...source];
@@ -196,6 +237,7 @@ export function useAudioPlayer(): AudioPlayerState {
 
   const stop = useCallback((): void => {
     playbackGenerationRef.current += 1;
+    sourceOverrideRef.current = null;
     playbackIntentRef.current = false;
     pendingPlaybackRef.current = false;
     autoAdvancedRef.current = true;
@@ -224,6 +266,16 @@ export function useAudioPlayer(): AudioPlayerState {
   }, []);
 
   const seek = useCallback(async (seconds: number): Promise<void> => {
+    if (singActiveRef.current && singPlayerRef.current) {
+      const player = singPlayerRef.current;
+      const nextTime = clamp(seconds, 0, player.duration || duration);
+      const wasPlaying = playbackIntentRef.current;
+      player.pause();
+      player.seek(nextTime);
+      setCurrentTime(nextTime);
+      if (wasPlaying) await requestPlayback(true);
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
     const nextTime = clamp(seconds, 0, Number.isFinite(audio.duration) ? audio.duration : duration);
@@ -234,11 +286,129 @@ export function useAudioPlayer(): AudioPlayerState {
     if (wasPlaying) await requestPlayback(true);
   }, [duration, requestPlayback]);
 
+  const swapAudioSource = useCallback(async (streamUrl: string): Promise<void> => {
+    if (singActiveRef.current) return;
+    const audio = audioRef.current;
+    const song = currentSongRef.current;
+    if (!audio || !song) return;
+    const nextSrc = resolveApiUrl(streamUrl);
+    if (audio.src === nextSrc) return;
+
+    const wasPlaying = playbackIntentRef.current;
+    const resumeAt = audio.currentTime;
+    sourceOverrideRef.current = streamUrl;
+    playbackGenerationRef.current += 1;
+    const generation = playbackGenerationRef.current;
+
+    audio.pause();
+    setIsBuffering(true);
+    audio.src = nextSrc;
+    audio.load();
+
+    await new Promise<void>((resolve) => {
+      const onReady = (): void => {
+        audio.removeEventListener('loadedmetadata', onReady);
+        audio.removeEventListener('error', onReady);
+        resolve();
+      };
+      audio.addEventListener('loadedmetadata', onReady, { once: true });
+      audio.addEventListener('error', onReady, { once: true });
+    });
+
+    if (generation !== playbackGenerationRef.current || currentSongRef.current?.id !== song.id) return;
+    audio.currentTime = resumeAt;
+    setCurrentTime(resumeAt);
+    setIsBuffering(false);
+    if (wasPlaying) await requestPlayback(true);
+  }, [requestPlayback]);
+
+  const enterSingMode = useCallback(async (stems: SingStemUrls): Promise<void> => {
+    const audio = audioRef.current;
+    const song = currentSongRef.current;
+    if (!audio || !song) return;
+
+    const wasPlaying = playbackIntentRef.current;
+    const resumeAt = audio.currentTime;
+    playbackGenerationRef.current += 1;
+    const generation = playbackGenerationRef.current;
+
+    audio.pause();
+    setIsBuffering(true);
+    const player = singPlayerRef.current ?? new SingStemPlayer();
+    singPlayerRef.current = player;
+    try {
+      await player.start(stems, resumeAt, wasPlaying, volume);
+    } catch {
+      setIsBuffering(false);
+      setError("Couldn't start Sing mode. Try again.");
+      return;
+    }
+    if (generation !== playbackGenerationRef.current || currentSongRef.current?.id !== song.id) {
+      await player.stop();
+      return;
+    }
+    singActiveRef.current = true;
+    setSingActive(true);
+    setCurrentTime(resumeAt);
+    if (player.duration > 0) setDuration(player.duration);
+    setIsBuffering(false);
+    setIsPlaying(wasPlaying);
+    player.onTimeUpdate(() => {
+      if (!singActiveRef.current || singPlayerRef.current !== player) return;
+      setCurrentTime(player.currentTime);
+    });
+    player.onEnded(() => {
+      if (!singActiveRef.current || singPlayerRef.current !== player) return;
+      advanceToNext();
+    });
+  }, [advanceToNext, volume]);
+
+  const exitSingMode = useCallback(async (): Promise<void> => {
+    const audio = audioRef.current;
+    const song = currentSongRef.current;
+    const player = singPlayerRef.current;
+    if (!audio || !song || !player || !singActiveRef.current) return;
+
+    const wasPlaying = playbackIntentRef.current;
+    const resumeAt = player.currentTime;
+    player.pause();
+    await player.stop();
+    singActiveRef.current = false;
+    setSingActive(false);
+    singPlayerRef.current = null;
+
+    sourceOverrideRef.current = null;
+    playbackGenerationRef.current += 1;
+    const generation = playbackGenerationRef.current;
+    setIsBuffering(true);
+    audio.src = resolveApiUrl(song.streamUrl);
+    audio.load();
+    await new Promise<void>((resolve) => {
+      const onReady = (): void => {
+        audio.removeEventListener('loadedmetadata', onReady);
+        audio.removeEventListener('error', onReady);
+        resolve();
+      };
+      audio.addEventListener('loadedmetadata', onReady, { once: true });
+      audio.addEventListener('error', onReady, { once: true });
+    });
+    if (generation !== playbackGenerationRef.current || currentSongRef.current?.id !== song.id) return;
+    audio.currentTime = resumeAt;
+    setCurrentTime(resumeAt);
+    setIsBuffering(false);
+    if (wasPlaying) await requestPlayback(true);
+  }, [requestPlayback]);
+
+  const setSingGains = useCallback((vocals: number, instrumental: number): void => {
+    singPlayerRef.current?.setStemLevels(vocals, instrumental);
+  }, []);
+
   const setVolume = useCallback((value: number): void => {
     const audio = audioRef.current;
     const next = clamp(value, 0, 1);
     setVolumeState(next);
     try { window.localStorage.setItem('allegra-volume', String(next)); } catch { /* storage unavailable: volume just will not persist */ }
+    singPlayerRef.current?.setMasterVolume(next);
     if (!audio) return;
     audio.volume = next;
     // Dragging the slider up from silence is an explicit "I want to hear it".
@@ -330,7 +500,7 @@ export function useAudioPlayer(): AudioPlayerState {
     const songId = currentSong.id;
     let onCanPlay: (() => void) | null = null;
     audio.pause();
-    audio.src = resolveApiUrl(currentSong.streamUrl);
+    audio.src = resolveApiUrl(sourceOverrideRef.current ?? currentSong.streamUrl);
     audio.load();
     const shouldPlay = pendingPlaybackRef.current;
     pendingPlaybackRef.current = false;
@@ -405,6 +575,11 @@ export function useAudioPlayer(): AudioPlayerState {
     setVolume,
     toggleShuffle,
     cycleRepeat,
+    swapAudioSource,
+    enterSingMode,
+    exitSingMode,
+    setSingGains,
+    singActive,
     audioRef
   };
 }

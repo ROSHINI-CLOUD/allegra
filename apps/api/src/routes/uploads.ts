@@ -23,7 +23,7 @@ export function uploadsRouter(auth: AuthService, uploads?: UploadsConfig): Route
   const router = Router();
 
   router.post('/uploads/sign', async (request, response) => {
-    const userId = getUserId(auth, request);
+    const userId = await getUserId(auth, request);
     if (!userId) {
       sendUnauthorized(response);
       return;

@@ -4,7 +4,7 @@ import { createApp, type AppOptions } from './app.js';
 import { loadConfig } from './config.js';
 import { createCacheStore } from './db/createCacheStore.js';
 
-/** Shared by the App Runner entrypoint (index.ts) and the Vercel serverless function. */
+/** Shared by the local dev server (index.ts) and the Vercel function (api/index.ts). */
 export function createAppFromEnv(env: NodeJS.Dict<string>): Express {
   const config = loadConfig(env);
   const options: AppOptions = {
@@ -17,9 +17,12 @@ export function createAppFromEnv(env: NodeJS.Dict<string>): Express {
     ...(config.lyricaApiUrl ? { lyricaApiUrl: config.lyricaApiUrl } : {}),
     ...(config.betterLyricsApiUrl ? { betterLyricsApiUrl: config.betterLyricsApiUrl } : {}),
     ...(config.betterLyricsApiKey ? { betterLyricsApiKey: config.betterLyricsApiKey } : {}),
+    ...(config.karaoke ? { karaoke: config.karaoke } : {}),
+    ...(config.musicBrainz ? { musicBrainz: config.musicBrainz } : {}),
     ...(config.convexUrl && config.convexServerSecret
       ? { convexUrl: config.convexUrl, convexServerSecret: config.convexServerSecret }
       : {}),
+    ...(config.convexSiteUrl ? { convexSiteUrl: config.convexSiteUrl } : {}),
     enableRequestLogging: config.enableRequestLogging,
     ai: config.ai,
     cacheStore: createCacheStore(config.cache),

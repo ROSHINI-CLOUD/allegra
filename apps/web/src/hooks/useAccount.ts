@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { AccountProfile, TasteSummary, UnifiedSong } from '@shared/types';
 
-import { ensureSession, fetchProfile, fetchTaste, loginAccount, logoutAccount, registerAccount, seedTaste, sendListenSignal, updateDisplayName } from '../lib/api';
+import { ensureSession, fetchProfile, fetchTaste, seedTaste, sendListenSignal, startGuestSession, updateDisplayName } from '../lib/api';
 
 export interface AccountApi {
   readonly profile: AccountProfile | null;
@@ -10,9 +10,8 @@ export interface AccountApi {
   /** The first profile/taste load has finished (successfully or not). */
   readonly ready: boolean;
   readonly refresh: () => Promise<void>;
-  readonly signUp: (input: { email: string; password: string; displayName?: string }) => Promise<void>;
-  readonly signIn: (input: { email: string; password: string }) => Promise<void>;
-  readonly signOut: () => Promise<void>;
+  /** Drops back to a fresh guest session. Called after Convex Auth signs the listener out. */
+  readonly startGuest: () => Promise<void>;
   readonly rename: (displayName: string) => Promise<void>;
   readonly seed: (artists: readonly string[], languages: readonly string[]) => Promise<void>;
 }
@@ -52,18 +51,8 @@ export function useAccount(onSessionChange: () => void): AccountApi {
     changed.current();
   }, [refresh]);
 
-  const signUp = useCallback(async (input: { email: string; password: string; displayName?: string }): Promise<void> => {
-    await registerAccount(input);
-    await afterSessionChange();
-  }, [afterSessionChange]);
-
-  const signIn = useCallback(async (input: { email: string; password: string }): Promise<void> => {
-    await loginAccount(input);
-    await afterSessionChange();
-  }, [afterSessionChange]);
-
-  const signOut = useCallback(async (): Promise<void> => {
-    await logoutAccount();
+  const startGuest = useCallback(async (): Promise<void> => {
+    await startGuestSession();
     await afterSessionChange();
   }, [afterSessionChange]);
 
@@ -76,7 +65,7 @@ export function useAccount(onSessionChange: () => void): AccountApi {
     changed.current();
   }, []);
 
-  return { profile, taste, ready, refresh, signUp, signIn, signOut, rename, seed };
+  return { profile, taste, ready, refresh, startGuest, rename, seed };
 }
 
 /**

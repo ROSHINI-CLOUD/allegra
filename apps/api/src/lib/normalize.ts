@@ -1,3 +1,4 @@
+import { isDerivative } from './derivative.js';
 import type { SaavnSong } from '../providers/saavn.js';
 import type { UnifiedSong } from '../types.js';
 import { decodeHtml } from './decodeHtml.js';
@@ -104,6 +105,11 @@ function electCanonical(
   albumDiversity: ReadonlyMap<string, number>
 ): UnifiedSong {
   return [...group].sort((left, right) => {
+    // An edit — sped up, slowed, live, karaoke — is never the canonical take of a
+    // recording, however many plays it has collected.
+    const edit = Number(isDerivative(left)) - Number(isDerivative(right));
+    if (edit !== 0) return edit;
+
     // Day-lists / "best of" shells often outrank the studio cut on raw plays.
     // Prefer a real release unless the compilation has a clear blowout (~5×).
     const leftComp = isCompilationAlbum(left.album);
@@ -190,9 +196,41 @@ function isVariousArtists(artist: string): boolean {
 /** Playlist / themed day-list / "best of" shells — not the song's own release. */
 function isCompilationAlbum(album: string | undefined): boolean {
   if (!album) return false;
-  return /\b(best of|greatest hits|hits|playlist|world music day|valentine|holi|diwali|christmas|new year|top\s*\d+|chartbusters?|jukebox|collection|anthology|various)\b/i.test(
+  return /\b(best of|greatest hits|hits|playlist|world music day|valentine|holi|diwali|christmas|new year|top\s*\d+|chartbusters?|jukebox|collection|anthology|various|tik\s*tok|viral|throwbacks?|trending|essentials|mega\s*mix|party\s*mix|sad\s*songs|love\s*songs|workout|road\s*trip|vibes|moods?)\b/i.test(
     album
   );
+}
+
+/**
+ * True when every row in the group is a licence placement rather than a release.
+ *
+ * The signature is unmistakable: one master — same play count, same length to the
+ * second — listed on several *different* albums, none of which is named after it.
+ * Saavn does this for anything that went viral, and the record it was actually
+ * released on is usually not in the result set at all. So the album name and the
+ * cover art on every one of these rows belong to somebody's playlist.
+ *
+ * Structural on purpose. A keyword list never ends: "Throwback TikTok Songs" is a
+ * compilation and reads like nothing in one.
+ */
+export function isPlacementOnly(group: readonly UnifiedSong[]): boolean {
+  if (group.length < 3) return false;
+  const first = group[0];
+  if (!first) return false;
+  const albums = new Set(group.map((song) => (song.album ? flatten(song.album) : '')));
+  if (albums.size < 3) return false;
+  if (group.some(albumMatchesTitle)) return false;
+  return group.every((song) => song.playCount === first.playCount && song.duration === first.duration);
+}
+
+/**
+ * Whether this row is worth asking an outside authority about: it is on an album that
+ * is not its own, and that album reads like a compilation. Callers pay a rate-limited
+ * network round trip for a true answer, so it stays deliberately narrow.
+ */
+export function needsCanonicalRelease(song: UnifiedSong): boolean {
+  if (albumMatchesTitle(song)) return false;
+  return isCompilationAlbum(song.album) || isPlacementOnly([song, ...(song.variants ?? [])]);
 }
 
 function stripVariants(song: UnifiedSong): UnifiedSong {

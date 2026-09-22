@@ -1,4 +1,4 @@
-import { Languages, LoaderCircle, Music, RefreshCw } from 'lucide-react';
+import { Languages, LoaderCircle, RefreshCw } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
 import {
   memo,
@@ -129,13 +129,13 @@ export function LyricsPanel({
       const active = lineRefs.current[activeIndex];
       if (!container || !active) return;
 
-      // Dead-centre in every mode — the sung line is the focal point, not a heading.
+      // A touch above centre — the sung line is the focal point, with more of what is coming below it.
       // Measured against the container's own box: offsetTop is relative to the nearest
       // positioned ancestor, which is the section, so it silently adds the chrome height
       // and parks the active line above centre.
       const offsetInScroll =
         container.scrollTop + (active.getBoundingClientRect().top - container.getBoundingClientRect().top);
-      const target = offsetInScroll - container.clientHeight * 0.5 + active.offsetHeight / 2;
+      const target = offsetInScroll - container.clientHeight * ACTIVE_LINE_ANCHOR + active.offsetHeight / 2;
       const nextTop = Math.max(0, target);
       if (Math.abs(container.scrollTop - nextTop) < 2) return;
 
@@ -232,20 +232,18 @@ export function LyricsPanel({
         <p className="ytm-lyrics__note">Translated by {translateProvider} — meaning, not word-for-word.</p>
       ) : null}
 
+      {softFocus && !compact && !loading && !error && lines.length > 0 ? (
+        <>
+          <div className="ytm-lyrics__edge ytm-lyrics__edge--top" aria-hidden="true"><i /><i /><i /><i /><i /></div>
+          <div className="ytm-lyrics__edge ytm-lyrics__edge--bottom" aria-hidden="true"><i /><i /><i /><i /><i /></div>
+        </>
+      ) : null}
+
       {loading ? (
         <div className="ytm-lyrics__state ytm-lyrics__state--loading" role="status" aria-live="polite">
-          <div className="lyrics-loading-card">
-            <div className="lyrics-loading-orbit" aria-hidden="true">
-              <span className="lyrics-loading-ring" />
-              <span className="lyrics-loading-core"><LoaderCircle className="spin" size={19} /></span>
-            </div>
-            <div className="lyrics-loading-copy">
-              <strong>Loading synchronized lyrics…</strong>
-              <span>Finding the beat and lining up every word.</span>
-            </div>
-            <div className="lyrics-loading-wave" aria-hidden="true">
-              <span /><span /><span /><span /><span /><span /><span />
-            </div>
+          <div className="lyrics-fetch">
+            <span className="lyric-wave lyric-wave--live" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+            <p>Fetching lyrics</p>
           </div>
         </div>
       ) : error ? (
@@ -330,7 +328,7 @@ const LyricLineButton = memo(function LyricLineButton({
     >
       {instrumental ? (
         <span className="ytm-lyrics__instrumental" aria-label="Instrumental break">
-          <Music size={16} />
+          <span className="lyric-wave" aria-hidden="true"><i /><i /><i /><i /><i /></span>
         </span>
       ) : karaoke ? (
         <KaraokeLine text={line.text} progress={progress} />
@@ -340,6 +338,9 @@ const LyricLineButton = memo(function LyricLineButton({
     </button>
   );
 });
+
+/** Where the sung line rests in the lyrics viewport: 0 is the top edge, 0.5 dead centre. */
+const ACTIVE_LINE_ANCHOR = 0.4;
 
 function lineOpacity(distance: number, active: boolean): number {
   if (active) return 1;

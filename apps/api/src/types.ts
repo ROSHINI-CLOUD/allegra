@@ -64,3 +64,14 @@ export type ApiFailure = {
   readonly error: string;
 };
 export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
+
+/** Mirrors packages/shared/types.ts — lazy stem-separation cache. */
+export type KaraokeStatus = 'none' | 'queued' | 'processing' | 'ready' | 'failed';
+
+export interface KaraokePayload {
+  readonly status: KaraokeStatus;
+  readonly instrumentalUrl?: string;
+  readonly vocalsUrl?: string;
+  readonly retryable?: boolean;
+  readonly separationVersion?: string;
+}

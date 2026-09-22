@@ -1,4 +1,5 @@
 import { parseTrustedProviderUrl } from './lib/publicUrl.js';
+import { DEFAULT_SEPARATION_VERSION } from './services/karaoke/types.js';
 
 export interface AppConfig {
   readonly nodeEnv: 'development' | 'test' | 'production';
@@ -15,15 +16,44 @@ export interface AppConfig {
   readonly lyricaApiUrl?: string;
   readonly betterLyricsApiUrl?: string;
   readonly betterLyricsApiKey?: string;
+  /** AWS Batch karaoke. Unset disables karaoke routes (503). */
+  readonly karaoke?: KaraokeAwsConfig;
   /** Convex deployment URL. Unset means user data stays in memory. */
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
+  /** Convex site origin, which issues Convex Auth session tokens. Unset disables Google sign-in. */
+  readonly convexSiteUrl?: string;
   readonly enableRequestLogging: boolean;
   readonly ai: AiConfig;
   /** Playlist-cover uploads. Unset disables POST /api/uploads/sign. */
   readonly uploads?: UploadsConfig;
   /** DynamoDB TTL cache. Unset keeps an in-process memory cache only. */
   readonly cache?: CacheConfig;
+  /**
+   * MusicBrainz + Cover Art Archive, which name the record a song was released on.
+   * Unset (`MUSICBRAINZ_API_URL=off`) leaves the provider's album and cover alone.
+   */
+  readonly musicBrainz?: MusicBrainzConfig;
+}
+
+/** Both hosts are free and keyless; the contact goes in the User-Agent they require. */
+export interface MusicBrainzConfig {
+  readonly baseUrl: string;
+  readonly coverArtUrl: string;
+  readonly contact: string;
+}
+
+/** AWS Batch + S3 stem separation. Creds optional when the host has an IAM role. */
+export interface KaraokeAwsConfig {
+  readonly region: string;
+  readonly jobQueue: string;
+  readonly jobDefinition: string;
+  readonly bucket: string;
+  readonly separationVersion: string;
+  readonly stemModel: string;
+  readonly accessKeyId?: string;
+  readonly secretAccessKey?: string;
+  readonly sessionToken?: string;
 }
 
 /** Hand-rolled DynamoDB cache (no AWS SDK). Instance-role creds work via container URI. */
@@ -79,6 +109,10 @@ const DEFAULT_GAANA = 'https://gaanaapibyprats.vercel.app/api';
 const DEFAULT_LRCLIB = 'https://lrclib.net/api';
 const DEFAULT_LYRICA = 'https://test-0k.onrender.com/lyrics';
 const DEFAULT_BETTER_LYRICS = 'https://lyrics-api.boidu.dev';
+const DEFAULT_MUSICBRAINZ = 'https://musicbrainz.org/ws/2';
+const DEFAULT_COVERART = 'https://coverartarchive.org';
+// MusicBrainz throttles anonymous agents harder, so it wants a way to reach whoever is calling.
+const DEFAULT_MUSICBRAINZ_CONTACT = 'https://github.com/peterish8/allegra';
 
 export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
   const nodeEnv = parseNodeEnv(env.NODE_ENV);
@@ -112,7 +146,14 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
   const lyricaApiUrl = isOff(env.LYRICA_API_URL) ? undefined : readOptionalProviderUrl(env.LYRICA_API_URL, production, 'LYRICA_API_URL') ?? DEFAULT_LYRICA;
   const betterLyricsApiUrl = isOff(env.BETTERLYRICS_API_URL) ? undefined : readOptionalProviderUrl(env.BETTERLYRICS_API_URL, production, 'BETTERLYRICS_API_URL') ?? DEFAULT_BETTER_LYRICS;
   const betterLyricsApiKey = env.BETTERLYRICS_API_KEY?.trim() || undefined;
-
+  // On by default: it only runs for a row whose album is somebody's playlist.
+  const musicBrainz: MusicBrainzConfig | undefined = isOff(env.MUSICBRAINZ_API_URL)
+    ? undefined
+    : {
+        baseUrl: readOptionalProviderUrl(env.MUSICBRAINZ_API_URL, production, 'MUSICBRAINZ_API_URL') ?? DEFAULT_MUSICBRAINZ,
+        coverArtUrl: readOptionalProviderUrl(env.COVERART_API_URL, production, 'COVERART_API_URL') ?? DEFAULT_COVERART,
+        contact: env.MUSICBRAINZ_CONTACT?.trim() || DEFAULT_MUSICBRAINZ_CONTACT
+      };
   const ai: AiConfig = {
     ...(env.GEMINI_API_KEY?.trim() ? { geminiApiKey: env.GEMINI_API_KEY.trim() } : {}),
     ...(env.GEMINI_MODEL?.trim() ? { geminiModel: env.GEMINI_MODEL.trim() } : {}),
@@ -144,8 +185,13 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     }
   }
 
+  // Convex serves functions from .convex.cloud and HTTP (including auth) from
+  // .convex.site. Deriving it keeps one URL to configure instead of two that must agree.
+  const convexSiteUrl = env.CONVEX_SITE_URL?.trim() || convexUrl?.replace(/\.convex\.cloud$/, '.convex.site');
+
   const uploads = loadUploadsConfig(env, ai);
   const cache = loadCacheConfig(env, ai);
+  const karaoke = loadKaraokeConfig(env, ai);
 
   const config: AppConfig = {
     nodeEnv,
@@ -159,11 +205,14 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     ...(lyricaApiUrl ? { lyricaApiUrl } : {}),
     ...(betterLyricsApiUrl ? { betterLyricsApiUrl } : {}),
     ...(betterLyricsApiKey ? { betterLyricsApiKey } : {}),
+    ...(karaoke ? { karaoke } : {}),
     ...(convexUrl && convexServerSecret ? { convexUrl, convexServerSecret } : {}),
+    ...(convexSiteUrl ? { convexSiteUrl } : {}),
     enableRequestLogging: nodeEnv === 'production',
     ai,
     ...(uploads ? { uploads } : {}),
-    ...(cache ? { cache } : {})
+    ...(cache ? { cache } : {}),
+    ...(musicBrainz ? { musicBrainz } : {})
   };
 
   const withOrigin = allowedOrigin ? { ...config, allowedOrigin } : config;
@@ -180,7 +229,7 @@ function isOff(value: string | undefined): boolean {
  * half-configured.
  */
 /**
- * Optional DynamoDB cache table. When set, App Runner layers memory + Dynamo so
+ * Optional DynamoDB cache table. When set, the API layers memory + Dynamo so
  * lyrics/search/AI hits survive restarts. Credentials may be static env keys or
  * the container role (`AWS_CONTAINER_CREDENTIALS_*`).
  */
@@ -197,6 +246,41 @@ function loadCacheConfig(env: NodeJS.Dict<string>, ai: AiConfig): CacheConfig | 
     ...(ai.awsAccessKeyId ? { accessKeyId: ai.awsAccessKeyId } : {}),
     ...(ai.awsSecretAccessKey ? { secretAccessKey: ai.awsSecretAccessKey } : {}),
     ...(ai.awsSessionToken ? { sessionToken: ai.awsSessionToken } : {})
+  };
+}
+
+/**
+ * Karaoke needs Batch queue + job definition + stem bucket. Missing any piece
+ * leaves karaoke disabled (503) rather than half-configured.
+ */
+function loadKaraokeConfig(env: NodeJS.Dict<string>, ai: AiConfig): KaraokeAwsConfig | undefined {
+  const jobQueue = env.AWS_BATCH_JOB_QUEUE?.trim();
+  const jobDefinition = env.AWS_BATCH_JOB_DEFINITION?.trim();
+  const bucket = env.KARAOKE_S3_BUCKET?.trim();
+  if (!jobQueue && !jobDefinition && !bucket) return undefined;
+  if (!jobQueue || !jobDefinition || !bucket) {
+    throw new Error(
+      'Karaoke needs AWS_BATCH_JOB_QUEUE, AWS_BATCH_JOB_DEFINITION, and KARAOKE_S3_BUCKET together (or leave all blank to disable).'
+    );
+  }
+  const region = (env.AWS_REGION?.trim() || ai.awsRegion || '').trim();
+  if (!region) {
+    throw new Error('Karaoke needs AWS_REGION.');
+  }
+  // Dedicated keys: the shared AWS_* pair on Vercel is a short-lived Bedrock session token.
+  const accessKeyId = env.KARAOKE_AWS_ACCESS_KEY_ID?.trim() || ai.awsAccessKeyId;
+  const secretAccessKey = env.KARAOKE_AWS_SECRET_ACCESS_KEY?.trim() || ai.awsSecretAccessKey;
+  const sessionToken = env.KARAOKE_AWS_ACCESS_KEY_ID?.trim() ? env.KARAOKE_AWS_SESSION_TOKEN?.trim() : ai.awsSessionToken;
+  return {
+    region,
+    jobQueue,
+    jobDefinition,
+    bucket,
+    separationVersion: env.STEM_SEPARATION_VERSION?.trim() || DEFAULT_SEPARATION_VERSION,
+    stemModel: env.STEM_MODEL?.trim() || 'htdemucs',
+    ...(accessKeyId ? { accessKeyId } : {}),
+    ...(secretAccessKey ? { secretAccessKey } : {}),
+    ...(sessionToken ? { sessionToken } : {})
   };
 }
 

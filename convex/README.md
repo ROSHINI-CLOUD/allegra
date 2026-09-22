@@ -33,7 +33,7 @@ npx convex deploy
 
 Set the same `CONVEX_SERVER_SECRET` on the production deployment's environment
 variables (separate from dev — Convex keeps dev/prod config apart), then put the
-production deployment URL + that secret into the API host's env vars (App Runner).
+production deployment URL + that secret into the Vercel project's environment variables.
 
 ## Schema
 

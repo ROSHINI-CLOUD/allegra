@@ -3,8 +3,8 @@ import { anyApi } from 'convex/server';
 
 import type { LibraryRecord, RecentRecord, ShareRecord, TasteEntry, TasteProfile, UserData, UserStore } from '../user/store.js';
 
-/** Function references into convex/users.ts and convex/shares.ts. anyApi is untyped, so name what we use. */
-const usersApi = anyApi.users as unknown as { readonly get: unknown; readonly byEmail: unknown; readonly save: unknown };
+/** Function references into convex/profiles.ts and convex/shares.ts. anyApi is untyped, so name what we use. */
+const profilesApi = anyApi.profiles as unknown as { readonly get: unknown; readonly byEmail: unknown; readonly save: unknown; readonly identity: unknown };
 const sharesApi = anyApi.shares as unknown as { readonly get: unknown; readonly byLibrary: unknown; readonly save: unknown; readonly remove: unknown };
 
 /** The two calls the store needs. Narrow on purpose so tests can fake it. */
@@ -31,15 +31,15 @@ export class ConvexUserStore implements UserStore {
   }
 
   public async get(userId: string): Promise<UserData | null> {
-    return parseUserData(await this.client.query(usersApi.get, { secret: this.secret, userId }));
+    return parseUserData(await this.client.query(profilesApi.get, { secret: this.secret, userId }));
   }
 
   public async findByEmail(email: string): Promise<UserData | null> {
-    return parseUserData(await this.client.query(usersApi.byEmail, { secret: this.secret, email }));
+    return parseUserData(await this.client.query(profilesApi.byEmail, { secret: this.secret, email }));
   }
 
   public async save(user: UserData): Promise<void> {
-    await this.client.mutation(usersApi.save, { secret: this.secret, user });
+    await this.client.mutation(profilesApi.save, { secret: this.secret, user });
   }
 
   public async getShare(code: string): Promise<ShareRecord | null> {
@@ -56,6 +56,21 @@ export class ConvexUserStore implements UserStore {
 
   public async deleteShare(code: string): Promise<void> {
     await this.client.mutation(sharesApi.remove, { secret: this.secret, code });
+  }
+
+  /**
+   * What Convex Auth knows about a signed-in user, read once when their profile is
+   * first created. Returns null rather than throwing: a missing name or email must
+   * never block someone from signing in.
+   */
+  public async identity(userId: string): Promise<{ email?: string; displayName?: string } | null> {
+    const raw = await this.client.query(profilesApi.identity, { secret: this.secret, userId });
+    if (!raw || typeof raw !== 'object') return null;
+    const record = raw as Record<string, unknown>;
+    return {
+      ...(typeof record.email === 'string' ? { email: record.email } : {}),
+      ...(typeof record.displayName === 'string' ? { displayName: record.displayName } : {})
+    };
   }
 }
 
@@ -114,7 +129,6 @@ function parseUserData(value: unknown): UserData | null {
     settings,
     ...(typeof record.displayName === 'string' ? { displayName: record.displayName } : {}),
     ...(typeof record.email === 'string' ? { email: record.email } : {}),
-    ...(typeof record.passwordHash === 'string' ? { passwordHash: record.passwordHash } : {}),
     ...(taste ? { taste } : {})
   };
 }
