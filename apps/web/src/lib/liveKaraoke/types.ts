@@ -6,7 +6,7 @@ export type LiveKaraokeStatus =
   | 'active'
   | 'error';
 
-export type LiveKaraokeBackend = 'midside' | 'scnet';
+export type LiveKaraokeBackend = 'midside' | 'scnet' | 'roformer';
 
 export interface LiveKaraokeCapabilities {
   readonly sharedArrayBuffer: boolean;

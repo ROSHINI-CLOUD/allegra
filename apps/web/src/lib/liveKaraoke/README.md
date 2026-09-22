@@ -39,3 +39,7 @@ The worker probes for that file. Full `onnxruntime-web` + STFT/ISTFT inference i
 
 ## Vocal remove (quality)
 Bass-preserving mid-side: keep mid below ~220Hz, duck only the vocal band in the mid channel, leave side intact. DSP + WAV encode run in a Web Worker with prepare progress.
+
+## Mel-Band RoFormer (primary)
+
+See [roformer/MODEL.md](./roformer/MODEL.md). Karaoke prefers on-device Mel-Band RoFormer ONNX (WebGPU/WASM) with ~11 s windows and overlap-add. Mid-side remains the automatic fallback if the model cannot load.

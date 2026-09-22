@@ -19,3 +19,5 @@ output/playwright/
 # Large ONNX models for browser live karaoke (download locally; do not commit)
 apps/web/public/models/*.onnx
 apps/web/public/models/*.ort
+
+apps/web/public/models/roformer/
