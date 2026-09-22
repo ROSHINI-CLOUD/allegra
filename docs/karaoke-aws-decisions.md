@@ -111,7 +111,7 @@ Web Audio: MediaElementSource → GainNode → destination  (both stems)
 | `KARAOKE_AWS_ACCESS_KEY_ID` / `KARAOKE_AWS_SECRET_ACCESS_KEY` | Dedicated API IAM user (Vercel has no instance role) |
 | `STEM_SEPARATION_VERSION` | Default `aws-batch-htdemucs-v1` |
 | `STEM_MODEL` | Default `htdemucs` |
-| `AWS_REGION` | Prefer same as App Runner (e.g. `ap-south-1`) |
+| `AWS_REGION` | One region for the whole karaoke stack (e.g. `ap-south-1`) |
 
 Static `AWS_ACCESS_KEY_ID` / secret only when no task/instance role. Prefer IAM roles in AWS.
 
@@ -124,7 +124,7 @@ Removed: `SCARLETA_API_KEY`, `SCARLETA_API_BASE_URL`.
 1. Confirm **G Spot vCPU quota** in `ap-south-1` (or chosen region)  
 2. `aws cloudformation deploy` of `infra/aws/karaoke-batch.yaml`  
 3. Build/push worker image to ECR (`stem-separator:<git-sha>`)  
-4. Wire App Runner env to stack outputs  
+4. Wire the Vercel project env to the stack outputs  
 5. Run one real song end-to-end; fill [`karaoke-aws-cost-benchmark.md`](./karaoke-aws-cost-benchmark.md) with measured ₹  
 6. Optional: On-Demand Batch CE fallback if Spot capacity is chronically empty  
 7. Optional: CloudFront OAC in front of the karaoke bucket  

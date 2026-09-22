@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { UnifiedSong } from '@shared/types';
 
 import { DynamicLyricsBackground } from './DynamicLyricsBackground';
+import { FluidArtBackground } from './FluidArtBackground';
 import { LyricsPanel } from './LyricsPanel';
 import { PlaylistMenu } from './PlaylistMenu';
 import { Artwork, IconButton, TactileButton } from './ui';
@@ -166,7 +167,11 @@ export function PlayerPanel({
           <div className="listening-world__atmosphere" aria-hidden="true">
             {/* Gradient atmosphere, not a blurred cover: two composited layers instead of
                 stacked filter:blur passes, so it stays smooth on a phone. */}
-            <DynamicLyricsBackground artworkUrl={song.artwork} palette={palette} light={light} />
+            {song.artwork ? (
+              <FluidArtBackground artworkUrl={song.artwork} />
+            ) : (
+              <DynamicLyricsBackground artworkUrl={song.artwork} palette={palette} light={light} />
+            )}
             <div className="listening-world__glow" />
           </div>
 

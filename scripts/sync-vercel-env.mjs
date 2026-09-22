@@ -17,7 +17,7 @@ const SKIP = new Set(['NODE_ENV', 'PORT']);
 /** Same-origin serverless SPA — blank base uses /api via vercel.json rewrite. */
 const FORCE = {
   ALLEGRA_ORIGIN: 'https://allegravibe.vercel.app',
-  VITE_API_BASE_URL: ''
+  NEXT_PUBLIC_API_BASE_URL: ''
 };
 
 const TARGETS = ['production', 'preview', 'development'];

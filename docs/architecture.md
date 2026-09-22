@@ -1,0 +1,142 @@
+# Architecture — how Allegra actually works
+
+One deployment, three owners of state. Read this before changing anything structural.
+
+```
+                    ┌─────────────────────────────────────────────┐
+  Browser           │  Vercel deployment                          │
+  ───────           │                                             │
+  Next.js shell ────┼──► apps/web  (Next.js App Router, static)   │
+   • one <audio>    │                                             │
+   • Web Audio mix  │    /api/*  ──► api/index.ts                 │
+   • routes         │                └─ apps/api (Express)        │
+                    └──────────┬──────────────────┬───────────────┘
+                               │                  │
+        ┌──────────────────────┘                  └──────────────┐
+        ▼                                                        ▼
+  Music providers                                         ┌─────────────┐
+  (Saavn, Gaana, LRCLIB, …)                               │   Convex    │
+  server-side only, never                                 │             │
+  reachable from the browser                              │ • Google    │
+                                                          │   sign-in   │
+  ┌──────────────────────────────┐                        │ • profiles  │
+  │ AWS (karaoke only)           │                        │ • shares    │
+  │  Batch → Spot GPU → S3 stems │◄───────────────────────┤             │
+  └──────────────────────────────┘     submit / read      └─────────────┘
+```
+
+## The three owners of state
+
+| State | Owner | Why there |
+|---|---|---|
+| Identity (who you are) | **Convex Auth** | It holds the Google secret and signs session tokens. Our API never touches a credential. |
+| Listener data (likes, playlists, recents, taste, shares) | **Convex** | Durable, and the API reaches it through one `UserStore` seam. |
+| Separated stems (vocals + instrumental) | **AWS S3** | Produced by a GPU job; deterministic object keys make the whole pipeline idempotent. |
+
+Everything else — search results, lyrics, artwork, recommendations — is cache, and is allowed to be lost.
+
+## Why the API and the web app ship together
+
+`apps/web` is a Next.js app; `api/index.ts` is an Express app running as a Vercel Function. One
+`vercel.json` builds both. The rewrite `/api/(.*) → /api` is ordered **before** Next's optional
+catch-all route, which is the only reason Express still receives API requests at all.
+
+That ordering is load-bearing and invisible when wrong: the site renders perfectly while every API
+call 404s, so it reads as a frontend bug. `tests/infra/infra-files.test.mjs` asserts the rewrite
+exists, and `vercel build` can be run locally to inspect the generated route table.
+
+Express was kept rather than ported to route handlers because `GET /api/stream/:songId` forwards the
+client's `Range` header and preserves the upstream status. A `206` must stay a `206`. Rewriting that
+path would risk the highest-consequence, least-visible bug in the product (see below).
+
+## Playback
+
+One `<audio>` element lives in the App Router layout, so it survives every route change. Verified:
+navigating `/discover → /library` keeps the *same* DOM node and playback continues uninterrupted.
+
+Three invariants, each of which was a real bug:
+
+1. **One funnel.** All play/pause goes through `requestPlayback(playing)`. Never `setIsPlaying(...)`
+   *and* `audio.play()` from a component. The raw setter only syncs **from** the element's events.
+2. **Load effects must not depend on `isPlaying`.** An effect listing it in deps that calls `.play()`
+   re-fires on the user's own pause and instantly resumes — pause appears to do nothing.
+3. **Seek pauses. Always resume.** Capture `wasPlaying`, set `currentTime`, resume if it was playing.
+
+### Sing mode
+
+Normal playback uses the original master. Sing mode plays two stems through separate `GainNode`s:
+
+```
+vocals.m4a  ──► GainNode ──┐
+                           ├──► destination
+instrumental.m4a ──► GainNode ──┘
+```
+
+Moving a slider changes a gain value. It never touches the network, the backend, or a model. Vocals
+at 0% is karaoke; instrumental at 0% is an isolated vocal.
+
+Two independently decoded streams drift, so a guard re-locks the instrumental to the vocals clock and
+a stall in either pauses both. The worker guarantees they start sample-aligned.
+
+## Karaoke: stateless by necessity
+
+The API runs as serverless functions. They freeze after responding, and each instance has its own
+memory — so background polling and in-process locks do not work. AWS is therefore the source of truth:
+
+- **Ready** = `manifest.json` exists in S3. The worker writes it *after* both stems, so its presence
+  implies both are complete.
+- **In flight / failed** = a `karaoke-state/…json` marker plus `DescribeJobs`, reconciled on every
+  status read.
+- **One job per song** = an S3 conditional write (`If-None-Match` / `If-Match`) is the cross-instance
+  lock. A claimer that dies before submitting is taken over after 120 s.
+
+A test fires 20 simultaneous requests from 20 separate simulated instances and asserts exactly one
+Batch job is created. Cost correctness depends on this.
+
+Stem identity is `trackId : sourceFingerprint : separationVersion`. The fingerprint ignores URL query
+strings, so a re-signed CDN link for the same file does not pay for a second separation.
+
+## Authentication
+
+```
+Browser ──► Convex Auth ──► Google ──► session JWT (RS256)
+   │
+   └──► Express API:  Authorization: Bearer <token>
+                        ├─ guest token?   verify with JWT_SECRET (local, free)
+                        └─ Convex token?  verify against Convex's published JWKS
+```
+
+Both kinds sit behind one `TokenVerifier` port, so routes never branch on which kind of caller they
+have. Guest listening works with no Convex deployment at all.
+
+Signing in calls `POST /api/auth/link` once, handing over the old guest token so likes and playlists
+made before signing in follow the listener into their account. Merging is a union, so it is safe to
+repeat.
+
+## Seams worth knowing
+
+| Port | Implementations |
+|---|---|
+| `UserStore` | `ConvexUserStore`, `MemoryUserStore` (tests, and local dev without Convex) |
+| `TokenVerifier` | `GuestTokenVerifier`, `ConvexTokenVerifier`, `FirstMatchVerifier` |
+| `KaraokeSeparationProvider` | `AwsBatchStemSeparationProvider` (swap the model or vendor here) |
+| `CacheStore` | `MemoryCacheStore`, `DynamoCacheStore`, `LayeredCacheStore` |
+
+Each has a fake used by tests, which is why the suite runs with no network and no cloud account.
+
+## Rules that are not negotiable
+
+1. **`docs/api-contract.md` is the contract.** Propose → update the doc → announce → adapt both sides.
+2. **No provider URLs, tokens or secrets in the frontend.** `NEXT_PUBLIC_*` is inlined into public
+   JavaScript. Everything provider-side is server-side.
+3. **Duration is always seconds.**
+4. **`{ success, data, error? }` on every API response.** `error` is user-facing copy, never a raw
+   provider error.
+5. **Animate `transform` and `opacity` only**, from a token in `src/motion/index.ts`.
+6. **`prefers-reduced-motion` collapses to opacity.** It never disables a feature.
+7. **TypeScript strict, no `any`.** Provider responses get narrow interfaces covering consumed fields.
+8. **Every outbound call** gets an `AbortController` timeout and its own try/catch returning empty —
+   that is what keeps the provider cascade alive.
+9. **The byte-range rule.** `GET /api/stream/:songId` preserves the upstream status and passes through
+   `Content-Range` and `Accept-Ranges`. Collapse a `206` to `200` and audio plays perfectly while
+   seeking silently does nothing — the highest-risk failure in the product, because it looks fine.

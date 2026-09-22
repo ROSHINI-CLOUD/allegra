@@ -5,7 +5,7 @@
 >
 > **To change it:** propose in the channel → update this file → both sides adapt. **Never a silent shape change.** A renamed field at hour 20 costs a night.
 
-Base URL: `VITE_API_BASE_URL` (mock server in dev, the Render API in prod)
+Base URL: same-origin `/api`. `NEXT_PUBLIC_API_BASE_URL` is blank everywhere — in dev Next rewrites `/api` to the Express server, and on Vercel it is the Express function.
 
 ## Envelope — every response
 
@@ -147,7 +147,7 @@ Frontend: poll `GET` every ~2–3 s while processing; when ready, load **both** 
 
 ### `POST /api/auth/anon`
 `→ ApiResponse<{ token: string; userId: string }>`
-Called once on first load, token stored client-side and sent as `Authorization: Bearer`. **No login screen.**
+Called once on first load, token stored client-side and sent as `Authorization: Bearer`. Listening never needs an account.
 
 ### Library — all require `Authorization: Bearer <token>`
 ```
@@ -189,16 +189,30 @@ Cascade for both: **Gemini → OpenRouter → NVIDIA → Groq → Bedrock**, fir
 
 Additive only: no existing shape changed. Every response uses `{ success, data, error? }`.
 
-### Accounts (a guest can become an account without losing anything)
+### Accounts — **changed 2026-09-22: Google via Convex Auth replaces email/password**
+
+Two kinds of bearer token reach this API, and every route accepts either:
+
+1. **Guest** — minted by `POST /api/auth/anon`, signed by the API (`JWT_SECRET`).
+2. **Account** — minted by **Convex Auth** after Google sign-in. The browser gets it from Convex
+   directly; the API verifies it against the deployment's published keys
+   (`CONVEX_SITE_URL/.well-known/jwks.json`). **The API never sees a Google secret or a password.**
+
+Convex Auth's subject is `<userId>|<sessionId>`; the profile is keyed on the `userId` half, so a
+second device or a re-login is the same listener. The first time an account appears, the API creates
+its profile and copies the name and email from Convex.
 
 | Endpoint | Auth | Body → response |
 |---|---|---|
-| `POST /api/auth/register` | optional guest `Bearer` | `{ email, password (>=8), displayName? }` → `201 { token, userId }`. **Converts the caller's guest session into the account** (same `userId`, `isGuest` flips to false, likes/playlists/plays/taste kept). No/expired guest token → a fresh account. `400` bad email/short password, `409` email already registered. |
-| `POST /api/auth/login` | optional guest `Bearer` | `{ email, password }` → `{ token, userId }`. If a guest token is sent and differs from the account, the guest's likes, playlists, recents and taste are **merged into the account**. `401` on any mismatch, with the same copy for "no such email" and "wrong password". |
-| `GET /api/auth/me` | Bearer | → `{ userId, isGuest, createdAt, displayName?, email? }` (never the hash) |
+| `POST /api/auth/link` | account `Bearer` | `{ guestToken }` → the account profile. Folds that guest's likes, playlists, recents and taste **into the account**. Idempotent (merging is a union). `400` without a guest token, `401` if the bearer is not a verified caller. |
+| `GET /api/auth/me` | Bearer | → `{ userId, isGuest, createdAt, displayName?, email? }` |
 | `PATCH /api/me/profile` | Bearer | `{ displayName }` → same profile. Empty string clears it. |
 
-Passwords are stored as `scrypt$<salt>$<hash>` (Node `crypto.scrypt`, per-user salt). Sign-out is client-side: drop the token and call `POST /api/auth/anon`.
+**Removed** (no longer routed; they answer `404`): `POST /api/auth/register`, `POST /api/auth/login`.
+No stored password hashes remain — `passwordHash` is gone from the user record.
+
+Sign-out is client-side: Convex clears its session, then the browser calls `POST /api/auth/anon` for a
+fresh guest session.
 
 ### Taste (what the app learns about a listener)
 

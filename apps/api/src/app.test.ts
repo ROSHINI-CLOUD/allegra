@@ -4,7 +4,7 @@ import request from 'supertest';
 
 import { createApp } from './app.js';
 
-test('GET /api/health returns the App Runner health contract', async () => {
+test('GET /api/health returns the health contract', async () => {
   const response = await request(
     createApp({ version: 'test-version', allowedOrigin: 'http://localhost:5173' })
   ).get('/api/health');

@@ -232,7 +232,7 @@ export function LyricsPanel({
         <p className="ytm-lyrics__note">Translated by {translateProvider} — meaning, not word-for-word.</p>
       ) : null}
 
-      {softFocus && !compact ? (
+      {softFocus && !compact && !loading && !error && lines.length > 0 ? (
         <>
           <div className="ytm-lyrics__edge ytm-lyrics__edge--top" aria-hidden="true"><i /><i /><i /><i /><i /></div>
           <div className="ytm-lyrics__edge ytm-lyrics__edge--bottom" aria-hidden="true"><i /><i /><i /><i /><i /></div>
@@ -241,18 +241,9 @@ export function LyricsPanel({
 
       {loading ? (
         <div className="ytm-lyrics__state ytm-lyrics__state--loading" role="status" aria-live="polite">
-          <div className="lyrics-loading-card">
-            <div className="lyrics-loading-orbit" aria-hidden="true">
-              <span className="lyrics-loading-ring" />
-              <span className="lyrics-loading-core"><LoaderCircle className="spin" size={19} /></span>
-            </div>
-            <div className="lyrics-loading-copy">
-              <strong>Loading synchronized lyrics…</strong>
-              <span>Finding the beat and lining up every word.</span>
-            </div>
-            <div className="lyrics-loading-wave" aria-hidden="true">
-              <span /><span /><span /><span /><span /><span /><span />
-            </div>
+          <div className="lyrics-fetch">
+            <span className="lyric-wave lyric-wave--live" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+            <p>Fetching lyrics</p>
           </div>
         </div>
       ) : error ? (

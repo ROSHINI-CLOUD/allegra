@@ -4621,3 +4621,116 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
 .listening-world .np-actions svg { filter: var(--np-lift); }
 .listening-world .np-actions .tactile-icon-control,
 .listening-world .np-actions button { width: 44px; height: 44px; }
+
+/* ---------- Lyrics stage: the cover's colour over black, and a background that visibly moves ---------- */
+.listening-world .music-bg-base {
+  background: linear-gradient(
+    152deg,
+    color-mix(in srgb, var(--music-primary, #5b9dff) 26%, #050608) 0%,
+    color-mix(in srgb, var(--music-secondary, #7f6bff) 18%, #050608) 48%,
+    #040507 100%
+  );
+}
+.listening-world .ambient-blob { opacity: 0.6; }
+.listening-world .blob-5 { opacity: 0.4; }
+.listening-world .music-background__darkness {
+  background:
+    linear-gradient(180deg, rgba(3, 4, 7, 0.34) 0%, rgba(3, 4, 7, 0.16) 30%, rgba(3, 4, 7, 0.2) 66%, rgba(3, 4, 7, 0.5) 100%),
+    radial-gradient(ellipse 110% 90% at 50% 46%, rgba(3, 4, 7, 0) 0%, rgba(3, 4, 7, 0.36) 100%);
+}
+.listening-world .music-background__lyric-field { background: linear-gradient(to right, transparent 0%, rgba(3, 4, 7, 0.22) 46%, rgba(3, 4, 7, 0.4) 100%); }
+.listening-world .listening-world__glow { opacity: 0.28; }
+
+/* Same closed loops, roughly three times quicker, so the colour is seen to travel. */
+.listening-world .blob-1 { animation-duration: 15s; }
+.listening-world .blob-2 { animation-duration: 19s; }
+.listening-world .blob-3 { animation-duration: 23s; }
+.listening-world .blob-4 { animation-duration: 27s; }
+.listening-world .blob-5 { animation-duration: 31s; }
+
+/* Loading: one quiet, centred line — no card, no blur. */
+.ytm-lyrics__state--loading { display: grid; height: 100%; place-items: center; }
+.lyrics-fetch { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+.lyrics-fetch p { margin: 0; color: rgba(255, 255, 255, 0.85); font-size: 15px; font-weight: 500; letter-spacing: 0.02em; }
+.lyric-wave--live i { animation: lyric-wave 1.15s ease-in-out infinite; }
+.lyric-wave--live i:nth-child(2) { animation-delay: -0.85s; }
+.lyric-wave--live i:nth-child(3) { animation-delay: -0.55s; }
+.lyric-wave--live i:nth-child(4) { animation-delay: -0.3s; }
+.lyric-wave--live i:nth-child(5) { animation-delay: -0.7s; }
+@media (prefers-reduced-motion: reduce) { .lyric-wave--live i { animation: none; transform: scaleY(0.6); } }
+
+/* ---------- Lyrics stage colour fields, rebuilt to survive zoom and resize ----------
+ * The old fields were 30vmax elements whose blurred child was scaled 3.4x and screen-blended.
+ * Browsers rasterise that in tiles, and after a zoom change the tile seams showed as hard
+ * rectangles. These are plain gradients that fade to zero before their own edge: no filter,
+ * no scale on the paint layer, no blend mode. Motion is translate only, in viewport units. */
+.listening-world .ambient-blob {
+  width: 84vmax;
+  height: 84vmax;
+  margin: -42vmax 0 0 -42vmax;
+  mix-blend-mode: normal;
+  backface-visibility: visible;
+}
+.listening-world .ambient-blob::before {
+  inset: 0;
+  border-radius: 0;
+  filter: none;
+  transform: none;
+}
+.listening-world .blob-1::before { background: radial-gradient(closest-side, rgba(var(--music-primary-rgb, 91, 157, 255), 0.62) 0%, rgba(var(--music-primary-rgb, 91, 157, 255), 0.3) 45%, rgba(var(--music-primary-rgb, 91, 157, 255), 0) 100%); }
+.listening-world .blob-2::before { background: radial-gradient(closest-side, rgba(var(--music-secondary-rgb, 127, 107, 255), 0.58) 0%, rgba(var(--music-secondary-rgb, 127, 107, 255), 0.28) 45%, rgba(var(--music-secondary-rgb, 127, 107, 255), 0) 100%); }
+.listening-world .blob-3::before { background: radial-gradient(closest-side, rgba(var(--music-accent-rgb, 65, 216, 255), 0.5) 0%, rgba(var(--music-accent-rgb, 65, 216, 255), 0.24) 45%, rgba(var(--music-accent-rgb, 65, 216, 255), 0) 100%); }
+.listening-world .blob-4::before { background: radial-gradient(closest-side, rgba(var(--music-primary-rgb, 91, 157, 255), 0.5) 0%, rgba(var(--music-secondary-rgb, 127, 107, 255), 0.26) 45%, rgba(var(--music-secondary-rgb, 127, 107, 255), 0) 100%); }
+.listening-world .blob-5::before { background: radial-gradient(closest-side, rgba(var(--music-deep-rgb, 8, 9, 11), 0.7) 0%, rgba(var(--music-deep-rgb, 8, 9, 11), 0.32) 45%, rgba(var(--music-deep-rgb, 8, 9, 11), 0) 100%); }
+.listening-world .ambient-blob { opacity: 1; }
+
+.listening-world .blob-1 { animation-name: lyric-drift-1; animation-duration: 16s; }
+.listening-world .blob-2 { animation-name: lyric-drift-2; animation-duration: 20s; }
+.listening-world .blob-3 { animation-name: lyric-drift-3; animation-duration: 24s; }
+.listening-world .blob-4 { animation-name: lyric-drift-4; animation-duration: 28s; }
+.listening-world .blob-5 { animation-name: lyric-drift-5; animation-duration: 32s; }
+
+@keyframes lyric-drift-1 { 0%, 100% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(34vw, 14vh, 0); } 50% { transform: translate3d(12vw, 40vh, 0); } 75% { transform: translate3d(-22vw, 22vh, 0); } }
+@keyframes lyric-drift-2 { 0%, 100% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(-30vw, -20vh, 0); } 50% { transform: translate3d(-44vw, 12vh, 0); } 75% { transform: translate3d(-12vw, 28vh, 0); } }
+@keyframes lyric-drift-3 { 0%, 100% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(-32vw, 22vh, 0); } 50% { transform: translate3d(-48vw, -8vh, 0); } 75% { transform: translate3d(-14vw, -26vh, 0); } }
+@keyframes lyric-drift-4 { 0%, 100% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(34vw, -20vh, 0); } 50% { transform: translate3d(48vw, 10vh, 0); } 75% { transform: translate3d(16vw, 30vh, 0); } }
+@keyframes lyric-drift-5 { 0%, 100% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(-24vw, 20vh, 0); } 50% { transform: translate3d(18vw, 34vh, 0); } 75% { transform: translate3d(30vw, -14vh, 0); } }
+
+/* ---------- Fluid cover backdrop (Apple Music style, raw CSS) ----------
+ * Four copies of the cover, blurred once, each orbiting its own anchor while turning: where
+ * they overlap the colours fuse. A zero-size .fluid__spin rotates (transform only, compositor);
+ * its .fluid__art child is offset from the anchor, so it both orbits and twists. */
+.fluid { position: absolute; inset: 0; overflow: hidden; background: #050608; contain: paint; }
+.fluid__scene { position: absolute; inset: 0; animation: fluid-in 1.2s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes fluid-in { from { opacity: 0; } to { opacity: 1; } }
+
+.fluid__spin { position: absolute; left: var(--ax); top: var(--ay); width: 0; height: 0; will-change: transform; animation: fluid-turn var(--turn) linear infinite; animation-direction: var(--dir, normal); }
+.fluid__art {
+  position: absolute;
+  width: var(--size);
+  height: var(--size);
+  left: calc(var(--size) / -2);
+  top: calc(var(--size) / -2);
+  background: var(--fluid-art) center / cover no-repeat;
+  filter: blur(30px) saturate(2.5) brightness(1.08) contrast(1.06);
+  opacity: var(--alpha, 0.92);
+  transform: translate(var(--ox), var(--oy)) scaleX(var(--flip, 1));
+}
+@keyframes fluid-turn { to { transform: rotate(360deg); } }
+
+.fluid__spin--1 { --ax: 30%; --ay: 34%; --size: 80vmax; --ox: 12vmax; --oy: -6vmax; --turn: 36s; --alpha: 1; }
+.fluid__spin--2 { --ax: 72%; --ay: 30%; --size: 72vmax; --ox: -14vmax; --oy: 8vmax; --turn: 44s; --dir: reverse; --alpha: 0.9; }
+.fluid__spin--3 { --ax: 62%; --ay: 78%; --size: 82vmax; --ox: 10vmax; --oy: 10vmax; --turn: 52s; --flip: -1; --alpha: 0.85; }
+.fluid__spin--4 { --ax: 22%; --ay: 76%; --size: 68vmax; --ox: -10vmax; --oy: -12vmax; --turn: 60s; --dir: reverse; --alpha: 0.8; }
+
+/* Seat the lyrics: an even dark veil, heavier under the text column and at the floor. */
+.fluid__shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, rgba(3, 4, 7, 0.06) 0%, rgba(3, 4, 7, 0.2) 55%, rgba(3, 4, 7, 0.36) 100%),
+    linear-gradient(180deg, rgba(3, 4, 7, 0.24) 0%, rgba(3, 4, 7, 0.06) 34%, rgba(3, 4, 7, 0.1) 66%, rgba(3, 4, 7, 0.46) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) { .fluid__spin { animation: none; } }
+.app-shell[data-motion-paused='true'] .fluid__spin { animation-play-state: paused; }

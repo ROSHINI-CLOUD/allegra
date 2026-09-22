@@ -1,87 +1,52 @@
 # AGENTS.md
 
-Agent-facing guide for the Allegra repo. Human-facing rules are in `CLAUDE.md` — **read that too; everything in it applies here.**
+Agent-facing guide for the Allegra repo. The hard rules are in [`CLAUDE.md`](CLAUDE.md) — **read that
+too; everything in it applies here.**
 
 ## Orientation, in order
-1. `.planning/03-DELIVERY.md` — the schedule and current phase
-2. `docs/api-contract.md` — **frozen**. The FE↔BE seam. (Karaoke/Sing shape updated 2026-09-21 — dual stems.)
-3. The plan for your area — `.planning/05-` backend, `06-` frontend, `07-` motion, `13-` completion plan, `09-` QA
-4. Sing / Karaoke (AWS Batch): `docs/karaoke-aws-decisions.md` + `.planning/23-HANDOFF-KARAOKE.md` — **do not reintroduce Scarleta**
-5. `CLAUDE.md` — the hard rules
 
-Role briefings: `docs/agent-prompts/{backend,frontend,infra,qa}-agent.md`
+1. [`docs/architecture.md`](docs/architecture.md) — how the system works end to end
+2. [`docs/api-contract.md`](docs/api-contract.md) — the FE↔BE seam. Change it by proposing first.
+3. [`.planning/ROADMAP.md`](.planning/ROADMAP.md) — current state and what is blocked on credentials
+4. [`docs/workflows.md`](docs/workflows.md) — how to run, verify and ship
+5. [`CLAUDE.md`](CLAUDE.md) — the rules
 
 ## How to work here
 
-**One ticket at a time.** The plans are ordered lists. Take the next one, finish it, show the diff, stop. Do not scaffold a whole layer at once — a human has to be able to explain every line to a judge, and *Technical Understanding* is a scored criterion.
+**One thing at a time.** Take the next item, finish it, show the diff, stop. Do not scaffold a whole
+layer at once.
 
-**Vertical slices, never horizontal layers.** Don't build "all the endpoints" then "all the UI." Build search→play end-to-end and deployed, then add depth.
+**Vertical slices, never horizontal layers.** Build search→play end to end, then add depth. Not "all
+the endpoints" followed by "all the UI".
 
-**Verify before claiming done.** Run typecheck, lint and tests. If something fails, say so with the output. Never report a task complete on the strength of the code looking right.
+**Verify before claiming done.** Run typecheck, lint and tests. If something fails, say so with the
+output. Never report a task complete on the strength of the code looking right. If a change is visible
+in a browser, look at it in a browser.
 
-**Ask before:** changing `docs/api-contract.md`, adding a dependency, adding anything not in the plan, or touching another role's directory.
+**Prefer deleting.** A control that does nothing, a config with no consumer, a second way to do the
+same thing — remove it rather than documenting around it.
 
-## Reference material is authoritative
-`docs/provider-integration.md` and `ALLEGRA_BACKEND_SPEC.md` are extracted from a **working production implementation**. The headers, fallback triggers and parsing quirks in them are load-bearing and were each learned from a real bug. **Follow them literally rather than writing what looks reasonable.** Specifically:
-- `BROWSER_HEADERS` on every Saavn/Gaana call (Cloudflare)
-- Gaana fires only on **zero results**, not on error
-- HTML entity decoding: named, decimal **and** hex
-- Artist arrives as a string **or** an array — handle both
-- Reject a lyrics body containing `<div`/`<html`/`<!DOCTYPE` and fall through
-- Permissive LRC regex; real files are dirty
+## Things that will waste your day
 
-## Things that look optional and are not
-| | Why |
-|---|---|
-| `Range` → `206` on `/api/stream` | Audio plays fine, seeking silently dies |
-| Negative caching on lyrics misses | Misses get re-queried hardest |
-| `prefers-reduced-motion` | Accessibility, and judges check |
-| Loading / empty / error states | Half of Best UI is what happens when things aren't perfect |
-| Long-text and script handling | Devanagari and Tamil clip on line-height, not width |
+- **The `/api` rewrite must precede Next's catch-all** in `vercel.json`. If it does not, the site
+  renders perfectly and every API call 404s. `vercel build` shows the real route order locally.
+- **The API is serverless.** Instances freeze after responding and share no memory. Background timers,
+  polling loops and in-process locks silently do nothing in production. Reconcile on read instead.
+- **One lockfile, at the root.** Vercel resolves function dependencies from the repo root. A
+  per-app lockfile lets a package work locally and be missing in production.
+- **Range requests.** `206` must survive. It is the one bug that looks like success.
+- **`NEXT_PUBLIC_*` is public.** Anything with that prefix is inlined into JavaScript the world can
+  read.
+- **Convex Auth owns the `users` table.** Listener data lives in `profiles`.
 
-## Never
-- Put a provider URL, token or secret in `apps/web`
-- Change a shared type without updating `docs/api-contract.md` first
-- Animate anything other than `transform`/`opacity`
-- Add an AI attribution footer to a commit
-- Push directly to `main`
-- Add a feature after T+26
+## Costs real money
 
-## Environment
-```
-apps/web   VITE_API_BASE_URL          # the ONLY client env var
-apps/api   PORT · ALLEGRA_ORIGIN · SAAVN_API_URL · GAANA_API_URL
-           LRCLIB_API_URL · JWT_SECRET · CONVEX_URL · CONVEX_SERVER_SECRET
-```
-Everything secret comes from the host environment (Render dashboard) and the Convex dashboard. `.env.example` stays current; real values never get committed.
+`workers/` and `infra/aws/` drive GPU jobs. Never deploy a stack, push an image, or submit a job
+unless you were explicitly asked to. Dev capacity is capped at one GPU (`MaxvCpus=4`) on purpose.
 
-<!-- BEGIN AWS Agent Toolkit rules -->
-# AWS Guidance
+## Testing style
 
-- Where these AWS rules conflict with the project's own instructions, the
-  project's instructions take precedence.
-- Prefer the AWS MCP Server for AWS interactions — it provides sandboxed
-  execution, observability, and audit logging. If unavailable, use the
-  AWS CLI directly.
-- Before starting a task, check whether a relevant AWS skill is available.
-  Load the skill with `retrieve_skill` and prefer its guidance over
-  general knowledge.
-- When uncertain about specific AWS details (API parameters, permissions,
-  limits, error codes), verify against documentation rather than guessing.
-  State uncertainty explicitly if you cannot confirm.
-- When creating infrastructure, prefer infrastructure-as-code (AWS CDK or
-  CloudFormation) over direct CLI commands.
-- When working with infrastructure, follow AWS Well-Architected Framework
-  principles.
-- Do not use em dashes in AWS resource names or descriptions. Use
-  hyphens instead.
-
-## Secret Safety
-
-- MUST load the `aws-secrets-manager` skill first for any secret,
-  credential, API key, token, or password task. MUST NOT call
-  `secretsmanager get-secret-value` or `batch-get-secret-value`, and MUST
-  NOT hit the Secrets Manager Agent daemon directly. MUST use
-  `{{resolve:secretsmanager:secret-id:SecretString:json-key}}` with
-  `asm-exec` so the secret resolves at runtime without entering context.
-<!-- END AWS Agent Toolkit rules -->
+Tests state a behaviour, not a method name: *"20 simultaneous requests across separate instances
+create ONE Batch job"*. Each seam has a fake, which is why the suite needs no network and no cloud
+account. Prove security properties with real primitives — the token tests sign with generated RSA
+keys rather than asserting on a mock.

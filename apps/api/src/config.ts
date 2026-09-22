@@ -204,7 +204,7 @@ function isOff(value: string | undefined): boolean {
  * half-configured.
  */
 /**
- * Optional DynamoDB cache table. When set, App Runner layers memory + Dynamo so
+ * Optional DynamoDB cache table. When set, the API layers memory + Dynamo so
  * lyrics/search/AI hits survive restarts. Credentials may be static env keys or
  * the container role (`AWS_CONTAINER_CREDENTIALS_*`).
  */
