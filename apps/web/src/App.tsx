@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 
 import type { ArtistProfile, HomePayload, LyricLine, SharedPlaylist, UnifiedSong } from '@shared/types';
+import { deriveMoodPrompts } from '@shared/moodPrompts';
 
 import { AlbumPage } from './components/AlbumPage';
 import { ArtistPage } from './components/ArtistPage';
@@ -30,7 +31,9 @@ import { Artwork, EmptyState, IconButton, OfflineToast, SkeletonCard, TactileBut
 import { useAccount, useListenTracker } from './hooks/useAccount';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { useKaraoke } from './hooks/useKaraoke';
+import { useLiveKaraoke } from './hooks/useLiveKaraoke';
 import { useMediaSession } from './hooks/useMediaSession';
+import { useNarrowViewport } from './hooks/useNarrowViewport';
 import { PlaylistsContext, usePlaylists } from './hooks/usePlaylists';
 import { collectAlbumTracks } from './lib/album';
 import { tapHaptic } from './lib/haptics';
@@ -45,7 +48,6 @@ import { itemVariants, motionTokens, pageVariants, spring } from './motion';
 
 const DEFAULT_QUERY = 'top songs';
 type PlayerMode = 'mini' | ImmersivePlayerMode;
-const MOOD_PROMPTS = ['late night', 'soft focus', 'Hindi essentials', 'golden hour'];
 
 /** Every credited name on a song ("A, B & C feat. D"), in order. */
 function creditedNames(song: UnifiedSong): string[] {
@@ -75,6 +77,10 @@ function curatedSongs(songs: UnifiedSong[]): UnifiedSong[] {
 
 export default function App() {
   const reduced = useReducedMotion();
+  // Gates swipe-up-to-expand on the mini player: no equivalent gesture affordance
+  // on desktop, so the drag only engages on the phone layout (see app.css's
+  // matching `@media (max-width: 900px)` breakpoint).
+  const isNarrowViewport = useNarrowViewport();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
   const [query, setQuery] = useState('');
@@ -175,10 +181,18 @@ export default function App() {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const lyricsGeneration = useRef(0);
   const audio = useAudioPlayer();
-  const karaoke = useKaraoke(audio.currentSong, {
+  // Stable identity across renders: useKaraoke depends on this object by reference, and
+  // audio.currentTime updates (every audio timeupdate tick) re-render App constantly —
+  // a fresh object literal here re-fires useKaraoke's status-fetch effect on every one of
+  // those renders, which was hammering GET /api/songs/:id/karaoke in a tight loop.
+  const karaokePlayback = useMemo(() => ({
     enterSingMode: audio.enterSingMode,
     exitSingMode: audio.exitSingMode,
     setSingGains: audio.setSingGains,
+    swapAudioSource: audio.swapAudioSource
+  }), [audio.enterSingMode, audio.exitSingMode, audio.setSingGains, audio.swapAudioSource]);
+  const karaoke = useKaraoke(audio.currentSong, karaokePlayback);
+  const liveKaraoke = useLiveKaraoke(audio.currentSong, {
     swapAudioSource: audio.swapAudioSource
   });
   const hasSongLoaded = audio.currentSong !== null;
@@ -371,6 +385,12 @@ export default function App() {
     void loadPersonalSpace();
   });
   useListenTracker(audio.currentSong ?? null, audio.currentTime, account.refresh);
+
+  /** Home/search mood chips: server-built prompts when taste is ready, else calm guest defaults. */
+  const moodPrompts = useMemo(() => {
+    if (account.taste?.prompts?.length) return [...account.taste.prompts];
+    return deriveMoodPrompts(account.taste);
+  }, [account.taste]);
 
   // A shared playlist opened by link: public, so it works before anyone has signed in.
   useEffect(() => {
@@ -990,7 +1010,7 @@ export default function App() {
         <div className="panel-topbar">
             {isDetailView || isCollectionView ? <button type="button" className="topbar-back" onClick={() => goBack(view === 'liked' || view === 'playlist' ? '#library' : view === 'shared' ? '#home' : '#discover')} aria-label="Back"><ArrowLeft size={17} aria-hidden="true" /><span>Back</span></button> : null}
             <nav className="crumbs" aria-label="Breadcrumb"><span>{view === 'home' || view === 'shared' ? 'Home' : view === 'library' || view === 'liked' || view === 'playlist' ? 'Library' : 'Browse'}</span><ChevronRight size={14} aria-hidden="true" /><strong>{view === 'home' ? 'For you' : view === 'shared' ? 'Shared playlist' : view === 'library' ? 'Your music' : view === 'album' ? 'Album' : view === 'artist' ? 'Artist' : view === 'liked' ? 'Liked Songs' : view === 'playlist' ? 'Playlist' : query.trim() ? 'Search' : 'Made for you'}</strong></nav>
-            <div className="mood-pills" role="group" aria-label="Quick picks"><span className="mood-pills-label" aria-hidden="true">Quick picks</span>{MOOD_PROMPTS.map((prompt) => <button key={prompt} type="button" className="mood-pill" aria-pressed={query === prompt} onClick={() => { if (view !== 'discover') router.push(paths.discover); setQuery(query === prompt ? '' : prompt); }}>{query === prompt ? <motion.span layoutId="mood-pill-bg" className="mood-pill-bg" transition={spring.tactile} /> : null}<span>{prompt}</span></button>)}</div>
+            <div className="mood-pills" role="group" aria-label="Quick picks"><span className="mood-pills-label" aria-hidden="true">Quick picks</span>{moodPrompts.map((prompt) => <button key={prompt} type="button" className="mood-pill" aria-pressed={query === prompt} onClick={() => { if (view !== 'discover') router.push(paths.discover); setQuery(query === prompt ? '' : prompt); }}><span>{prompt}</span></button>)}</div>
             <CommandPalette
               open={paletteOpen}
               onOpen={() => setPaletteOpen(true)}
@@ -1012,8 +1032,6 @@ export default function App() {
             taste={account.taste}
             recentlyPlayed={recentlyPlayed}
             likedSongs={likedSongs}
-            playlists={playlists.playlists}
-            playlistSongs={playlists.songs}
             picks={aiPicks}
             picksReason={aiPicksReasoning}
             picksProvider={aiPicksProvider}
@@ -1029,7 +1047,6 @@ export default function App() {
             onToggle={audio.togglePlayback}
             onLike={toggleLike}
             onOpenArtist={openArtist}
-            onCreatePlaylist={(name) => playlists.create(name)}
             onSeedTaste={(artistNames, languageNames) => account.seed(artistNames, languageNames)}
             onOpenAuth={() => setAuthOpen(true)}
             onExplore={(value) => { router.push(paths.discover); setQuery(value); }}
@@ -1149,7 +1166,17 @@ export default function App() {
       </AnimatePresence>
 
       {audio.currentSong && !immersiveOpen ? (
-        <div className={`mini-player${queueOpen ? ' is-queue-open' : ''}`} role="region" aria-label="Player bar">
+        <motion.div
+          className={`mini-player${queueOpen ? ' is-queue-open' : ''}`}
+          role="region"
+          aria-label="Player bar"
+          drag={isNarrowViewport && !reduced ? 'y' : false}
+          dragConstraints={{ top: 0, bottom: 0 }}
+          dragElastic={{ top: 0.3, bottom: 0 }}
+          onDragEnd={(_event, info) => {
+            if (info.offset.y < -80 || info.velocity.y < -500) setPlayerMode('immersive');
+          }}
+        >
           <div className="am-transport">
             <button type="button" className={`am-btn ${audio.shuffle ? 'is-on' : ''}`} aria-pressed={audio.shuffle} aria-label={audio.shuffle ? 'Shuffle on' : 'Shuffle off'} title="Shuffle" onClick={audio.toggleShuffle}><Shuffle size={16} aria-hidden="true" /></button>
             <button type="button" className="am-btn am-btn--skip" aria-label="Previous track" title="Previous" onClick={audio.skipPrevious}><SkipBack size={20} fill="currentColor" aria-hidden="true" /></button>
@@ -1294,7 +1321,7 @@ export default function App() {
               </motion.div>
             ) : null}
           </AnimatePresence>
-        </div>
+        </motion.div>
       ) : null}
       <p className="sr-only" aria-live="polite">{audio.currentSong ? `${audio.isPlaying ? 'Playing' : 'Paused'} ${audio.currentSong.title} by ${audio.currentSong.artist}` : ''}</p>
       <audio ref={audio.audioRef} className="audio-element" crossOrigin="anonymous" preload="metadata" aria-hidden="true" />
@@ -1330,6 +1357,7 @@ export default function App() {
         muted={audio.isMuted}
         onMute={audio.toggleMute}
         karaoke={karaoke}
+        liveKaraoke={liveKaraoke}
         onCollapse={collapsePlayer}
         onOpenWorkspace={() => setPlayerMode('workspace')}
         onOpenImmersive={() => setPlayerMode('immersive')}

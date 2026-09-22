@@ -16,3 +16,6 @@ output/playwright/
 .vercel/
 .claude/
 
+# Large ONNX models for browser live karaoke (download locally; do not commit)
+apps/web/public/models/*.onnx
+apps/web/public/models/*.ort

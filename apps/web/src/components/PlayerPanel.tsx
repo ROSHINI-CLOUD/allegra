@@ -2,6 +2,7 @@ import {
   ChevronDown,
   Heart,
   ListMusic,
+  Mic,
   Mic2,
   SkipBack,
   SkipForward,
@@ -10,7 +11,7 @@ import {
   VolumeX,
   Waves
 } from 'lucide-react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useDragControls, useReducedMotion } from 'motion/react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -21,7 +22,11 @@ import { FluidArtBackground } from './FluidArtBackground';
 import { LyricsPanel } from './LyricsPanel';
 import { PlaylistMenu } from './PlaylistMenu';
 import { Artwork, IconButton, TactileButton } from './ui';
+import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useNarrowViewport } from '../hooks/useNarrowViewport';
+import { usePress } from '../hooks/usePress';
 import type { KaraokeController } from '../hooks/useKaraoke';
+import type { LiveKaraokeController } from '../hooks/useLiveKaraoke';
 import type { Palette } from '../lib/palette';
 import { tapHaptic } from '../lib/haptics';
 import { creditedArtists, formatTime, clamp } from '../lib/utils';
@@ -47,6 +52,7 @@ interface PlayerPanelProps {
   readonly energy?: number;
   readonly suggestions?: UnifiedSong[];
   readonly karaoke?: KaraokeController;
+  readonly liveKaraoke?: LiveKaraokeController;
   readonly onCollapse: () => void;
   readonly onOpenWorkspace: () => void;
   readonly onOpenImmersive: () => void;
@@ -56,16 +62,16 @@ interface PlayerPanelProps {
   readonly onSeek: (seconds: number) => void;
   readonly onLike: () => void;
   readonly onPlayQueueSong?: (song: UnifiedSong) => void;
-  /** Song title → official album / track list. Sheet slides away first. */
+  /** Song title -> official album / track list. Sheet slides away first. */
   readonly onOpenAlbum?: (song: UnifiedSong) => void;
-  /** Artist credit → artist page. Sheet slides away first. */
+  /** Artist credit -> artist page. Sheet slides away first. */
   readonly onOpenArtist?: (name: string) => void;
   readonly muted: boolean;
   readonly onMute: () => void;
 }
 
 /**
- * Listening World — shell from allegra-v2-immersive-shell:
+ * Listening World - shell from allegra-v2-immersive-shell:
  * left now-playing (real artwork), right Lyrics / Up Next / Related.
  * Atmosphere is a lightweight CSS cover wash (no WebGL).
  */
@@ -84,6 +90,7 @@ export function PlayerPanel({
   light = false,
   suggestions = [],
   karaoke,
+  liveKaraoke,
   onCollapse,
   onOpenWorkspace,
   onOpenImmersive,
@@ -104,10 +111,23 @@ export function PlayerPanel({
   const upNext = queue.filter((item) => item.id !== song?.id).slice(0, 8);
   const related = (suggestions.length > 0 ? suggestions : upNext).slice(0, 6);
   const artists = song ? creditedArtists(song.artist) : [];
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const playPress = usePress();
+  const dragControls = useDragControls();
+  const isNarrowViewport = useNarrowViewport();
+  // Swipe-down-to-dismiss mirrors Apple Music / YT Music on a phone; desktop has no
+  // equivalent affordance, and reduced-motion listeners keep the Back button + Escape
+  // as their dismiss path rather than a springy drag-to-close.
+  const swipeToDismissEnabled = isNarrowViewport && !reduced;
 
   useEffect(() => {
     if (mode === 'workspace') setTab('lyrics');
   }, [mode]);
+
+  // The panel is a persistent portion of the tree (App.tsx keeps `song` null while
+  // closed rather than unmounting PlayerPanel), so `song` is the "currently visible"
+  // signal the mini-player control opens and closes.
+  useFocusTrap(Boolean(song), panelRef);
 
   useEffect(() => {
     if (!song) return undefined;
@@ -148,6 +168,7 @@ export function PlayerPanel({
       {song ? (
         <motion.div
           key="listening-world"
+          ref={panelRef}
           className={`listening-world${mode === 'workspace' ? ' is-lyrics' : ''}`}
           role="dialog"
           aria-modal="true"
@@ -163,6 +184,14 @@ export function PlayerPanel({
           animate={reduced ? { opacity: 1 } : { y: '0vh' }}
           exit={reduced ? { opacity: 0 } : { y: '100vh' }}
           transition={sheetTransition}
+          drag={swipeToDismissEnabled ? 'y' : false}
+          dragControls={dragControls}
+          dragListener={false}
+          dragConstraints={{ top: 0, bottom: 0 }}
+          dragElastic={{ top: 0, bottom: 0.55 }}
+          onDragEnd={(_event, info) => {
+            if (info.offset.y > 120 || info.velocity.y > 500) onCollapse();
+          }}
         >
           <div className="listening-world__atmosphere" aria-hidden="true">
             {/* Gradient atmosphere, not a blurred cover: two composited layers instead of
@@ -186,11 +215,29 @@ export function PlayerPanel({
             }
             data-live={isPlaying ? 'true' : undefined}
           >
+            {swipeToDismissEnabled ? (
+              <div
+                className="listening-grabber"
+                aria-hidden="true"
+                onPointerDown={(event) => dragControls.start(event)}
+              />
+            ) : null}
             <div className="listening-top">
-              <button type="button" className="listening-collapse" onClick={onCollapse}>
-                <ChevronDown size={16} aria-hidden="true" />
-                Back to browse
+              <button type="button" className="listening-collapse" onClick={onCollapse} aria-label="Back to browse">
+                <ChevronDown size={18} aria-hidden="true" />
+                <span className="listening-collapse__label">Back to browse</span>
               </button>
+              {mode === 'workspace' ? (
+                <div className="mobile-lyrics-chip" aria-hidden={false}>
+                  <div className="mobile-lyrics-chip__art">
+                    <Artwork song={song} size="small" />
+                  </div>
+                  <div className="mobile-lyrics-chip__meta">
+                    <span className="mobile-lyrics-chip__title">{song.title}</span>
+                    <span className="mobile-lyrics-chip__artist">{song.artist}</span>
+                  </div>
+                </div>
+              ) : null}
               <div className="player-tabs" role="tablist" aria-label="Player surfaces">
                 <button
                   type="button"
@@ -230,10 +277,16 @@ export function PlayerPanel({
               <div className="now-playing">
                 <motion.div
                   className="np-art"
-                  animate={reduced ? undefined : { scale: isPlaying ? 1.015 : 1 }}
-                  transition={spring.breathe}
+                  animate={
+                    reduced
+                      ? { opacity: mode === 'workspace' ? 0 : 1 }
+                      : mode === 'workspace'
+                        ? { opacity: 0, scale: 0.72, y: -16 }
+                        : { opacity: 1, scale: isPlaying ? 1.015 : 1, y: 0 }
+                  }
+                  transition={reduced ? { duration: motionTokens.duration.instant } : spring.lyrics}
                 >
-                  {/* No shared layoutId — shared morphs read as top-left; sheet rises from the bottom. */}
+                  {/* No shared layoutId - shared morphs read as top-left; sheet rises from the bottom. */}
                   <Artwork song={song} size="large" />
                 </motion.div>
                 <div className="np-meta">
@@ -277,10 +330,11 @@ export function PlayerPanel({
                   <div className="np-btns">
                     <IconButton icon={SkipBack} label="Previous track" onClick={onPrevious} />
                     <button
-                      className={`ctrl-play${isBuffering ? ' is-buffering' : ''}`}
+                      className={`ctrl-play tactile-control${isBuffering ? ' is-buffering' : ''}`}
                       onClick={onToggle}
                       aria-label={isPlaying ? 'Pause' : 'Play'}
                       aria-busy={isBuffering || undefined}
+                      {...playPress}
                     >
                       <PlayPauseGlyph isPlaying={isPlaying} />
                       {/* A ring around the button, not a swapped glyph: the control keeps
@@ -291,6 +345,12 @@ export function PlayerPanel({
                   </div>
                   <div className="np-actions">
                     <IconButton icon={Heart} label={liked ? 'Remove from likes' : 'Add to likes'} active={liked} onClick={onLike} />
+                    <IconButton
+                      icon={Waves}
+                      label={mode === 'workspace' ? 'Show cover' : 'Show lyrics'}
+                      active={mode === 'workspace'}
+                      onClick={() => (mode === 'workspace' ? onOpenImmersive() : onOpenWorkspace())}
+                    />
                     <PlaylistMenu song={song} />
                     <IconButton icon={muted ? VolumeX : Volume2} label={muted ? 'Unmute' : 'Mute'} active={muted} onClick={onMute} />
                   </div>
@@ -319,6 +379,40 @@ export function PlayerPanel({
                           {karaoke.error}
                         </p>
                       ) : null}
+
+                  {song ? (
+                    <div className="np-live-karaoke">
+                      <TactileButton
+                        variant={liveKaraoke?.active ? 'primary' : 'secondary'}
+                        icon={Mic}
+                        className={`np-live-karaoke-btn${liveKaraoke?.busy ? ' is-busy' : ''}${liveKaraoke?.active ? ' is-on' : ''}`}
+                        disabled={Boolean(liveKaraoke?.busy)}
+                        aria-pressed={liveKaraoke?.active ?? false}
+                        aria-busy={liveKaraoke?.busy || undefined}
+                        onClick={() => {
+                          tapHaptic(10);
+                          void liveKaraoke?.toggle();
+                        }}
+                      >
+                        {liveKaraoke?.busy
+                          ? 'Preparing…'
+                          : liveKaraoke?.active
+                            ? 'Karaoke on'
+                            : 'Karaoke'}
+                      </TactileButton>
+                      {liveKaraoke?.error ? (
+                        <p className="np-live-karaoke-error" role="alert">
+                          {liveKaraoke.error}
+                        </p>
+                      ) : null}
+                      {!liveKaraoke?.error ? (
+                        <p className="np-live-karaoke-hint">
+                          Removes vocals in your browser — works offline after load
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
                       {karaoke.busy ? (
                         <p className="np-karaoke-hint">Separating vocals and instruments…</p>
                       ) : null}
@@ -351,7 +445,7 @@ export function PlayerPanel({
                         </div>
                       ) : null}
                       {karaoke.mode === 'on' && !karaoke.busy && !karaoke.vocalsUrl ? (
-                        <p className="np-karaoke-hint">Instrumental playing — sing along with the lyrics.</p>
+                        <p className="np-karaoke-hint">Instrumental playing - sing along with the lyrics.</p>
                       ) : null}
                     </div>
                   ) : null}
@@ -438,7 +532,7 @@ function PlayPauseGlyph({ isPlaying }: { readonly isPlaying: boolean }) {
   );
 }
 
-/** "1 Minute and 19 Seconds" — what Apple Music reads out for its timers. */
+/** "1 Minute and 19 Seconds" - what Apple Music reads out for its timers. */
 function spokenTime(seconds: number): string {
   const whole = Math.max(0, Math.round(seconds));
   const minutes = Math.floor(whole / 60);
@@ -455,7 +549,7 @@ function spokenTime(seconds: number): string {
  * the edge of the bar, releasing off-screen, arrow and Page keys, and screen-reader
  * semantics all come for free and all behaved badly in the custom version.
  *
- * The visual is only the track — a 7px bar whose fill edge is the playhead. The thumb is
+ * The visual is only the track - a 7px bar whose fill edge is the playhead. The thumb is
  * an 18px transparent circle that exists purely to be grabbed, which is exactly what
  * Apple does: no knob appears, even on hover.
  *

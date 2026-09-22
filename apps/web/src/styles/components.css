@@ -117,19 +117,19 @@ body::before { display: none; }
 /* Skip Link */
 .skip-link {
   position: fixed;
-  top: -100px;
+  top: 16px;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -120px);
   z-index: 9999;
   padding: 12px 24px;
   background: var(--accent);
   color: var(--accent-ink);
   font-weight: 700;
   border-radius: var(--radius-pill);
-  transition: top var(--d-fast) var(--ease-standard);
+  transition: transform var(--d-fast) var(--ease-standard);
 }
 .skip-link:focus {
-  top: 16px;
+  transform: translate(-50%, 0);
 }
 
 /* Phase 2: Brand + session chrome (nav layout lives in global.css rail) ---- */
@@ -465,9 +465,7 @@ body::before { display: none; }
 }
 
 .mood-pill:hover {
-  border-color: var(--accent-line);
-  background: var(--accent-wash);
-  color: var(--accent-bright);
+  /* Soft Signal: handled in app.css (opacity + scale only). */
 }
 
 /* Catalog & Queue Grid */
@@ -1688,6 +1686,44 @@ body::before { display: none; }
 .np-karaoke-pct {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+
+.np-live-karaoke {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.np-live-karaoke-btn {
+  min-width: 10.5rem;
+}
+
+.np-live-karaoke-btn.is-busy {
+  opacity: 0.85;
+}
+
+.np-live-karaoke-btn.is-on {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--wave) 45%, transparent);
+}
+
+.np-live-karaoke-error {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--accent-bright, #ffaaa0);
+  text-align: center;
+}
+
+.np-live-karaoke-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--ink-muted);
+  text-align: center;
+  max-width: 16rem;
 }
 
 .player-sidepanel {

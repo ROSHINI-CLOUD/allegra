@@ -36,7 +36,7 @@ export function apiBaseUrl(): string {
 }
 
 export function resolveApiUrl(path: string): string {
-  if (/^https?:\/\//.test(path)) return path;
+  if (/^(https?:|blob:|data:)/.test(path)) return path;
   const normalized = path.replace(/^\/+/, '');
   return API_BASE_URL ? `${API_BASE_URL}/${normalized}` : `/${normalized}`;
 }
@@ -81,12 +81,36 @@ function renewSession(): Promise<void> {
   return renewing;
 }
 
+const DEFAULT_TIMEOUT_MS = 15000;
+
+/*
+ * A distinct, non-DOMException abort reason for our own timeout. fetch() rejects
+ * with whatever `signal.reason` was, so the catch block below can tell "the user
+ * (or a caller's own controller) cancelled this" — a DOMException named
+ * AbortError, forwarded as-is — apart from "this just timed out", which is never
+ * a DOMException and therefore falls through to the friendly ApiError message.
+ */
+const TIMEOUT_REASON = Symbol('allegra-api-timeout');
+
 async function send(path: string, init?: RequestInit, canRenew = true): Promise<Response> {
   let response: Response;
+  // Every call gets its own AbortController so a stalled connection cannot hang
+  // the caller forever, even when the caller never passed a signal of its own
+  // (most mutating calls in this file don't). A caller-supplied signal is
+  // combined in rather than replaced: aborting either one aborts the fetch.
+  const controller = new AbortController();
+  const callerSignal = init?.signal;
+  const forwardCallerAbort = (): void => controller.abort(callerSignal?.reason);
+  if (callerSignal) {
+    if (callerSignal.aborted) controller.abort(callerSignal.reason);
+    else callerSignal.addEventListener('abort', forwardCallerAbort);
+  }
+  const timeoutId = window.setTimeout(() => controller.abort(TIMEOUT_REASON), DEFAULT_TIMEOUT_MS);
   try {
     const token = currentToken();
     response = await fetch(resolveApiUrl(path), {
       ...init,
+      signal: controller.signal,
       headers: {
         Accept: 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -96,6 +120,9 @@ async function send(path: string, init?: RequestInit, canRenew = true): Promise<
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
     throw new ApiError('We could not reach the music service. Check your connection and try again.', 0);
+  } finally {
+    window.clearTimeout(timeoutId);
+    if (callerSignal) callerSignal.removeEventListener('abort', forwardCallerAbort);
   }
   // A signed-in 401 is a real authorization failure; starting a guest session would
   // silently drop the listener out of their own account.
@@ -156,6 +183,11 @@ export async function fetchLyrics(song: UnifiedSong, signal?: AbortSignal): Prom
     }).toString()}`,
     { signal }
   );
+}
+
+/** Placeholder synced lines when the lyrics API returns 404. */
+export function fallbackLyrics(duration: number): LyricLine[] {
+  return [{ timestamp: 0, text: duration > 0 ? 'Lyrics are taking a quiet moment.' : '[INSTRUMENTAL]', lineOrder: 0 }];
 }
 
 /** Current karaoke / Sing cache state. Throws ApiError 503 when Batch karaoke is not configured. */
@@ -321,10 +353,6 @@ export async function translateLyrics(
 export async function fetchAiRecommendations(currentSongId?: string, signal?: AbortSignal): Promise<{ songs: UnifiedSong[]; provider: string; reasoning: string }> {
   const query = currentSongId ? `?songId=${encodeURIComponent(currentSongId)}` : '';
   return request(`/api/ai/recommendations${query}`, { signal });
-}
-
-export function fallbackLyrics(duration: number): LyricLine[] {
-  return [{ timestamp: 0, text: duration > 0 ? 'Lyrics are taking a quiet moment.' : '[INSTRUMENTAL]', lineOrder: 0 }];
 }
 
 function isApiResponse<T>(value: unknown): value is ApiResponse<T> {
