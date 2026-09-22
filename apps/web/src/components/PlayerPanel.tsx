@@ -360,7 +360,7 @@ export function PlayerPanel({
                         variant={karaoke.mode === 'on' ? 'primary' : 'secondary'}
                         icon={Mic2}
                         className={`np-karaoke-btn${karaoke.busy ? ' is-busy' : ''}${karaoke.mode === 'on' ? ' is-on' : ''}`}
-                        disabled={karaoke.busy}
+                        disabled={karaoke.busy || Boolean(liveKaraoke?.active)}
                         aria-pressed={karaoke.mode === 'on'}
                         aria-busy={karaoke.busy || undefined}
                         onClick={() => {
@@ -379,44 +379,6 @@ export function PlayerPanel({
                           {karaoke.error}
                         </p>
                       ) : null}
-                  {song ? (
-                    <div className="np-live-karaoke">
-                      <TactileButton
-                        variant={liveKaraoke?.active ? 'primary' : 'secondary'}
-                        icon={Mic}
-                        className={`np-live-karaoke-btn${liveKaraoke?.busy ? ' is-busy' : ''}${liveKaraoke?.active ? ' is-on' : ''}`}
-                        disabled={Boolean(liveKaraoke?.busy) || karaoke?.mode === 'on'}
-                        aria-pressed={liveKaraoke?.active ?? false}
-                        aria-busy={liveKaraoke?.busy || undefined}
-                        onClick={() => {
-                          tapHaptic(10);
-                          void liveKaraoke?.toggle();
-                        }}
-                      >
-                        {liveKaraoke?.busy
-                          ? 'Preparing…'
-                          : liveKaraoke?.active
-                            ? 'Karaoke on'
-                            : 'Karaoke'}
-                      </TactileButton>
-                      {liveKaraoke?.error ? (
-                        <p className="np-live-karaoke-error" role="alert">
-                          {liveKaraoke.error}
-                        </p>
-                      ) : null}
-
-                      {liveKaraoke?.monoWarning && liveKaraoke.active ? (
-                        <p className="np-live-karaoke-hint">
-                          This track is mono — vocal removal may be weak. Prefer stereo or Sing.
-                        </p>
-                      ) : !liveKaraoke?.error ? (
-                        <p className="np-live-karaoke-hint">
-                          Downloads the track, then strips centered vocals in your browser
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : null}
-
                       {karaoke.busy ? (
                         <p className="np-karaoke-hint">Separating vocals and instruments…</p>
                       ) : null}
@@ -453,6 +415,45 @@ export function PlayerPanel({
                       ) : null}
                     </div>
                   ) : null}
+
+                  {song ? (
+                    <div className="np-live-karaoke">
+                      <TactileButton
+                        variant={liveKaraoke?.active ? 'primary' : 'secondary'}
+                        icon={Mic}
+                        className={`np-live-karaoke-btn${liveKaraoke?.busy ? ' is-busy' : ''}${liveKaraoke?.active ? ' is-on' : ''}`}
+                        disabled={Boolean(liveKaraoke?.busy) || karaoke?.mode === 'on'}
+                        aria-pressed={liveKaraoke?.active ?? false}
+                        aria-busy={liveKaraoke?.busy || undefined}
+                        onClick={() => {
+                          tapHaptic(10);
+                          void liveKaraoke?.toggle();
+                        }}
+                      >
+                        {liveKaraoke?.busy
+                          ? liveKaraoke.progress != null
+                            ? `Preparing ${Math.round(liveKaraoke.progress * 100)}%`
+                            : 'Preparing…'
+                          : liveKaraoke?.active
+                            ? 'Karaoke on'
+                            : 'Karaoke'}
+                      </TactileButton>
+                      {liveKaraoke?.error ? (
+                        <p className="np-live-karaoke-error" role="alert">
+                          {liveKaraoke.error}
+                        </p>
+                      ) : null}
+                      {liveKaraoke?.monoWarning && liveKaraoke.active ? (
+                        <p className="np-live-karaoke-hint">
+                          This track is mono — vocal removal may be weak. Prefer stereo or Sing.
+                        </p>
+                      ) : !liveKaraoke?.error ? (
+                        <p className="np-live-karaoke-hint">
+                          Removes vocals, keeps bass and instruments
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -467,6 +468,7 @@ export function PlayerPanel({
                       artworkUrl={lyrics.artworkUrl ?? song.artwork}
                       karaokeActive={liveKaraoke?.active ?? false}
                       karaokeBusy={liveKaraoke?.busy ?? false}
+                      karaokeProgressRatio={liveKaraoke?.progress ?? null}
                       karaokeDisabled={karaoke?.mode === 'on'}
                       karaokeError={liveKaraoke?.error ?? null}
                       onToggleKaraoke={

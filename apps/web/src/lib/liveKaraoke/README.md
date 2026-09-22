@@ -36,3 +36,6 @@ The worker probes for that file. Full `onnxruntime-web` + STFT/ISTFT inference i
 - Refuses downloads over ~40MB or decoded audio over 8 minutes (use Sing instead).
 - Mid-side only helps stereo; mono shows a UI warning.
 - Turn Sing off before Karaoke (swapAudioSource is a no-op while Sing is active).
+
+## Vocal remove (quality)
+Bass-preserving mid-side: keep mid below ~220Hz, duck only the vocal band in the mid channel, leave side intact. DSP + WAV encode run in a Web Worker with prepare progress.

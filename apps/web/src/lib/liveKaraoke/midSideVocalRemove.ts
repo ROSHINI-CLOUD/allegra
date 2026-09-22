@@ -1,12 +1,19 @@
 /**
- * Stereo mid-side vocal attenuation.
- * Vocals are often centered (mid); instruments lean into the side channel.
- * Attenuating Mid and keeping Side yields a usable instrumental without a model.
+ * Stereo vocal attenuation that keeps the mix body.
+ *
+ * Plain "mute the mid" kills centered bass/kick/pad and sounds like a phone.
+ * Instead: keep low mid (bass/body), only duck the vocal band in the mid
+ * channel, leave the side channel (width / most instruments) alone.
  */
 
 export interface MidSideOptions {
-  /** 0 = keep mid fully, 1 = mute mid. Default 0.92. */
+  /**
+   * How hard to duck the vocal-band mid (0 keep fully, 1 mute).
+   * Default ~0.72 — enough for vocals without gutting instruments.
+   */
   readonly midAttenuation?: number;
+  /** Hz below which mid is kept (bass / kick / warmth). Default 220. */
+  readonly bassKeepHz?: number;
 }
 
 export interface MidSideResult {
@@ -27,12 +34,9 @@ export function midSideVocalRemove(
     throw new Error('No audio to process.');
   }
 
-  const midAttenuation = clamp01(options.midAttenuation ?? 0.92);
-  const keepMid = 1 - midAttenuation;
   const channels = source.numberOfChannels;
   const length = source.length;
   const sampleRate = source.sampleRate;
-
   const out = new AudioBuffer({ length, numberOfChannels: 2, sampleRate });
 
   if (channels < 2) {
@@ -47,17 +51,44 @@ export function midSideVocalRemove(
   const outL = out.getChannelData(0);
   const outR = out.getChannelData(1);
 
-  for (let i = 0; i < length; i++) {
+  processMidSideStereo(left, right, outL, outR, sampleRate, options);
+
+  return { buffer: out, monoSource: false };
+}
+
+/** Pure DSP used by the worker and the main-thread path. */
+export function processMidSideStereo(
+  left: Float32Array,
+  right: Float32Array,
+  outL: Float32Array,
+  outR: Float32Array,
+  sampleRate: number,
+  options: MidSideOptions = {}
+): void {
+  const atten = clamp01(options.midAttenuation ?? 0.72);
+  const keepVocalMid = 1 - atten;
+  const bassKeepHz = Math.max(80, Math.min(400, options.bassKeepHz ?? 220));
+  // One-pole lowpass coefficient for bassKeepHz
+  const rc = 1 / (2 * Math.PI * bassKeepHz);
+  const dt = 1 / sampleRate;
+  const alpha = dt / (rc + dt);
+
+  let midLow = 0;
+  const n = left.length;
+  for (let i = 0; i < n; i++) {
     const L = left[i] ?? 0;
     const R = right[i] ?? 0;
     const mid = (L + R) * 0.5;
     const side = (L - R) * 0.5;
-    const m = mid * keepMid;
-    outL[i] = m + side;
-    outR[i] = m - side;
-  }
 
-  return { buffer: out, monoSource: false };
+    // Keep bass/body in mid; only duck the residual (vocal-ish) mid.
+    midLow += alpha * (mid - midLow);
+    const midHigh = mid - midLow;
+    const midOut = midLow + midHigh * keepVocalMid;
+
+    outL[i] = midOut + side;
+    outR[i] = midOut - side;
+  }
 }
 
 function clamp01(n: number): number {
@@ -74,12 +105,28 @@ export function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
   if (numFrames === 0) {
     throw new Error('Cannot encode empty audio.');
   }
+  const channels: Float32Array[] = [];
+  for (let c = 0; c < numChannels; c++) {
+    channels.push(buffer.getChannelData(c));
+  }
+  return encodeWavPcm16(channels, sampleRate);
+}
+
+/** Fast PCM16 WAV encode from channel arrays (worker-safe). */
+export function encodeWavPcm16(
+  channels: Float32Array[],
+  sampleRate: number
+): ArrayBuffer {
+  const numChannels = channels.length;
+  const numFrames = channels[0]?.length ?? 0;
+  if (numFrames === 0) throw new Error('Cannot encode empty audio.');
   const bytesPerSample = 2;
   const blockAlign = numChannels * bytesPerSample;
   const dataSize = numFrames * blockAlign;
   const headerSize = 44;
   const arrayBuffer = new ArrayBuffer(headerSize + dataSize);
   const view = new DataView(arrayBuffer);
+  const pcm = new Int16Array(arrayBuffer, headerSize);
 
   writeString(view, 0, 'RIFF');
   view.setUint32(4, 36 + dataSize, true);
@@ -95,19 +142,11 @@ export function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
   writeString(view, 36, 'data');
   view.setUint32(40, dataSize, true);
 
-  const channels: Float32Array[] = [];
-  for (let c = 0; c < numChannels; c++) {
-    channels.push(buffer.getChannelData(c));
-  }
-
-  let offset = headerSize;
+  let w = 0;
   for (let i = 0; i < numFrames; i++) {
     for (let c = 0; c < numChannels; c++) {
       const sample = Math.max(-1, Math.min(1, channels[c]?.[i] ?? 0));
-      // Symmetric int16 conversion
-      const int16 = sample < 0 ? Math.round(sample * 0x8000) : Math.round(sample * 0x7fff);
-      view.setInt16(offset, int16, true);
-      offset += 2;
+      pcm[w++] = sample < 0 ? Math.round(sample * 0x8000) : Math.round(sample * 0x7fff);
     }
   }
 

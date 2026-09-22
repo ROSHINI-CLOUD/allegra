@@ -10,7 +10,6 @@ import {
 
 export interface LiveKaraokePlayback {
   readonly swapAudioSource: (streamUrl: string) => Promise<boolean>;
-  /** When true, swapAudioSource is a no-op — turn Sing off first. */
   readonly singActive?: boolean;
 }
 
@@ -19,6 +18,8 @@ export interface LiveKaraokeController {
   readonly backend: LiveKaraokeBackend | null;
   readonly active: boolean;
   readonly busy: boolean;
+  /** 0–1 while preparing; null when idle/active. */
+  readonly progress: number | null;
   readonly error: string | null;
   readonly monoWarning: boolean;
   readonly toggle: () => Promise<void>;
@@ -26,8 +27,8 @@ export interface LiveKaraokeController {
 }
 
 /**
- * Browser live karaoke: fetch + decode + mid-side vocal remove, then swap the
- * main player to a blob URL of the instrumental. Restores the original stream on off.
+ * Browser live karaoke: fetch + decode + bass-preserving vocal remove, then swap
+ * the main player to an instrumental blob URL. Restores the original stream on off.
  */
 export function useLiveKaraoke(
   song: UnifiedSong | null,
@@ -37,11 +38,11 @@ export function useLiveKaraoke(
   const [backend, setBackend] = useState<LiveKaraokeBackend | null>(null);
   const [active, setActive] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [monoWarning, setMonoWarning] = useState(false);
 
   const songIdRef = useRef<string | null>(null);
-  const streamUrlRef = useRef<string | null>(null);
   const blobUrlRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const generationRef = useRef(0);
@@ -66,14 +67,10 @@ export function useLiveKaraoke(
   useEffect(() => {
     const prevId = songIdRef.current;
     songIdRef.current = song?.id ?? null;
-    streamUrlRef.current = song?.streamUrl ?? null;
     generationRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
 
-    // New track: drop karaoke state. Player loads the new streamUrl itself —
-    // only revoke after clearing active so we do not yank a still-attached src
-    // on the same tick as an in-flight prepare for the old id.
     const hadBlob = Boolean(blobUrlRef.current);
     setStatus('idle');
     setBackend(null);
@@ -81,10 +78,10 @@ export function useLiveKaraoke(
     activeRef.current = false;
     setBusy(false);
     busyRef.current = false;
+    setProgress(null);
     setError(null);
     setMonoWarning(false);
     if (hadBlob && prevId !== song?.id) {
-      // Defer revoke one frame so swap/load of the new song can replace src first.
       const stale = blobUrlRef.current;
       blobUrlRef.current = null;
       window.setTimeout(() => {
@@ -114,6 +111,7 @@ export function useLiveKaraoke(
       busyRef.current = true;
       setBusy(true);
       setError(null);
+      setProgress(null);
       try {
         const ok = await playback.swapAudioSource(current.streamUrl);
         if (!ok) {
@@ -146,13 +144,19 @@ export function useLiveKaraoke(
     setBusy(true);
     setError(null);
     setMonoWarning(false);
+    setProgress(0);
     setStatus('loading');
 
     try {
       const result = await prepareLiveKaraoke({
         streamUrl: current.streamUrl,
         songId: current.id,
-        signal: ac.signal
+        signal: ac.signal,
+        onProgress: (ratio) => {
+          if (generation !== generationRef.current) return;
+          setProgress(Math.max(0, Math.min(1, ratio)));
+          if (ratio >= 0.35) setStatus('processing');
+        }
       });
 
       if (generation !== generationRef.current || songIdRef.current !== current.id) {
@@ -160,11 +164,11 @@ export function useLiveKaraoke(
         return;
       }
 
-      setStatus('processing');
       revokeBlob();
       blobUrlRef.current = result.blobUrl;
       setBackend(result.backend);
       setMonoWarning(result.monoSource);
+      setProgress(0.97);
 
       const ok = await playback.swapAudioSource(result.blobUrl);
 
@@ -180,6 +184,7 @@ export function useLiveKaraoke(
             : 'Could not switch to the instrumental. Try playing the song again.'
         );
         setStatus('error');
+        setProgress(null);
         activeRef.current = false;
         setActive(false);
         return;
@@ -188,6 +193,7 @@ export function useLiveKaraoke(
       activeRef.current = true;
       setActive(true);
       setStatus('active');
+      setProgress(null);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       if (generation !== generationRef.current) return;
@@ -195,6 +201,7 @@ export function useLiveKaraoke(
         err instanceof Error ? err.message : 'Live karaoke failed.';
       setError(message);
       setStatus('error');
+      setProgress(null);
       activeRef.current = false;
       setActive(false);
       revokeBlob();
@@ -211,6 +218,7 @@ export function useLiveKaraoke(
     backend,
     active,
     busy,
+    progress,
     error,
     monoWarning,
     toggle,

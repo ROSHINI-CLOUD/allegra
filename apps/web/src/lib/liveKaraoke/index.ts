@@ -1,5 +1,6 @@
 import { detectLiveKaraokeCapabilities } from './capabilities';
-import { audioBufferToBlobUrl, midSideVocalRemove } from './midSideVocalRemove';
+import { audioBufferToWav, audioBufferToBlobUrl, midSideVocalRemove } from './midSideVocalRemove';
+import { processToInstrumentalBlob } from './processInWorker';
 import { probeScnetAvailability } from './scnetWorker.client';
 import { fetchAndDecodeSong } from './streamFetch';
 import type {
@@ -20,6 +21,7 @@ export { midSideVocalRemove, audioBufferToWav, audioBufferToBlobUrl } from './mi
 export { fetchAndDecodeSong, resolveStreamFetchPath, MAX_LIVE_KARAOKE_SECONDS } from './streamFetch';
 export { LiveKaraokePlayer } from './LiveKaraokePlayer';
 export { probeScnetAvailability } from './scnetWorker.client';
+export { processToInstrumentalBlob } from './processInWorker';
 
 export interface PrepareLiveKaraokeInput {
   readonly streamUrl: string;
@@ -27,11 +29,13 @@ export interface PrepareLiveKaraokeInput {
   readonly preferBackend?: LiveKaraokeBackend;
   readonly signal?: AbortSignal;
   readonly midAttenuation?: number;
+  readonly bassKeepHz?: number;
+  readonly onProgress?: (ratio: number) => void;
 }
 
 /**
- * Fetch + decode + remove vocals. SCNet is probed only when preferred;
- * MVP always applies mid-side until ORT inference is wired.
+ * Fetch + decode + remove vocals (bass-preserving mid-side).
+ * DSP/encode run in a worker when available so the UI stays responsive.
  */
 export async function prepareLiveKaraoke(
   input: PrepareLiveKaraokeInput
@@ -42,6 +46,7 @@ export async function prepareLiveKaraoke(
 
   const caps = detectLiveKaraokeCapabilities();
   const prefer = input.preferBackend ?? caps.recommendedBackend;
+  const onProgress = input.onProgress;
 
   let backend: LiveKaraokeBackend = 'midside';
   if (prefer === 'scnet') {
@@ -53,28 +58,26 @@ export async function prepareLiveKaraoke(
     }
   }
 
+  onProgress?.(0.05);
   const decoded = await fetchAndDecodeSong(input.streamUrl, input.songId, input.signal);
   if (input.signal?.aborted) {
     throw new DOMException('Aborted', 'AbortError');
   }
+  onProgress?.(0.35);
 
-  // SCNet path reserved — fall through to midside until inference is wired.
-  if (backend === 'scnet') {
-    backend = 'midside';
-  }
+  if (backend === 'scnet') backend = 'midside';
 
-  const { buffer: instrumental, monoSource } = midSideVocalRemove(decoded, {
-    midAttenuation: input.midAttenuation
-  });
+  const { blobUrl, monoSource } = await processToInstrumentalBlob(
+    decoded,
+    {
+      midAttenuation: input.midAttenuation,
+      bassKeepHz: input.bassKeepHz
+    },
+    (ratio) => onProgress?.(0.35 + ratio * 0.65),
+    input.signal
+  );
 
-  let blobUrl: string;
-  try {
-    blobUrl = audioBufferToBlobUrl(instrumental);
-  } catch {
-    throw new Error('Could not build the instrumental audio.');
-  }
-
-  return { backend, instrumental, blobUrl, monoSource };
+  return { backend, blobUrl, monoSource };
 }
 
 export function statusAfterPrepare(active: boolean): LiveKaraokeStatus {

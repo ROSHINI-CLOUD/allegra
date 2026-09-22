@@ -13,7 +13,6 @@ export interface LiveKaraokeCapabilities {
   readonly crossOriginIsolated: boolean;
   readonly webgpu: boolean;
   readonly hardwareConcurrency: number;
-  /** Preferred backend for this browser. SCNet only when model + ORT are available. */
   readonly recommendedBackend: LiveKaraokeBackend;
 }
 
@@ -24,7 +23,6 @@ export interface ScnetAvailability {
 
 export interface LiveKaraokePrepareResult {
   readonly backend: LiveKaraokeBackend;
-  readonly instrumental: AudioBuffer;
   readonly blobUrl: string;
   /** True when input was mono — vocal cancel is weak / none. */
   readonly monoSource: boolean;

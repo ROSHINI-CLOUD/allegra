@@ -39,6 +39,8 @@ interface LyricsPanelProps {
   readonly karaokeProgress?: boolean;
   readonly karaokeActive?: boolean;
   readonly karaokeBusy?: boolean;
+  /** 0–1 while preparing karaoke. */
+  readonly karaokeProgressRatio?: number | null;
   readonly karaokeDisabled?: boolean;
   readonly karaokeError?: string | null;
   readonly onToggleKaraoke?: () => void;
@@ -75,6 +77,7 @@ export function LyricsPanel({
   karaokeProgress = false,
   karaokeActive = false,
   karaokeBusy = false,
+  karaokeProgressRatio = null,
   karaokeDisabled = false,
   karaokeError = null,
   onToggleKaraoke
@@ -259,7 +262,13 @@ export function LyricsPanel({
               }
               className={`ytm-lyrics__karaoke-btn${karaokeActive ? ' is-on' : ''}${karaokeBusy ? ' is-busy' : ''}`}
             >
-              {karaokeBusy ? 'Preparing…' : karaokeActive ? 'Karaoke on' : 'Karaoke'}
+              {karaokeBusy
+                ? karaokeProgressRatio != null
+                  ? `Preparing ${Math.round(karaokeProgressRatio * 100)}%`
+                  : 'Preparing…'
+                : karaokeActive
+                  ? 'Karaoke on'
+                  : 'Karaoke'}
             </TactileButton>
           ) : null}
           {onToggleTranslate && lines.length > 0 ? (
