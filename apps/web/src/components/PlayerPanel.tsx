@@ -386,7 +386,7 @@ export function PlayerPanel({
                         variant={liveKaraoke?.active ? 'primary' : 'secondary'}
                         icon={Mic}
                         className={`np-live-karaoke-btn${liveKaraoke?.busy ? ' is-busy' : ''}${liveKaraoke?.active ? ' is-on' : ''}`}
-                        disabled={Boolean(liveKaraoke?.busy)}
+                        disabled={Boolean(liveKaraoke?.busy) || karaoke?.mode === 'on'}
                         aria-pressed={liveKaraoke?.active ?? false}
                         aria-busy={liveKaraoke?.busy || undefined}
                         onClick={() => {
@@ -405,9 +405,13 @@ export function PlayerPanel({
                           {liveKaraoke.error}
                         </p>
                       ) : null}
-                      {!liveKaraoke?.error ? (
+                      {liveKaraoke?.monoWarning && liveKaraoke.active ? (
                         <p className="np-live-karaoke-hint">
-                          Removes vocals in your browser — works offline after load
+                          This track is mono — vocal removal may be weak. Prefer stereo or Sing.
+                        </p>
+                      ) : !liveKaraoke?.error ? (
+                        <p className="np-live-karaoke-hint">
+                          Downloads the track, then strips centered vocals in your browser
                         </p>
                       ) : null}
                     </div>

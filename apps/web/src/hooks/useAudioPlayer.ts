@@ -41,7 +41,7 @@ export interface AudioPlayerState {
    * Swap the element source (e.g. original ↔ karaoke instrumental) while keeping
    * the same song identity, timestamp, and play/pause intent.
    */
-  readonly swapAudioSource: (streamUrl: string) => Promise<void>;
+  readonly swapAudioSource: (streamUrl: string) => Promise<boolean>;
   /** Enter Sing mode with synchronized vocal + instrumental stems (Web Audio gains). */
   readonly enterSingMode: (stems: SingStemUrls) => Promise<void>;
   /** Leave Sing mode and restore the original master stream at the same timestamp. */
@@ -286,13 +286,13 @@ export function useAudioPlayer(): AudioPlayerState {
     if (wasPlaying) await requestPlayback(true);
   }, [duration, requestPlayback]);
 
-  const swapAudioSource = useCallback(async (streamUrl: string): Promise<void> => {
-    if (singActiveRef.current) return;
+  const swapAudioSource = useCallback(async (streamUrl: string): Promise<boolean> => {
+    if (singActiveRef.current) return false;
     const audio = audioRef.current;
     const song = currentSongRef.current;
-    if (!audio || !song) return;
+    if (!audio || !song) return false;
     const nextSrc = resolveApiUrl(streamUrl);
-    if (audio.src === nextSrc) return;
+    if (audio.src === nextSrc || audio.getAttribute('src') === streamUrl) return true;
 
     const wasPlaying = playbackIntentRef.current;
     const resumeAt = audio.currentTime;
@@ -315,11 +315,12 @@ export function useAudioPlayer(): AudioPlayerState {
       audio.addEventListener('error', onReady, { once: true });
     });
 
-    if (generation !== playbackGenerationRef.current || currentSongRef.current?.id !== song.id) return;
+    if (generation !== playbackGenerationRef.current || currentSongRef.current?.id !== song.id) return false;
     audio.currentTime = resumeAt;
     setCurrentTime(resumeAt);
     setIsBuffering(false);
     if (wasPlaying) await requestPlayback(true);
+    return true;
   }, [requestPlayback]);
 
   const enterSingMode = useCallback(async (stems: SingStemUrls): Promise<void> => {

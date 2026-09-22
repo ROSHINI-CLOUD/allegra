@@ -56,17 +56,26 @@ async function probe(): Promise<ScnetWorkerResponse> {
 self.onmessage = (event: MessageEvent<ScnetWorkerRequest>): void => {
   const msg = event.data;
   void (async () => {
-    if (msg.type === 'probe') {
-      (self as DedicatedWorkerGlobalScope).postMessage(await probe());
-      return;
-    }
+    try {
+      if (msg.type === 'probe') {
+        (self as DedicatedWorkerGlobalScope).postMessage(await probe());
+        return;
+      }
 
-    if (msg.type === 'separate') {
-      const probeResult = await probe();
+      if (msg.type === 'separate') {
+        const probeResult = await probe();
+        (self as DedicatedWorkerGlobalScope).postMessage({
+          type: 'separate',
+          ok: false,
+          reason: probeResult.reason ?? 'SCNet unavailable'
+        } satisfies ScnetWorkerResponse);
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'Worker error';
       (self as DedicatedWorkerGlobalScope).postMessage({
-        type: 'separate',
-        ok: false,
-        reason: probeResult.reason ?? 'SCNet unavailable'
+        type: 'probe',
+        available: false,
+        reason
       } satisfies ScnetWorkerResponse);
     }
   })();

@@ -7,18 +7,26 @@
 export interface MidSideOptions {
   /** 0 = keep mid fully, 1 = mute mid. Default 0.92. */
   readonly midAttenuation?: number;
-  /** Optional soft high-pass on mid before attenuation (Hz). 0 disables. */
-  readonly midHighPassHz?: number;
+}
+
+export interface MidSideResult {
+  readonly buffer: AudioBuffer;
+  /** True when source had fewer than 2 channels (little/no vocal cancel). */
+  readonly monoSource: boolean;
 }
 
 /**
  * Produce a stereo instrumental AudioBuffer from a decoded mix.
- * Mono sources are returned unchanged (no side channel to exploit).
+ * Mono sources are duplicated L/R unchanged (no side channel to exploit).
  */
 export function midSideVocalRemove(
   source: AudioBuffer,
   options: MidSideOptions = {}
-): AudioBuffer {
+): MidSideResult {
+  if (!source || source.length === 0) {
+    throw new Error('No audio to process.');
+  }
+
   const midAttenuation = clamp01(options.midAttenuation ?? 0.92);
   const keepMid = 1 - midAttenuation;
   const channels = source.numberOfChannels;
@@ -31,7 +39,7 @@ export function midSideVocalRemove(
     const mono = source.getChannelData(0);
     out.copyToChannel(mono, 0);
     out.copyToChannel(mono, 1);
-    return out;
+    return { buffer: out, monoSource: true };
   }
 
   const left = source.getChannelData(0);
@@ -45,25 +53,27 @@ export function midSideVocalRemove(
     const mid = (L + R) * 0.5;
     const side = (L - R) * 0.5;
     const m = mid * keepMid;
-    // L' = Mid' + Side, R' = Mid' - Side
     outL[i] = m + side;
     outR[i] = m - side;
   }
 
-  return out;
+  return { buffer: out, monoSource: false };
 }
 
 function clamp01(n: number): number {
-  if (n <= 0) return 0;
+  if (!Number.isFinite(n) || n <= 0) return 0;
   if (n >= 1) return 1;
   return n;
 }
 
 /** Encode an AudioBuffer as a WAV ArrayBuffer (PCM 16-bit LE). */
 export function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
-  const numChannels = buffer.numberOfChannels;
+  const numChannels = Math.min(2, Math.max(1, buffer.numberOfChannels));
   const sampleRate = buffer.sampleRate;
   const numFrames = buffer.length;
+  if (numFrames === 0) {
+    throw new Error('Cannot encode empty audio.');
+  }
   const bytesPerSample = 2;
   const blockAlign = numChannels * bytesPerSample;
   const dataSize = numFrames * blockAlign;
@@ -94,7 +104,9 @@ export function audioBufferToWav(buffer: AudioBuffer): ArrayBuffer {
   for (let i = 0; i < numFrames; i++) {
     for (let c = 0; c < numChannels; c++) {
       const sample = Math.max(-1, Math.min(1, channels[c]?.[i] ?? 0));
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+      // Symmetric int16 conversion
+      const int16 = sample < 0 ? Math.round(sample * 0x8000) : Math.round(sample * 0x7fff);
+      view.setInt16(offset, int16, true);
       offset += 2;
     }
   }

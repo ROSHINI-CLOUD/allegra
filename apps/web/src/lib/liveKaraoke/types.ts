@@ -26,4 +26,6 @@ export interface LiveKaraokePrepareResult {
   readonly backend: LiveKaraokeBackend;
   readonly instrumental: AudioBuffer;
   readonly blobUrl: string;
+  /** True when input was mono — vocal cancel is weak / none. */
+  readonly monoSource: boolean;
 }

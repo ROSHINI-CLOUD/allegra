@@ -1,7 +1,7 @@
 /**
- * Optional dedicated player for an instrumental AudioBuffer / blob URL.
- * Prefer useAudioPlayer.swapAudioSource for unified transport; this class
- * remains available if the main element cannot take a blob URL.
+ * Optional dedicated player for an instrumental blob URL.
+ * Prefer useAudioPlayer.swapAudioSource for unified transport.
+ * Does not revoke URLs it did not create (caller owns blob lifecycle).
  */
 
 export interface LiveKaraokePlayerOptions {
@@ -12,13 +12,14 @@ export interface LiveKaraokePlayerOptions {
 
 export class LiveKaraokePlayer {
   private readonly audio: HTMLAudioElement;
-  private blobUrl: string | null = null;
+  private src: string | null = null;
   private opts: LiveKaraokePlayerOptions;
 
   constructor(options: LiveKaraokePlayerOptions = {}) {
     this.opts = options;
     this.audio = new Audio();
     this.audio.preload = 'auto';
+    this.audio.crossOrigin = 'anonymous';
     this.audio.addEventListener('ended', () => this.opts.onEnded?.());
     this.audio.addEventListener('timeupdate', () =>
       this.opts.onTimeUpdate?.(this.audio.currentTime)
@@ -28,18 +29,24 @@ export class LiveKaraokePlayer {
   }
 
   async loadBlobUrl(url: string, resumeAt = 0): Promise<void> {
-    this.revoke();
-    this.blobUrl = url;
+    this.src = url;
     this.audio.src = url;
     this.audio.load();
-    await new Promise<void>((resolve) => {
-      const done = (): void => {
-        this.audio.removeEventListener('loadedmetadata', done);
-        this.audio.removeEventListener('error', done);
+    await new Promise<void>((resolve, reject) => {
+      const onReady = (): void => {
+        cleanup();
         resolve();
       };
-      this.audio.addEventListener('loadedmetadata', done, { once: true });
-      this.audio.addEventListener('error', done, { once: true });
+      const onError = (): void => {
+        cleanup();
+        reject(new Error('Could not load instrumental audio.'));
+      };
+      const cleanup = (): void => {
+        this.audio.removeEventListener('loadedmetadata', onReady);
+        this.audio.removeEventListener('error', onError);
+      };
+      this.audio.addEventListener('loadedmetadata', onReady, { once: true });
+      this.audio.addEventListener('error', onError, { once: true });
     });
     if (Number.isFinite(resumeAt) && resumeAt > 0) {
       this.audio.currentTime = resumeAt;
@@ -70,28 +77,11 @@ export class LiveKaraokePlayer {
     return this.audio.paused;
   }
 
-  muteMain(main: HTMLAudioElement | null): void {
-    if (!main) return;
-    main.pause();
-    main.muted = true;
-  }
-
-  restoreMain(main: HTMLAudioElement | null): void {
-    if (!main) return;
-    main.muted = false;
-  }
-
   dispose(): void {
     this.audio.pause();
     this.audio.removeAttribute('src');
     this.audio.load();
-    this.revoke();
-  }
-
-  private revoke(): void {
-    if (this.blobUrl) {
-      URL.revokeObjectURL(this.blobUrl);
-      this.blobUrl = null;
-    }
+    this.src = null;
+    // Caller owns revokeObjectURL.
   }
 }

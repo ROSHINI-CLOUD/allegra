@@ -193,7 +193,8 @@ export default function App() {
   }), [audio.enterSingMode, audio.exitSingMode, audio.setSingGains, audio.swapAudioSource]);
   const karaoke = useKaraoke(audio.currentSong, karaokePlayback);
   const liveKaraoke = useLiveKaraoke(audio.currentSong, {
-    swapAudioSource: audio.swapAudioSource
+    swapAudioSource: audio.swapAudioSource,
+    singActive: audio.singActive
   });
   const hasSongLoaded = audio.currentSong !== null;
   const playlists = usePlaylists();

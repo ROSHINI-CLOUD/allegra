@@ -30,3 +30,9 @@ The worker probes for that file. Full `onnxruntime-web` + STFT/ISTFT inference i
 ## Usage
 
 `useLiveKaraoke` fetches via `resolveApiUrl(song.streamUrl)` (or `/api/stream/:id`), runs midside, and swaps the main player source with `swapAudioSource(blobUrl)`. Turning off restores `song.streamUrl`.
+
+## Limits
+- Prefers /api/stream/:songId (same-origin).
+- Refuses downloads over ~40MB or decoded audio over 8 minutes (use Sing instead).
+- Mid-side only helps stereo; mono shows a UI warning.
+- Turn Sing off before Karaoke (swapAudioSource is a no-op while Sing is active).

@@ -13,7 +13,7 @@ export interface KaraokePlayback {
   readonly enterSingMode: (stems: { vocalsUrl: string; instrumentalUrl: string }) => Promise<void>;
   readonly exitSingMode: () => Promise<void>;
   readonly setSingGains: (vocals: number, instrumental: number) => void;
-  readonly swapAudioSource: (streamUrl: string) => Promise<void>;
+  readonly swapAudioSource: (streamUrl: string) => Promise<boolean>;
 }
 
 export interface KaraokeController {
