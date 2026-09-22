@@ -39,6 +39,25 @@ One entry per person per checkpoint. Two minutes each. Specific beats profound.
 
 Canonical: `docs/karaoke-aws-decisions.md`.
 
+## Next dev served 404 for every route, including `/`
+
+**What happened:** after running `next build` to inspect the Vercel output, `next dev` in the same
+directory answered `404` with an empty body for `/`, `/discover`, everything. The app directory was
+intact and the build had just succeeded, so it read like a routing or config bug. It was neither:
+`.next/` held production build artifacts, and dev mode read them instead of compiling.
+
+**The fix:** `rm -rf apps/web/.next`. Two racing `next dev` processes (one left over from another
+terminal, which had silently taken port 5174) made it look intermittent on top of that.
+
+**What it cost:** most of an hour chasing `turbopack.root` and the optional catch-all route, both of
+which were fine.
+
+**Would do differently:** treat "every route 404s, including the root" as a stale-artifact symptom
+rather than a routing one — a real routing bug almost always spares `/`. Clear `.next` and confirm
+exactly one dev server before reading any config.
+
+---
+
 ---
 
 > **Good entry:** "Learned that a proxy returning 200 instead of 206 makes an audio element unable to seek at all — the browser needs a byte-range to seek within. Took two hours to find because playback itself looked perfect."
