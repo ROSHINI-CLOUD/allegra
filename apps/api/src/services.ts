@@ -1,4 +1,4 @@
-import type { AiConfig, KaraokeAwsConfig, UploadsConfig } from './config.js';
+import type { AiConfig, KaraokeAwsConfig, MusicBrainzConfig, UploadsConfig } from './config.js';
 import { AiClient } from './ai/aiClient.js';
 import { GeminiProvider } from './ai/providers/gemini.js';
 import { OpenAiCompatibleProvider } from './ai/providers/openaiCompatible.js';
@@ -22,6 +22,7 @@ import { ItunesProvider } from './providers/itunes.js';
 import { LrclibProvider } from './providers/lrclib.js';
 import { BetterLyricsProvider } from './providers/betterlyrics.js';
 import { LyricaProvider } from './providers/lyrica.js';
+import { MusicBrainzReleaseAuthority, type ReleaseAuthority } from './providers/musicbrainz.js';
 import { SaavnProvider } from './providers/saavn.js';
 import { MemoryUserStore, type UserStore } from './user/store.js';
 
@@ -33,6 +34,10 @@ export interface ServiceOptions {
   readonly lyricaApiUrl?: string;
   /** Better Lyrics API base URL. Unset disables that tier. */
   readonly betterLyricsApiUrl?: string;
+  readonly musicBrainz?: MusicBrainzConfig;
+  /** Injected in tests so the election runs without reaching MusicBrainz. */
+  readonly releaseAuthority?: ReleaseAuthority;
+  readonly version?: string;
   /** Optional key: without it only already-cached songs resolve. */
   readonly betterLyricsApiKey?: string;
   readonly karaoke?: KaraokeAwsConfig;
@@ -134,7 +139,18 @@ export function createServices(options: ServiceOptions): AppServices {
     baseUrl: options.gaanaApiUrl ?? 'https://example.invalid/api',
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
   });
-  const catalog = new CatalogService({ saavn, gaana, cache });
+  // Names the record behind a row the provider only has on a playlist.
+  const releaseAuthority = options.releaseAuthority
+    ?? (options.musicBrainz
+      ? new MusicBrainzReleaseAuthority({
+          baseUrl: options.musicBrainz.baseUrl,
+          coverArtUrl: options.musicBrainz.coverArtUrl,
+          contact: options.musicBrainz.contact,
+          ...(options.version ? { appVersion: options.version } : {}),
+          ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
+        })
+      : undefined);
+  const catalog = new CatalogService({ saavn, gaana, cache, ...(releaseAuthority ? { releaseAuthority } : {}) });
   const convexStore = options.convexUrl && options.convexServerSecret
     ? new ConvexUserStore({ url: options.convexUrl, serverSecret: options.convexServerSecret })
     : undefined;

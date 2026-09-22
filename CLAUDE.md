@@ -109,3 +109,17 @@ Small PRs, squash-merge, reviewed by a non-author.
 The **Premium page is a UI demo** — no payments, labelled as such in the UI and the README. Karaoke
 sliders are **real**: they mix two genuinely separated stems locally. Don't ship a control that does
 nothing and present it as a feature.
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
+<!-- convex-ai-end -->

@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 
-import type { AiConfig, KaraokeAwsConfig, UploadsConfig } from './config.js';
+import type { AiConfig, KaraokeAwsConfig, MusicBrainzConfig, UploadsConfig } from './config.js';
 import { createServices, type AppServices } from './services.js';
 import type { CacheStore } from './lib/cache.js';
 import { createLogger, REDACTED_PATHS } from './lib/logger.js';
@@ -36,6 +36,7 @@ export interface AppOptions {
   readonly saavnSecondaryApiUrl?: string;
   readonly gaanaApiUrl?: string;
   readonly lrclibApiUrl?: string;
+  readonly musicBrainz?: MusicBrainzConfig;
   readonly lyricaApiUrl?: string;
   readonly betterLyricsApiUrl?: string;
   readonly betterLyricsApiKey?: string;
@@ -88,6 +89,8 @@ export function createApp(options: AppOptions): Express {
     ...(options.saavnSecondaryApiUrl ? { saavnSecondaryApiUrl: options.saavnSecondaryApiUrl } : {}),
     ...(options.gaanaApiUrl ? { gaanaApiUrl: options.gaanaApiUrl } : {}),
     ...(options.lrclibApiUrl ? { lrclibApiUrl: options.lrclibApiUrl } : {}),
+    ...(options.musicBrainz ? { musicBrainz: options.musicBrainz } : {}),
+    ...(options.version ? { version: options.version } : {}),
     ...(options.lyricaApiUrl ? { lyricaApiUrl: options.lyricaApiUrl } : {}),
     ...(options.betterLyricsApiUrl ? { betterLyricsApiUrl: options.betterLyricsApiUrl } : {}),
     ...(options.betterLyricsApiKey ? { betterLyricsApiKey: options.betterLyricsApiKey } : {}),

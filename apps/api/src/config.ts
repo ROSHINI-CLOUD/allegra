@@ -29,6 +29,18 @@ export interface AppConfig {
   readonly uploads?: UploadsConfig;
   /** DynamoDB TTL cache. Unset keeps an in-process memory cache only. */
   readonly cache?: CacheConfig;
+  /**
+   * MusicBrainz + Cover Art Archive, which name the record a song was released on.
+   * Unset (`MUSICBRAINZ_API_URL=off`) leaves the provider's album and cover alone.
+   */
+  readonly musicBrainz?: MusicBrainzConfig;
+}
+
+/** Both hosts are free and keyless; the contact goes in the User-Agent they require. */
+export interface MusicBrainzConfig {
+  readonly baseUrl: string;
+  readonly coverArtUrl: string;
+  readonly contact: string;
 }
 
 /** AWS Batch + S3 stem separation. Creds optional when the host has an IAM role. */
@@ -97,6 +109,10 @@ const DEFAULT_GAANA = 'https://gaanaapibyprats.vercel.app/api';
 const DEFAULT_LRCLIB = 'https://lrclib.net/api';
 const DEFAULT_LYRICA = 'https://test-0k.onrender.com/lyrics';
 const DEFAULT_BETTER_LYRICS = 'https://lyrics-api.boidu.dev';
+const DEFAULT_MUSICBRAINZ = 'https://musicbrainz.org/ws/2';
+const DEFAULT_COVERART = 'https://coverartarchive.org';
+// MusicBrainz throttles anonymous agents harder, so it wants a way to reach whoever is calling.
+const DEFAULT_MUSICBRAINZ_CONTACT = 'https://github.com/peterish8/allegra';
 
 export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
   const nodeEnv = parseNodeEnv(env.NODE_ENV);
@@ -130,6 +146,14 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
   const lyricaApiUrl = isOff(env.LYRICA_API_URL) ? undefined : readOptionalProviderUrl(env.LYRICA_API_URL, production, 'LYRICA_API_URL') ?? DEFAULT_LYRICA;
   const betterLyricsApiUrl = isOff(env.BETTERLYRICS_API_URL) ? undefined : readOptionalProviderUrl(env.BETTERLYRICS_API_URL, production, 'BETTERLYRICS_API_URL') ?? DEFAULT_BETTER_LYRICS;
   const betterLyricsApiKey = env.BETTERLYRICS_API_KEY?.trim() || undefined;
+  // On by default: it only runs for a row whose album is somebody's playlist.
+  const musicBrainz: MusicBrainzConfig | undefined = isOff(env.MUSICBRAINZ_API_URL)
+    ? undefined
+    : {
+        baseUrl: readOptionalProviderUrl(env.MUSICBRAINZ_API_URL, production, 'MUSICBRAINZ_API_URL') ?? DEFAULT_MUSICBRAINZ,
+        coverArtUrl: readOptionalProviderUrl(env.COVERART_API_URL, production, 'COVERART_API_URL') ?? DEFAULT_COVERART,
+        contact: env.MUSICBRAINZ_CONTACT?.trim() || DEFAULT_MUSICBRAINZ_CONTACT
+      };
   const ai: AiConfig = {
     ...(env.GEMINI_API_KEY?.trim() ? { geminiApiKey: env.GEMINI_API_KEY.trim() } : {}),
     ...(env.GEMINI_MODEL?.trim() ? { geminiModel: env.GEMINI_MODEL.trim() } : {}),
@@ -187,7 +211,8 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     enableRequestLogging: nodeEnv === 'production',
     ai,
     ...(uploads ? { uploads } : {}),
-    ...(cache ? { cache } : {})
+    ...(cache ? { cache } : {}),
+    ...(musicBrainz ? { musicBrainz } : {})
   };
 
   const withOrigin = allowedOrigin ? { ...config, allowedOrigin } : config;

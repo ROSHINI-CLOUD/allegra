@@ -18,6 +18,7 @@ export function createAppFromEnv(env: NodeJS.Dict<string>): Express {
     ...(config.betterLyricsApiUrl ? { betterLyricsApiUrl: config.betterLyricsApiUrl } : {}),
     ...(config.betterLyricsApiKey ? { betterLyricsApiKey: config.betterLyricsApiKey } : {}),
     ...(config.karaoke ? { karaoke: config.karaoke } : {}),
+    ...(config.musicBrainz ? { musicBrainz: config.musicBrainz } : {}),
     ...(config.convexUrl && config.convexServerSecret
       ? { convexUrl: config.convexUrl, convexServerSecret: config.convexServerSecret }
       : {}),

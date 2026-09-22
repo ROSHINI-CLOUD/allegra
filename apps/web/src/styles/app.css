@@ -4840,31 +4840,38 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
 @keyframes lyric-drift-5 { 0%, 100% { transform: translate3d(0, 0, 0); } 25% { transform: translate3d(-24vw, 20vh, 0); } 50% { transform: translate3d(18vw, 34vh, 0); } 75% { transform: translate3d(30vw, -14vh, 0); } }
 
 /* ---------- Fluid cover backdrop (Apple Music style, raw CSS) ----------
- * Four copies of the cover, blurred once, each orbiting its own anchor while turning: where
- * they overlap the colours fuse. A zero-size .fluid__spin rotates (transform only, compositor);
- * its .fluid__art child is offset from the anchor, so it both orbits and twists. */
+ * Not the picture — two colours pulled out of it, plus black. Four blurred orbs, each
+ * orbiting its own anchor while turning; a zero-size .fluid__spin rotates (transform only,
+ * compositor), its .fluid__orb child offset from that anchor, so it both orbits and twists.
+ * Colour orbs blend with mix-blend-mode: screen, so where two cross they fuse into a third,
+ * brighter hue instead of just overlapping — the same trick a real mesh gradient uses. The
+ * black orb blends normally and gives the field somewhere to recede to. */
 .fluid { position: absolute; inset: 0; overflow: hidden; background: #050608; contain: paint; }
-.fluid__scene { position: absolute; inset: 0; animation: fluid-in 1.2s cubic-bezier(0.22, 1, 0.36, 1) both; }
-@keyframes fluid-in { from { opacity: 0; } to { opacity: 1; } }
+.fluid__scene { position: absolute; inset: 0; opacity: 1; }
+.fluid__scene.is-incoming { opacity: 0; animation: fluid-in 1.3s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes fluid-in { to { opacity: 1; } }
 
 .fluid__spin { position: absolute; left: var(--ax); top: var(--ay); width: 0; height: 0; will-change: transform; animation: fluid-turn var(--turn) linear infinite; animation-direction: var(--dir, normal); }
-.fluid__art {
+.fluid__orb {
   position: absolute;
   width: var(--size);
   height: var(--size);
   left: calc(var(--size) / -2);
   top: calc(var(--size) / -2);
-  background: var(--fluid-art) center / cover no-repeat;
-  filter: blur(30px) saturate(2.5) brightness(1.08) contrast(1.06);
+  border-radius: 50%;
+  filter: blur(30px);
   opacity: var(--alpha, 0.92);
-  transform: translate(var(--ox), var(--oy)) scaleX(var(--flip, 1));
+  transform: translate(var(--ox), var(--oy));
 }
+.fluid__orb--a { background: radial-gradient(circle, rgba(var(--fluid-a), 0.9) 0%, rgba(var(--fluid-a), 0.5) 42%, transparent 74%); mix-blend-mode: screen; }
+.fluid__orb--b { background: radial-gradient(circle, rgba(var(--fluid-b), 0.9) 0%, rgba(var(--fluid-b), 0.5) 42%, transparent 74%); mix-blend-mode: screen; }
+.fluid__orb--dark { background: radial-gradient(circle, rgba(3, 4, 7, 0.95) 0%, rgba(3, 4, 7, 0.6) 46%, transparent 78%); mix-blend-mode: normal; }
 @keyframes fluid-turn { to { transform: rotate(360deg); } }
 
-.fluid__spin--1 { --ax: 30%; --ay: 34%; --size: 80vmax; --ox: 12vmax; --oy: -6vmax; --turn: 36s; --alpha: 1; }
-.fluid__spin--2 { --ax: 72%; --ay: 30%; --size: 72vmax; --ox: -14vmax; --oy: 8vmax; --turn: 44s; --dir: reverse; --alpha: 0.9; }
-.fluid__spin--3 { --ax: 62%; --ay: 78%; --size: 82vmax; --ox: 10vmax; --oy: 10vmax; --turn: 52s; --flip: -1; --alpha: 0.85; }
-.fluid__spin--4 { --ax: 22%; --ay: 76%; --size: 68vmax; --ox: -10vmax; --oy: -12vmax; --turn: 60s; --dir: reverse; --alpha: 0.8; }
+.fluid__spin--1 { --ax: 30%; --ay: 34%; --size: 74vmax; --ox: 12vmax; --oy: -6vmax; --turn: 34s; --alpha: 0.95; }
+.fluid__spin--2 { --ax: 72%; --ay: 30%; --size: 66vmax; --ox: -14vmax; --oy: 8vmax; --turn: 42s; --dir: reverse; --alpha: 0.85; }
+.fluid__spin--3 { --ax: 62%; --ay: 80%; --size: 70vmax; --ox: 10vmax; --oy: 10vmax; --turn: 50s; --alpha: 0.7; }
+.fluid__spin--4 { --ax: 24%; --ay: 78%; --size: 76vmax; --ox: -10vmax; --oy: -12vmax; --turn: 58s; --dir: reverse; --alpha: 0.9; }
 
 /* Seat the lyrics: an even dark veil, heavier under the text column and at the floor. */
 .fluid__shade {

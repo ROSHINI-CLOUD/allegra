@@ -50,3 +50,17 @@ Tests state a behaviour, not a method name: *"20 simultaneous requests across se
 create ONE Batch job"*. Each seam has a fake, which is why the suite needs no network and no cloud
 account. Prove security properties with real primitives — the token tests sign with generated RSA
 keys rather than asserting on a mock.
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
+<!-- convex-ai-end -->
