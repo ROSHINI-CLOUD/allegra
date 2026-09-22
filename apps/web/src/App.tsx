@@ -1016,6 +1016,8 @@ export default function App() {
             picksReason={aiPicksReasoning}
             picksProvider={aiPicksProvider}
             trending={home?.trending ?? []}
+            madeForYou={home?.madeForYou ?? []}
+            recommended={home?.recommended ?? []}
             faces={faces}
             currentSongId={audio.currentSong?.id ?? null}
             isPlaying={audio.isPlaying}
@@ -1028,6 +1030,7 @@ export default function App() {
             onCreatePlaylist={(name) => playlists.create(name)}
             onSeedTaste={(artistNames, languageNames) => account.seed(artistNames, languageNames)}
             onOpenAuth={() => setAuthOpen(true)}
+            onExplore={(value) => { router.push(paths.discover); setQuery(value); }}
           />
         ) : view === 'shared' ? (
           sharedError ? (

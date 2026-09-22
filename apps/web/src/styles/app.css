@@ -1337,7 +1337,7 @@ body::after,
 
   .panel-topbar .mood-pills-label { display: none; }
   .home-page { gap: 28px; }
-  .home-hero-copy h1 { font-size: clamp(28px, 8vw, 40px); }
+  .home-spotlight-lead h1 { font-size: clamp(28px, 8vw, 40px); }
   .tile { flex-basis: 148px; }
   .artist-card { flex: 0 0 140px; height: 184px; }
   .now-panel { grid-template-columns: 96px minmax(0, 1fr); }
@@ -3344,40 +3344,115 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 /* ---------- Home ---------- */
 .home-page { display: flex; min-width: 0; flex-direction: column; gap: 38px; container: browse / inline-size; animation: page-in 0.4s var(--ease-decelerate) both; }
 
-.home-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; padding-top: 6px; }
-.home-hero-copy { min-width: 0; max-width: 640px; }
-.home-hero-copy h1 { margin: 6px 0 10px; color: var(--ink); font-size: clamp(30px, 4.4cqw, 58px); font-weight: 700; letter-spacing: -0.045em; line-height: 1.02; text-wrap: balance; }
-.home-hero-copy p { max-width: 52ch; margin: 0; color: var(--ink-muted); font-size: 15px; line-height: 1.5; }
-
-.home-resume {
-  display: flex;
-  width: min(320px, 100%);
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 16px 10px 10px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--surface);
-  box-shadow: var(--glass-edge);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+/* ---------- Spotlight: one song worth pressing play on, plus six quick picks ----------
+ * Full-bleed band at the top of Home. The cover is blown up, blurred and veiled behind the
+ * copy, so the page takes its colour from whatever they are about to hear. Both layers are
+ * static (no transition), so nothing here animates a non-compositor property. */
+.home-spotlight {
+  --spotlight-veil: rgba(10, 11, 14, 0.62);
+  --spotlight-veil-deep: rgba(10, 11, 14, 0.9);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin: -6px calc(var(--page-gutter, 36px) * -1) 0;
+  padding: clamp(20px, 2.6cqw, 34px) var(--page-gutter, 36px) clamp(22px, 2.8cqw, 36px);
+  border-bottom: 1px solid var(--border-subtle);
 }
+.home-spotlight-wash {
+  position: absolute;
+  z-index: -2;
+  inset: -20%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(64px) saturate(1.7);
+  opacity: 0.45;
+  transform: scale(1.12);
+}
+.home-spotlight::after {
+  position: absolute;
+  z-index: -1;
+  background: linear-gradient(170deg, var(--spotlight-veil), var(--spotlight-veil-deep) 78%);
+  content: '';
+  inset: 0;
+}
+.app-shell[data-theme='light'] .home-spotlight {
+  --spotlight-veil: rgba(246, 249, 252, 0.56);
+  --spotlight-veil-deep: rgba(246, 249, 252, 0.86);
+}
+.app-shell[data-theme='light'] .home-spotlight-wash { opacity: 0.6; filter: blur(64px) saturate(1.5) brightness(1.1); }
 
-.home-resume-art { position: relative; display: block; width: 72px; height: 72px; flex: 0 0 72px; padding: 0; overflow: hidden; border: 0; border-radius: 14px; background: var(--surface-raised); cursor: pointer; box-shadow: 0 14px 30px -14px rgba(0, 0, 0, 0.8); }
-.home-resume-art .artwork { width: 100%; height: 100%; border-radius: 0; }
-.home-resume-play { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.32); color: #fff; opacity: 0; transition: opacity var(--d-fast) var(--ease-standard); }
-.home-resume-art:hover .home-resume-play,
-.home-resume-art:focus-visible .home-resume-play { opacity: 1; }
-.home-resume-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.home-resume-copy span { color: var(--ink-faint); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-.home-resume-copy strong { overflow: hidden; color: var(--ink); font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.home-resume-copy small { overflow: hidden; color: var(--ink-muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.home-spotlight-inner { display: grid; align-items: center; gap: clamp(18px, 2.6cqw, 36px); grid-template-columns: minmax(0, 1fr) minmax(0, 400px); }
+.home-spotlight-lead { min-width: 0; }
+.home-spotlight-lead h1 { margin: 6px 0 10px; color: var(--ink); font-size: clamp(30px, 4.2cqw, 54px); font-weight: 700; letter-spacing: -0.045em; line-height: 1.02; text-wrap: balance; }
+.home-spotlight-lead p { max-width: 52ch; margin: 0; color: var(--ink-muted); font-size: 15px; line-height: 1.5; }
+
+.home-feature { display: flex; align-items: center; gap: 16px; margin-top: 22px; }
+.home-feature-art { position: relative; display: block; width: 104px; height: 104px; flex: 0 0 104px; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--surface-raised); cursor: pointer; box-shadow: 0 22px 44px -20px rgba(0, 0, 0, 0.85); transition: transform var(--d-base) var(--ease-decelerate); }
+.home-feature-art .artwork { width: 100%; height: 100%; border-radius: 0; }
+@media (hover: hover) { .home-feature-art:hover { transform: translateY(-3px); }}
+.home-feature-play { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.36); color: #fff; opacity: 0; transition: opacity var(--d-fast) var(--ease-standard); }
+.home-feature-art:hover .home-feature-play,
+.home-feature-art:focus-visible .home-feature-play { opacity: 1; }
+.home-feature-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.home-feature-copy > span { color: var(--ink-faint); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.home-feature-copy strong { overflow: hidden; color: var(--ink); font-size: 19px; font-weight: 700; letter-spacing: -0.02em; text-overflow: ellipsis; white-space: nowrap; }
+.home-feature-copy small { overflow: hidden; color: var(--ink-muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.home-feature-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.home-feature-actions .tactile-control { display: inline-flex; min-height: 38px; flex: 0 0 auto; align-items: center; justify-content: center; gap: 7px; padding-inline: 18px; border-radius: var(--radius-pill); font-size: 13px; white-space: nowrap; }
+.home-feature-actions .tactile-control:disabled { cursor: default; opacity: 0.45; }
+
+/* Quick picks: the compact half of the band — two columns of what they reach for. */
+.home-quick { display: grid; min-width: 0; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.home-quick-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 0 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background-color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-decelerate);
+}
+@media (hover: hover) { .home-quick-card:hover { border-color: var(--border-strong); background: rgba(255, 255, 255, 0.12); transform: translateY(-2px); }}
+.home-quick-card:active { transform: scale(0.99); }
+.home-quick-card.is-current { border-color: color-mix(in srgb, var(--wave) 55%, transparent); }
+.home-quick-card .artwork { width: 48px; height: 48px; flex: 0 0 48px; border-radius: 0; }
+.home-quick-copy { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; gap: 1px; }
+.home-quick-copy strong { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.home-quick-copy small { overflow: hidden; color: var(--ink-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.home-quick-play { display: grid; width: 26px; height: 26px; flex: 0 0 26px; place-items: center; border-radius: 50%; background: var(--wave); color: var(--wave-ink); opacity: 0; transition: opacity var(--d-fast) var(--ease-standard); }
+.home-quick-card:hover .home-quick-play,
+.home-quick-card:focus-visible .home-quick-play,
+.home-quick-card.is-current .home-quick-play { opacity: 1; }
+
+@container browse (max-width: 900px) {
+  .home-spotlight-inner { grid-template-columns: minmax(0, 1fr); }
+}
+@container browse (max-width: 560px) {
+  .home-quick { grid-template-columns: minmax(0, 1fr); }
+  .home-feature { flex-wrap: wrap; }
+}
 
 .home-section { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
 .home-section .section-heading { margin: 0; }
 .shelf-link { color: var(--ink-muted); font-size: 13px; font-weight: 500; text-decoration: none; transition: color var(--d-fast) var(--ease-standard); }
 .shelf-link:hover { color: var(--ink); }
+
+.section-heading-end { display: flex; align-items: center; gap: 12px; }
+/* Arrow paging is an extra on top of the native scroll, so it only exists where a pointer does. */
+.shelf-arrows { display: none; gap: 6px; }
+@media (hover: hover) and (pointer: fine) { .shelf-arrows { display: flex; }}
+.shelf-arrow { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--ink-muted); cursor: pointer; transition: color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard), opacity var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-decelerate); }
+.shelf-arrow:hover:not(:disabled) { border-color: var(--border-strong); color: var(--ink); transform: scale(1.06); }
+.shelf-arrow:active:not(:disabled) { transform: scale(0.94); }
+.shelf-arrow:disabled { cursor: default; opacity: 0.32; }
 
 .guest-nudge { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px 12px 18px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); box-shadow: var(--glass-edge); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); color: var(--ink-soft); font-size: 14px; }
 .guest-nudge .tactile-control {
@@ -3431,6 +3506,74 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .playlist-tile--new.is-editing input:focus { border-color: color-mix(in srgb, var(--wave) 60%, transparent); }
 .playlist-tile--new.is-editing div { display: flex; gap: 8px; }
 .playlist-tile--new.is-editing .tactile-control { min-height: 36px; padding: 0 14px; font-size: 13px; }
+
+/* ---------- Browse by mood ----------
+ * Six doors into Discover. Each one runs a real query, so none of these is decoration. */
+.mood-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.mood-card {
+  position: relative;
+  display: flex;
+  min-height: 96px;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 14px 16px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--mood-tint) 34%, transparent);
+  border-radius: 18px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--mood-tint) 46%, transparent), color-mix(in srgb, var(--mood-tint) 12%, transparent));
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color var(--d-base) var(--ease-standard), transform var(--d-base) var(--ease-decelerate);
+}
+@media (hover: hover) { .mood-card:hover { border-color: color-mix(in srgb, var(--mood-tint) 70%, transparent); transform: translateY(-3px); }}
+.mood-card:active { transform: scale(0.985); }
+.mood-card-label { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+.mood-card-note { color: var(--ink-soft); font-size: 12px; }
+/* The tilted square is the genre-card signature: a cover that never quite fits in the corner. */
+.mood-card-chip { position: absolute; top: 14px; right: -14px; width: 56px; height: 56px; border-radius: 10px; background: color-mix(in srgb, var(--mood-tint) 88%, #000); box-shadow: 0 12px 26px -12px rgba(0, 0, 0, 0.85); transform: rotate(24deg); }
+
+/* ---------- Chart: the numbered top ten ---------- */
+.chart-grid { display: grid; margin: 0; padding: 0; gap: 4px 20px; grid-auto-flow: column; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(5, auto); list-style: none; }
+.chart-row { display: flex; min-width: 0; align-items: center; gap: 4px; border-radius: 14px; transition: background-color var(--d-fast) var(--ease-standard); }
+@media (hover: hover) { .chart-row:hover { background: var(--active-wash); }}
+.chart-row.is-current { background: color-mix(in srgb, var(--wave) 10%, transparent); }
+.chart-row-main { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: 12px; padding: 8px 6px 8px 10px; border: 0; background: none; color: var(--ink); cursor: pointer; font: inherit; text-align: left; }
+.chart-rank { width: 26px; flex: 0 0 26px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; }
+.chart-row.is-current .chart-rank { color: var(--wave); }
+.chart-art { position: relative; display: block; width: 44px; height: 44px; flex: 0 0 44px; overflow: hidden; border-radius: 10px; }
+.chart-art .artwork { width: 100%; height: 100%; border-radius: 0; }
+.chart-play { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.4); color: #fff; opacity: 0; transition: opacity var(--d-fast) var(--ease-standard); }
+.chart-row-main:hover .chart-play,
+.chart-row-main:focus-visible .chart-play,
+.chart-row.is-current .chart-play { opacity: 1; }
+.chart-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.chart-copy strong { overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.chart-copy small { overflow: hidden; color: var(--ink-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.chart-row .chart-like { width: 34px; height: 34px; flex: 0 0 34px; margin-right: 6px; border: 0; background: transparent; color: var(--ink-faint); }
+.chart-row .chart-like:hover { background: var(--active-wash); color: var(--ink); }
+.chart-row .chart-like[aria-label^='Remove'] { color: var(--accent, #ee6b5f); }
+
+@container browse (max-width: 760px) {
+  .chart-grid { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+}
+
+/* Reduced motion keeps every one of these controls — it only takes the travel out of them. */
+@media (prefers-reduced-motion: reduce) {
+  .home-feature-art,
+  .home-quick-card,
+  .mood-card,
+  .shelf-arrow { transition: opacity var(--d-fast) var(--ease-standard), background-color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard); }
+  .home-feature-art:hover,
+  .home-quick-card:hover,
+  .home-quick-card:active,
+  .mood-card:hover,
+  .mood-card:active,
+  .shelf-arrow:hover:not(:disabled),
+  .shelf-arrow:active:not(:disabled) { transform: none; }
+}
 
 /* ---------- Taste onboarding ---------- */
 /* Full-screen takeover: portalled to <body>, so it sits above the header, mini player and the command palette. */
@@ -3684,8 +3827,8 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
     scrollbar-width: none;
   }
   .panel-topbar .mood-pills::-webkit-scrollbar { display: none; }
-  .home-hero { flex-direction: column; align-items: stretch; }
-  .home-resume { width: 100%; }
+  .home-spotlight { margin-top: 0; }
+  .mood-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
   .guest-nudge { flex-direction: column; align-items: flex-start; }
   .taste-card { padding: 20px; }
   .taste-foot { flex-wrap: wrap; }}
