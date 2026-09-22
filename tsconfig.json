@@ -2,7 +2,7 @@
   "//": "For the root api/ Vercel Function only. Each workspace has its own tsconfig.",
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
