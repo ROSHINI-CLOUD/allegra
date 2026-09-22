@@ -2,18 +2,25 @@
  * Stereo vocal attenuation that keeps the mix body.
  *
  * Plain "mute the mid" kills centered bass/kick/pad and sounds like a phone.
- * Instead: keep low mid (bass/body), only duck the vocal band in the mid
- * channel, leave the side channel (width / most instruments) alone.
+ * Instead: keep low mid (bass/body), heavily duck the vocal band in the mid
+ * channel (~5% left), keep more of the air band, leave the side channel alone.
  */
 
 export interface MidSideOptions {
   /**
    * How hard to duck the vocal-band mid (0 keep fully, 1 mute).
-   * Default ~0.72 — enough for vocals without gutting instruments.
+   * Default 0.95 — about 5% of centered vocals left.
    */
   readonly midAttenuation?: number;
-  /** Hz below which mid is kept (bass / kick / warmth). Default 220. */
+  /** Hz below which mid is kept (bass / kick / warmth). Default 200. */
   readonly bassKeepHz?: number;
+  /**
+   * Hz above which mid is treated as air (cymbals/hihat) and ducked less.
+   * Default 5200.
+   */
+  readonly airKeepHz?: number;
+  /** Keep amount for air-band mid (0–1). Default 0.55. */
+  readonly airKeep?: number;
 }
 
 export interface MidSideResult {
@@ -65,15 +72,19 @@ export function processMidSideStereo(
   sampleRate: number,
   options: MidSideOptions = {}
 ): void {
-  const atten = clamp01(options.midAttenuation ?? 0.72);
+  // ~5% vocal-band mid left by default; bass + side stay fuller.
+  const atten = clamp01(options.midAttenuation ?? 0.95);
   const keepVocalMid = 1 - atten;
-  const bassKeepHz = Math.max(80, Math.min(400, options.bassKeepHz ?? 220));
-  // One-pole lowpass coefficient for bassKeepHz
-  const rc = 1 / (2 * Math.PI * bassKeepHz);
+  const bassKeepHz = Math.max(80, Math.min(400, options.bassKeepHz ?? 200));
+  const airKeepHz = Math.max(bassKeepHz + 500, Math.min(12000, options.airKeepHz ?? 5200));
+  const airKeep = clamp01(options.airKeep ?? 0.55);
+
   const dt = 1 / sampleRate;
-  const alpha = dt / (rc + dt);
+  const alphaBass = dt / (1 / (2 * Math.PI * bassKeepHz) + dt);
+  const alphaAir = dt / (1 / (2 * Math.PI * airKeepHz) + dt);
 
   let midLow = 0;
+  let midBelowAir = 0;
   const n = left.length;
   for (let i = 0; i < n; i++) {
     const L = left[i] ?? 0;
@@ -81,10 +92,14 @@ export function processMidSideStereo(
     const mid = (L + R) * 0.5;
     const side = (L - R) * 0.5;
 
-    // Keep bass/body in mid; only duck the residual (vocal-ish) mid.
-    midLow += alpha * (mid - midLow);
-    const midHigh = mid - midLow;
-    const midOut = midLow + midHigh * keepVocalMid;
+    // mid = bass + vocalBand + air
+    midLow += alphaBass * (mid - midLow);
+    const midNoBass = mid - midLow;
+    midBelowAir += alphaAir * (midNoBass - midBelowAir);
+    const midVocal = midBelowAir;
+    const midAir = midNoBass - midBelowAir;
+
+    const midOut = midLow + midVocal * keepVocalMid + midAir * airKeep;
 
     outL[i] = midOut + side;
     outR[i] = midOut - side;

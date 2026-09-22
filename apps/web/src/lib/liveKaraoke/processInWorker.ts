@@ -110,7 +110,9 @@ async function processViaWorker(
       right: rightCopy,
       sampleRate: decoded.sampleRate,
       midAttenuation: options.midAttenuation,
-      bassKeepHz: options.bassKeepHz
+      bassKeepHz: options.bassKeepHz,
+      airKeepHz: options.airKeepHz,
+      airKeep: options.airKeep
     };
     worker.postMessage(req, [leftCopy.buffer, rightCopy.buffer]);
   });

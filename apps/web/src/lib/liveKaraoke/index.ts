@@ -30,6 +30,8 @@ export interface PrepareLiveKaraokeInput {
   readonly signal?: AbortSignal;
   readonly midAttenuation?: number;
   readonly bassKeepHz?: number;
+  readonly airKeepHz?: number;
+  readonly airKeep?: number;
   readonly onProgress?: (ratio: number) => void;
 }
 
@@ -70,8 +72,10 @@ export async function prepareLiveKaraoke(
   const { blobUrl, monoSource } = await processToInstrumentalBlob(
     decoded,
     {
-      midAttenuation: input.midAttenuation,
-      bassKeepHz: input.bassKeepHz
+      midAttenuation: input.midAttenuation ?? 0.95,
+      bassKeepHz: input.bassKeepHz ?? 200,
+      airKeepHz: input.airKeepHz,
+      airKeep: input.airKeep
     },
     (ratio) => onProgress?.(0.35 + ratio * 0.65),
     input.signal

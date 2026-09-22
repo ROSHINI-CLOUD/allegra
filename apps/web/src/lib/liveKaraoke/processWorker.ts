@@ -13,6 +13,8 @@ export type ProcessWorkerRequest = {
   readonly sampleRate: number;
   readonly midAttenuation?: number;
   readonly bassKeepHz?: number;
+  readonly airKeepHz?: number;
+  readonly airKeep?: number;
 };
 
 export type ProcessWorkerResponse =
@@ -43,7 +45,9 @@ self.onmessage = (event: MessageEvent<ProcessWorkerRequest>): void => {
     const outR = new Float32Array(right.length);
     processMidSideStereo(left, right, outL, outR, sampleRate, {
       midAttenuation: msg.midAttenuation,
-      bassKeepHz: msg.bassKeepHz
+      bassKeepHz: msg.bassKeepHz,
+      airKeepHz: msg.airKeepHz,
+      airKeep: msg.airKeep
     });
 
     (self as DedicatedWorkerGlobalScope).postMessage({
