@@ -32,6 +32,8 @@ export interface PrepareLiveKaraokeInput {
   readonly bassKeepHz?: number;
   readonly airKeepHz?: number;
   readonly airKeep?: number;
+  readonly sideBoost?: number;
+  readonly makeupGain?: number;
   readonly onProgress?: (ratio: number) => void;
 }
 
@@ -75,7 +77,9 @@ export async function prepareLiveKaraoke(
       midAttenuation: input.midAttenuation ?? 0.95,
       bassKeepHz: input.bassKeepHz ?? 200,
       airKeepHz: input.airKeepHz,
-      airKeep: input.airKeep
+      airKeep: input.airKeep,
+      sideBoost: input.sideBoost ?? 1.22,
+      makeupGain: input.makeupGain ?? 1.08
     },
     (ratio) => onProgress?.(0.35 + ratio * 0.65),
     input.signal

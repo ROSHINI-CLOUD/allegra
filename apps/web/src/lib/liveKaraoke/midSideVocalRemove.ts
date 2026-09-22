@@ -3,7 +3,8 @@
  *
  * Plain "mute the mid" kills centered bass/kick/pad and sounds like a phone.
  * Instead: keep low mid (bass/body), heavily duck the vocal band in the mid
- * channel (~5% left), keep more of the air band, leave the side channel alone.
+ * channel, keep more of the air band, leave the side channel alone, then apply
+ * a neat side/instrument boost so residual vocals sit further back.
  */
 
 export interface MidSideOptions {
@@ -21,6 +22,15 @@ export interface MidSideOptions {
   readonly airKeepHz?: number;
   /** Keep amount for air-band mid (0–1). Default 0.55. */
   readonly airKeep?: number;
+  /**
+   * Multiply the side channel (stereo instruments / width). Default 1.22 (~1.7 dB).
+   * Neat boost so residual mid vocals feel quieter relative to the bed.
+   */
+  readonly sideBoost?: number;
+  /**
+   * Gentle overall makeup after ducking. Default 1.08 (~0.7 dB).
+   */
+  readonly makeupGain?: number;
 }
 
 export interface MidSideResult {
@@ -63,6 +73,13 @@ export function midSideVocalRemove(
   return { buffer: out, monoSource: false };
 }
 
+/** Soft ceiling so boosts don't hard-clip. */
+function softClip(x: number): number {
+  if (x > 1) return 1 - Math.exp(1 - x);
+  if (x < -1) return -1 + Math.exp(1 + x);
+  return x;
+}
+
 /** Pure DSP used by the worker and the main-thread path. */
 export function processMidSideStereo(
   left: Float32Array,
@@ -72,12 +89,14 @@ export function processMidSideStereo(
   sampleRate: number,
   options: MidSideOptions = {}
 ): void {
-  // ~5% vocal-band mid left by default; bass + side stay fuller.
   const atten = clamp01(options.midAttenuation ?? 0.95);
   const keepVocalMid = 1 - atten;
   const bassKeepHz = Math.max(80, Math.min(400, options.bassKeepHz ?? 200));
   const airKeepHz = Math.max(bassKeepHz + 500, Math.min(12000, options.airKeepHz ?? 5200));
   const airKeep = clamp01(options.airKeep ?? 0.55);
+  // Neat instrument lift — not a slam.
+  const sideBoost = clampRange(options.sideBoost ?? 1.22, 1, 1.45);
+  const makeupGain = clampRange(options.makeupGain ?? 1.08, 1, 1.25);
 
   const dt = 1 / sampleRate;
   const alphaBass = dt / (1 / (2 * Math.PI * bassKeepHz) + dt);
@@ -92,7 +111,6 @@ export function processMidSideStereo(
     const mid = (L + R) * 0.5;
     const side = (L - R) * 0.5;
 
-    // mid = bass + vocalBand + air
     midLow += alphaBass * (mid - midLow);
     const midNoBass = mid - midLow;
     midBelowAir += alphaAir * (midNoBass - midBelowAir);
@@ -100,15 +118,23 @@ export function processMidSideStereo(
     const midAir = midNoBass - midBelowAir;
 
     const midOut = midLow + midVocal * keepVocalMid + midAir * airKeep;
+    const sideOut = side * sideBoost;
 
-    outL[i] = midOut + side;
-    outR[i] = midOut - side;
+    outL[i] = softClip((midOut + sideOut) * makeupGain);
+    outR[i] = softClip((midOut - sideOut) * makeupGain);
   }
 }
 
 function clamp01(n: number): number {
   if (!Number.isFinite(n) || n <= 0) return 0;
   if (n >= 1) return 1;
+  return n;
+}
+
+function clampRange(n: number, min: number, max: number): number {
+  if (!Number.isFinite(n)) return min;
+  if (n < min) return min;
+  if (n > max) return max;
   return n;
 }
 

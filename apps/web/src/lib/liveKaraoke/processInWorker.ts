@@ -112,7 +112,9 @@ async function processViaWorker(
       midAttenuation: options.midAttenuation,
       bassKeepHz: options.bassKeepHz,
       airKeepHz: options.airKeepHz,
-      airKeep: options.airKeep
+      airKeep: options.airKeep,
+      sideBoost: options.sideBoost,
+      makeupGain: options.makeupGain
     };
     worker.postMessage(req, [leftCopy.buffer, rightCopy.buffer]);
   });

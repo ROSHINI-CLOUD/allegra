@@ -15,6 +15,8 @@ export type ProcessWorkerRequest = {
   readonly bassKeepHz?: number;
   readonly airKeepHz?: number;
   readonly airKeep?: number;
+  readonly sideBoost?: number;
+  readonly makeupGain?: number;
 };
 
 export type ProcessWorkerResponse =
@@ -47,7 +49,9 @@ self.onmessage = (event: MessageEvent<ProcessWorkerRequest>): void => {
       midAttenuation: msg.midAttenuation,
       bassKeepHz: msg.bassKeepHz,
       airKeepHz: msg.airKeepHz,
-      airKeep: msg.airKeep
+      airKeep: msg.airKeep,
+      sideBoost: msg.sideBoost,
+      makeupGain: msg.makeupGain
     });
 
     (self as DedicatedWorkerGlobalScope).postMessage({
