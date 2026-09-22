@@ -661,7 +661,11 @@ body::before { display: none; }
   -ms-overflow-style: none;
   /* Short edge fade: enough to stop a hard cut, not enough to read as a blur band. */
   mask-image: linear-gradient(to bottom, transparent 0%, #000 6%, #000 93%, transparent 100%);
-  scroll-behavior: smooth;
+  /* Follow-scroll is driven by our own rAF animation (see scrollActiveIntoView), not the
+     browser's: native smooth-scroll duration/easing varies by engine and lags visibly
+     behind the highlight class, which is what read as "laggy". Only a user's own manual
+     scroll (wheel/touch) should ever be native, and that is always instant (`auto`). */
+  scroll-behavior: auto;
 }
 
 .ytm-lyrics__scroll::-webkit-scrollbar {

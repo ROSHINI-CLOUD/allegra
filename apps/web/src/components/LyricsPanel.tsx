@@ -41,8 +41,13 @@ interface LyricsPanelProps {
 
 const FOLLOW_RESUME_MS = 2200;
 
+/** easeOutCubic: fast start, gentle settle — reads as a snap rather than a drift. */
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
+
 /**
- * Synced lyrics with native smooth scrolling.
+ * Synced lyrics with a hand-rolled smooth scroll (see `scrollActiveIntoView`).
  * Soft-focus uses overflow scroll (not transform lock) so past/future lines stay reachable.
  */
 export function LyricsPanel({
@@ -69,9 +74,10 @@ export function LyricsPanel({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const followPausedRef = useRef(false);
   const resumeTimerRef = useRef(0);
-  /** Scroll position our own smooth animation is heading for, or null when idle. */
-  const pendingScrollRef = useRef<number | null>(null);
-  const pendingTimerRef = useRef(0);
+  /** rAF handle for our own scroll animation, so a new target can cancel the last one cleanly. */
+  const scrollAnimationRef = useRef(0);
+  /** True while our own animation is moving the container — the scroll handler must ignore it. */
+  const isAnimatingRef = useRef(false);
   const lastSongKeyRef = useRef('');
   const [followPaused, setFollowPaused] = useState(false);
 
@@ -87,7 +93,11 @@ export function LyricsPanel({
   );
 
   const pauseFollow = useCallback(() => {
-    pendingScrollRef.current = null;
+    if (scrollAnimationRef.current) {
+      window.cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = 0;
+    }
+    isAnimatingRef.current = false;
     followPausedRef.current = true;
     setFollowPaused(true);
     if (resumeTimerRef.current) window.clearTimeout(resumeTimerRef.current);
@@ -105,7 +115,7 @@ export function LyricsPanel({
 
   useEffect(() => () => {
     if (resumeTimerRef.current) window.clearTimeout(resumeTimerRef.current);
-    if (pendingTimerRef.current) window.clearTimeout(pendingTimerRef.current);
+    if (scrollAnimationRef.current) window.cancelAnimationFrame(scrollAnimationRef.current);
   }, []);
 
   // New lyric set (song change / reopen after load): reset scroll + follow.
@@ -113,18 +123,14 @@ export function LyricsPanel({
     if (!songKey || songKey === lastSongKeyRef.current) return;
     lastSongKeyRef.current = songKey;
     resumeFollowNow();
+    if (scrollAnimationRef.current) window.cancelAnimationFrame(scrollAnimationRef.current);
+    isAnimatingRef.current = false;
     const container = scrollRef.current;
-    if (container) {
-      pendingScrollRef.current = 0;
-      container.scrollTop = 0;
-      window.requestAnimationFrame(() => {
-        pendingScrollRef.current = null;
-      });
-    }
+    if (container) container.scrollTop = 0;
   }, [songKey, resumeFollowNow]);
 
   const scrollActiveIntoView = useCallback(
-    (behavior: ScrollBehavior) => {
+    (instant: boolean) => {
       const container = scrollRef.current;
       const active = lineRefs.current[activeIndex];
       if (!container || !active) return;
@@ -137,18 +143,39 @@ export function LyricsPanel({
         container.scrollTop + (active.getBoundingClientRect().top - container.getBoundingClientRect().top);
       const target = offsetInScroll - container.clientHeight * ACTIVE_LINE_ANCHOR + active.offsetHeight / 2;
       const nextTop = Math.max(0, target);
-      if (Math.abs(container.scrollTop - nextTop) < 2) return;
+      const start = container.scrollTop;
+      const distance = nextTop - start;
+      if (Math.abs(distance) < 2) return;
 
-      // A smooth scroll emits scroll events for as long as it runs, and a fixed timer
-      // regularly expired mid-animation — the tail of our own scroll then looked like a
-      // user gesture, follow paused, and the active line drifted off centre for the rest
-      // of the song. Track the destination instead and ignore events until we arrive.
-      pendingScrollRef.current = nextTop;
-      if (pendingTimerRef.current) window.clearTimeout(pendingTimerRef.current);
-      pendingTimerRef.current = window.setTimeout(() => {
-        pendingScrollRef.current = null;
-      }, 1600);
-      container.scrollTo({ top: nextTop, behavior });
+      if (scrollAnimationRef.current) window.cancelAnimationFrame(scrollAnimationRef.current);
+
+      if (instant) {
+        isAnimatingRef.current = false;
+        container.scrollTop = nextTop;
+        return;
+      }
+
+      // Driven by rAF, not the browser's native smooth scroll: native duration/easing
+      // varies by engine and consistently lagged behind the highlight class flipping to
+      // the new line, which read as the line "catching up" a beat late instead of rising
+      // into place with it. A short, tuned duration keeps line-to-line hops snappy — the
+      // active line comes up smoothly right as it lights up, not after.
+      const duration = Math.min(520, Math.max(220, Math.abs(distance) * 0.5));
+      const startedAt = performance.now();
+      isAnimatingRef.current = true;
+
+      const step = (now: number): void => {
+        const elapsed = now - startedAt;
+        const t = Math.min(1, elapsed / duration);
+        container.scrollTop = start + distance * easeOutCubic(t);
+        if (t < 1) {
+          scrollAnimationRef.current = window.requestAnimationFrame(step);
+        } else {
+          isAnimatingRef.current = false;
+          scrollAnimationRef.current = 0;
+        }
+      };
+      scrollAnimationRef.current = window.requestAnimationFrame(step);
     },
     [activeIndex]
   );
@@ -157,24 +184,13 @@ export function LyricsPanel({
   useLayoutEffect(() => {
     if (followPausedRef.current) return;
     if (loading || lines.length === 0) return;
-    scrollActiveIntoView(reduced ? 'auto' : 'smooth');
+    scrollActiveIntoView(Boolean(reduced));
   }, [activeIndex, loading, lines.length, reduced, scrollActiveIntoView, followPaused, songKey]);
 
   const handleScroll = useCallback(() => {
-    const pending = pendingScrollRef.current;
-    if (pending === null) {
-      pauseFollow();
-      return;
-    }
-    const container = scrollRef.current;
-    const settled =
-      !container ||
-      Math.abs(container.scrollTop - pending) < 4 ||
-      container.scrollTop >= container.scrollHeight - container.clientHeight - 1;
-    if (settled) {
-      pendingScrollRef.current = null;
-      if (pendingTimerRef.current) window.clearTimeout(pendingTimerRef.current);
-    }
+    // Our own animation drives scrollTop every frame too, so ignore scroll events while it runs.
+    if (isAnimatingRef.current) return;
+    pauseFollow();
   }, [pauseFollow]);
 
   const handleLineActivate = useCallback(
@@ -184,7 +200,7 @@ export function LyricsPanel({
       else onSeek(timestamp);
       // Snap after seek so the tapped line is centered immediately.
       window.requestAnimationFrame(() => {
-        scrollActiveIntoView(reduced ? 'auto' : 'smooth');
+        scrollActiveIntoView(Boolean(reduced));
       });
     },
     [onActivateLine, onSeek, reduced, resumeFollowNow, scrollActiveIntoView]
