@@ -1,6 +1,7 @@
 import {
   ChevronDown,
   Heart,
+  Info,
   Languages,
   ListMusic,
   LoaderCircle,
@@ -492,27 +493,7 @@ export function PlayerPanel({
                             ? 'Karaoke on'
                             : 'Karaoke'}
                       </TactileButton>
-                      {liveKaraoke?.error ? (
-                        <p className="np-live-karaoke-error" role="alert">
-                          {liveKaraoke.error}
-                        </p>
-                      ) : null}
-                      {liveKaraoke?.monoWarning && liveKaraoke.active ? (
-                        <p className="np-live-karaoke-hint">
-                          This track is mono — vocal removal may be weak. Prefer stereo audio.
-                        </p>
-                      ) : liveKaraoke?.active && liveKaraoke.backend === 'midside' ? (
-                        <p className="np-live-karaoke-hint">
-                          Basic mode — the on-device AI model couldn&apos;t load here, so some vocals remain.
-                          {liveKaraoke.fallbackReason ? ` (${liveKaraoke.fallbackReason})` : null}
-                        </p>
-                      ) : liveKaraoke?.active && liveKaraoke.backend === 'roformer' ? (
-                        <p className="np-live-karaoke-hint">On-device AI vocal removal</p>
-                      ) : !liveKaraoke?.error ? (
-                        <p className="np-live-karaoke-hint">
-                          Removes vocals, keeps bass and instruments
-                        </p>
-                      ) : null}
+                      {liveKaraoke ? <KaraokeStatus karaoke={liveKaraoke} /> : null}
                     </div>
                   ) : null}
                 </div>
@@ -737,5 +718,81 @@ function MarqueeText({ text, children }: { readonly text: string; readonly child
         {overflow ? <span className="np-marquee__item" aria-hidden="true">{text}</span> : null}
       </span>
     </span>
+  );
+}
+
+/** One quiet status line under the Karaoke button; the detail lives behind an info button. */
+function KaraokeStatus({ karaoke }: { readonly karaoke: LiveKaraokeController }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // Close on outside press or Escape; a popover that can only be closed by its own button traps focus.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event: PointerEvent): void => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  let tone: 'error' | 'basic' | 'ai' | 'idle' = 'idle';
+  let summary = 'Removes vocals, keeps bass and instruments';
+  let detail: string | null = null;
+  let technical: string | null = null;
+
+  if (karaoke.error) {
+    tone = 'error';
+    summary = 'Karaoke couldn’t start';
+    detail = 'Something went wrong while preparing the instrumental. Try turning karaoke off and on again, or play the song once more.';
+    technical = karaoke.error;
+  } else if (karaoke.active && karaoke.monoWarning) {
+    tone = 'basic';
+    summary = 'Mono track — vocals may remain';
+    detail = 'This recording is mono, so the basic vocal remover has little to work with. A stereo version will sound much cleaner.';
+  } else if (karaoke.active && karaoke.backend === 'midside') {
+    tone = 'basic';
+    summary = 'Basic mode';
+    detail =
+      'The AI vocal remover couldn’t run on this device, so Allegra is using a lighter method that leaves some vocals in. Your browser’s GPU or memory wasn’t able to run the model; a reload or a different browser may help.';
+    technical = karaoke.fallbackReason ?? null;
+  } else if (karaoke.active && karaoke.backend === 'roformer') {
+    tone = 'ai';
+    summary = 'On-device AI vocal removal';
+    detail = 'A vocal-separation model runs privately on this device. Nothing is uploaded.';
+  }
+
+  const hasDetail = detail !== null;
+  return (
+    <div ref={rootRef} className={`np-live-karaoke-status is-${tone}`}>
+      <p className={tone === 'error' ? 'np-live-karaoke-error' : 'np-live-karaoke-hint'} role={tone === 'error' ? 'alert' : undefined}>
+        {summary}
+        {hasDetail ? (
+          <button
+            type="button"
+            className="np-info-btn"
+            aria-label="More about karaoke status"
+            aria-expanded={open}
+            aria-controls="karaoke-status-detail"
+            onClick={() => setOpen((value) => !value)}
+          >
+            <Info size={14} aria-hidden="true" />
+          </button>
+        ) : null}
+      </p>
+      {hasDetail && open ? (
+        <div id="karaoke-status-detail" className="np-info-pop" role="note">
+          <p>{detail}</p>
+          {technical ? <small>{technical.slice(0, 220)}</small> : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

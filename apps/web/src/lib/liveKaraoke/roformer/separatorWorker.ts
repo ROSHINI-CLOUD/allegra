@@ -8,7 +8,7 @@
 
 import { sliceChunk, streamChunkCount, STREAM_HOP_SAMPLES } from './chunks';
 import { ROFORMER_SAMPLE_RATE } from './config';
-import { getSession, separateChunk } from './separate';
+import { getSession, recoverWithWasm, separateChunk } from './separate';
 import type { StereoPcm } from './stft';
 
 export type SeparatorRequest =
@@ -82,7 +82,9 @@ async function pump(): Promise<void> {
   if (pumping) return;
   pumping = true;
   try {
-    const session = await getSession((p) => post({ type: 'progress', ratio: p.ratio, message: p.message }));
+    const onProgress = (p: { ratio: number; message?: string }): void =>
+      post({ type: 'progress', ratio: p.ratio, message: p.message });
+    let session = await getSession(onProgress);
     while (job && !job.paused) {
       const j = job;
       const k = nextChunk(j);
@@ -93,7 +95,16 @@ async function pump(): Promise<void> {
       }
       const residualPass = j.residualPass ?? false;
       const started = performance.now();
-      const out = await separateChunk(session, sliceChunk(j.mix, k), residualPass);
+      let out;
+      try {
+        out = await separateChunk(session, sliceChunk(j.mix, k), residualPass);
+      } catch (err) {
+        // WebGPU can build a session and still fail at run time; retry once on WASM.
+        const recovered = await recoverWithWasm(onProgress);
+        if (!recovered) throw err;
+        session = recovered;
+        out = await separateChunk(session, sliceChunk(j.mix, k), residualPass);
+      }
       const ms = performance.now() - started;
       if (job !== j) continue; // cancelled or replaced while the GPU was busy
       j.done[k] = 1;

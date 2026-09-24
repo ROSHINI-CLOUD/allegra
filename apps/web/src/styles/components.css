@@ -1917,3 +1917,39 @@ body::before { display: none; }
 /* A cover changing track travels sideways past the frame. Clip that at the column so it can
  * never widen a scroll container and nudge the header or title. `clip` makes no scroll box. */
 .now-playing { overflow-x: clip; }
+
+.np-live-karaoke-status { position: relative; display: flex; flex-direction: column; align-items: center; }
+.np-live-karaoke-status p:first-child { display: inline-flex; align-items: center; gap: 4px; }
+.np-info-btn {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity var(--d-fast) var(--ease-standard), background var(--d-fast) var(--ease-standard);
+}
+.np-info-btn:hover,
+.np-info-btn[aria-expanded='true'] { background: rgba(255, 255, 255, 0.14); opacity: 1; }
+.np-info-pop {
+  z-index: 5;
+  width: min(280px, 86vw);
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(20, 20, 26, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+  box-shadow: 0 14px 34px -14px rgba(0, 0, 0, 0.7);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  text-align: left;
+}
+.np-info-pop p { margin: 0; }
+.np-info-pop small { display: block; margin-top: 6px; color: rgba(255, 255, 255, 0.5); font-size: 0.68rem; word-break: break-word; }

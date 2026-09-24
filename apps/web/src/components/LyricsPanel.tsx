@@ -1,4 +1,4 @@
-import { Languages, LoaderCircle, Mic, RefreshCw } from 'lucide-react';
+import { Languages, LoaderCircle, Mic, Minus, Plus, RefreshCw } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
 import {
   memo,
@@ -96,11 +96,18 @@ export function LyricsPanel({
   const positionedRef = useRef(false);
   const [followPaused, setFollowPaused] = useState(false);
 
-  const activeIndex = useMemo(() => findActiveLine(lines, currentTime), [currentTime, lines]);
+  /** Listener sync nudge in seconds: positive delays the lyrics, negative shows them earlier. */
+  const [syncOffset, setSyncOffset] = useState(0);
+  const syncedTime = currentTime - syncOffset;
+
+  const activeIndex = useMemo(() => findActiveLine(lines, syncedTime), [syncedTime, lines]);
   const lineProgress = useMemo(
-    () => (karaokeProgress ? activeLineProgress(lines, activeIndex, currentTime) : 0),
-    [lines, activeIndex, currentTime, karaokeProgress]
+    () => (karaokeProgress ? activeLineProgress(lines, activeIndex, syncedTime) : 0),
+    [lines, activeIndex, syncedTime, karaokeProgress]
   );
+  const nudgeSync = useCallback((delta: number) => {
+    setSyncOffset((value) => clamp(Math.round((value + delta) * 10) / 10, -5, 5));
+  }, []);
 
   const songKey = useMemo(
     () => (lines.length > 0 ? `${lines[0]?.timestamp ?? 0}:${lines.length}:${lines[lines.length - 1]?.timestamp ?? 0}` : ''),
@@ -137,6 +144,7 @@ export function LyricsPanel({
   useLayoutEffect(() => {
     if (!songKey || songKey === lastSongKeyRef.current) return;
     lastSongKeyRef.current = songKey;
+    setSyncOffset(0);
     resumeFollowNow();
     if (scrollAnimationRef.current) window.cancelAnimationFrame(scrollAnimationRef.current);
     isAnimatingRef.current = false;
@@ -213,14 +221,16 @@ export function LyricsPanel({
   const handleLineActivate = useCallback(
     (timestamp: number) => {
       resumeFollowNow();
-      if (onActivateLine) onActivateLine(timestamp);
-      else onSeek(timestamp);
+      // The line is highlighted at timestamp + offset, so seek there to land on it.
+      const target = Math.max(0, timestamp + syncOffset);
+      if (onActivateLine) onActivateLine(target);
+      else onSeek(target);
       // Snap after seek so the tapped line is centered immediately.
       window.requestAnimationFrame(() => {
         scrollActiveIntoView(Boolean(reduced));
       });
     },
-    [onActivateLine, onSeek, reduced, resumeFollowNow, scrollActiveIntoView]
+    [onActivateLine, onSeek, reduced, resumeFollowNow, scrollActiveIntoView, syncOffset]
   );
 
   return (
@@ -350,6 +360,27 @@ export function LyricsPanel({
           ))}
         </div>
       )}
+
+      {lines.length > 0 && !loading && !error && !compact ? (
+        <div className="lyrics-sync" role="group" aria-label="Adjust lyrics timing">
+          <button type="button" className="lyrics-sync__btn" onClick={() => nudgeSync(-0.1)} aria-label="Show lyrics 0.1 seconds earlier">
+            <Minus size={14} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="lyrics-sync__value"
+            onClick={() => setSyncOffset(0)}
+            disabled={syncOffset === 0}
+            aria-label="Reset lyrics timing"
+            title="Reset timing"
+          >
+            {syncOffset > 0 ? '+' : ''}{syncOffset.toFixed(1)}s
+          </button>
+          <button type="button" className="lyrics-sync__btn" onClick={() => nudgeSync(0.1)} aria-label="Show lyrics 0.1 seconds later">
+            <Plus size={14} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

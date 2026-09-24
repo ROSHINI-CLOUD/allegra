@@ -4491,7 +4491,7 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   right: 0;
   left: 0;
   display: block;
-  height: 34%;
+  height: 18%;
   pointer-events: none;
 }
 .ytm-lyrics__edge--top { top: 0; }
@@ -4502,13 +4502,13 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
 .ytm-lyrics__edge--top i:nth-child(2) { -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px); -webkit-mask-image: linear-gradient(180deg, transparent 32%, #000 50%, #000 66%, transparent 84%); mask-image: linear-gradient(180deg, transparent 32%, #000 50%, #000 66%, transparent 84%); }
 .ytm-lyrics__edge--top i:nth-child(3) { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); -webkit-mask-image: linear-gradient(180deg, transparent 14%, #000 32%, #000 48%, transparent 66%); mask-image: linear-gradient(180deg, transparent 14%, #000 32%, #000 48%, transparent 66%); }
 .ytm-lyrics__edge--top i:nth-child(4) { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14%, #000 30%, transparent 48%); mask-image: linear-gradient(180deg, transparent 0, #000 14%, #000 30%, transparent 48%); }
-.ytm-lyrics__edge--top i:nth-child(5) { -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); -webkit-mask-image: linear-gradient(180deg, #000 0, #000 10%, transparent 32%); mask-image: linear-gradient(180deg, #000 0, #000 10%, transparent 32%); }
+.ytm-lyrics__edge--top i:nth-child(5) { -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); -webkit-mask-image: linear-gradient(180deg, #000 0, #000 10%, transparent 32%); mask-image: linear-gradient(180deg, #000 0, #000 10%, transparent 32%); }
 
 .ytm-lyrics__edge--bottom i:nth-child(1) { -webkit-backdrop-filter: blur(0.6px); backdrop-filter: blur(0.6px); -webkit-mask-image: linear-gradient(0deg, transparent 50%, #000 68%, #000 84%, transparent 100%); mask-image: linear-gradient(0deg, transparent 50%, #000 68%, #000 84%, transparent 100%); }
 .ytm-lyrics__edge--bottom i:nth-child(2) { -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px); -webkit-mask-image: linear-gradient(0deg, transparent 32%, #000 50%, #000 66%, transparent 84%); mask-image: linear-gradient(0deg, transparent 32%, #000 50%, #000 66%, transparent 84%); }
 .ytm-lyrics__edge--bottom i:nth-child(3) { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); -webkit-mask-image: linear-gradient(0deg, transparent 14%, #000 32%, #000 48%, transparent 66%); mask-image: linear-gradient(0deg, transparent 14%, #000 32%, #000 48%, transparent 66%); }
 .ytm-lyrics__edge--bottom i:nth-child(4) { -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); -webkit-mask-image: linear-gradient(0deg, transparent 0, #000 14%, #000 30%, transparent 48%); mask-image: linear-gradient(0deg, transparent 0, #000 14%, #000 30%, transparent 48%); }
-.ytm-lyrics__edge--bottom i:nth-child(5) { -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); -webkit-mask-image: linear-gradient(0deg, #000 0, #000 10%, transparent 32%); mask-image: linear-gradient(0deg, #000 0, #000 10%, transparent 32%); }
+.ytm-lyrics__edge--bottom i:nth-child(5) { -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); -webkit-mask-image: linear-gradient(0deg, #000 0, #000 10%, transparent 32%); mask-image: linear-gradient(0deg, #000 0, #000 10%, transparent 32%); }
 
 /* Instrumental break: a live equaliser that plays while the break is the active line. */
 .lyric-wave { display: inline-flex; height: 40px; align-items: center; gap: 6px; }
@@ -6018,3 +6018,66 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
 @media (max-width: 900px) {
   .hero-banner[data-searching] { display: none; }
 }
+
+/* Lyrics stage: keep lines in front of the fog, give them room, and float the sync nudge bottom-right. */
+.ytm-lyrics--nobackdrop.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__scroll {
+  padding-block: 72px 42dvh;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, rgba(0, 0, 0, 0.5) 6%, #000 14%, #000 70%, rgba(0, 0, 0, 0.4) 86%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, rgba(0, 0, 0, 0.5) 6%, #000 14%, #000 70%, rgba(0, 0, 0, 0.4) 86%, transparent 100%);
+}
+.ytm-lyrics--nobackdrop.ytm-lyrics--softfocus .ytm-lyrics__line { padding-block: 0.3em; text-wrap: balance; }
+
+/* On a short desktop window the now-playing column can be taller than the viewport, which
+ * stretches the shared grid row and pushes the lyric panel's bottom (and the sync pill) offscreen. */
+@media (min-width: 961px) {
+  .listening-world.is-lyrics .player-sidepanel { max-height: calc(100dvh - 132px); }
+}
+
+.lyrics-sync {
+  position: absolute;
+  z-index: 4;
+  right: 14px;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  color: #fff;
+}
+.lyrics-sync__btn,
+.lyrics-sync__value {
+  display: grid;
+  place-items: center;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--d-fast) var(--ease-standard), opacity var(--d-fast) var(--ease-standard);
+}
+.lyrics-sync__btn { width: 32px; }
+.lyrics-sync__value { min-width: 52px; padding: 0 6px; font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.lyrics-sync__value:disabled { opacity: 0.55; cursor: default; }
+.lyrics-sync__btn:hover,
+.lyrics-sync__value:not(:disabled):hover { background: rgba(255, 255, 255, 0.18); }
+.lyrics-sync__btn:active { background: rgba(255, 255, 255, 0.28); }
+
+/* The Karaoke / Translate / Other lyrics row sits in front of the top fog, never under it. The fog
+ * starts below the row and only softens the lines that scroll up beneath it. */
+/* Everything above the lyric list (buttons, source/match info, version picker, notes, alerts) stacks in
+ * front of the fog. Only the scrolling lines pass beneath it. */
+.ytm-lyrics--nobackdrop > :not(.ytm-lyrics__scroll):not(.ytm-lyrics__edge):not(.lyrics-sync):not(.ytm-lyrics__state) {
+  position: relative;
+  z-index: 4;
+}
+.ytm-lyrics--nobackdrop .ytm-lyrics__provenance { color: rgba(255, 255, 255, 0.72); }
+.ytm-lyrics--nobackdrop.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__edge--top { top: 40px; }
+.player-sidepanel.is-lyrics .ytm-lyrics__chrome .tactile-control { opacity: 0.9; }
+.player-sidepanel.is-lyrics .ytm-lyrics__chrome .tactile-control { color: rgba(255, 255, 255, 0.9); }

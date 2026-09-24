@@ -24,6 +24,10 @@ export type SeparateProgress = {
 
 let ortModule: typeof OrtNamespace | null = null;
 let sessionPromise: Promise<OrtNamespace.InferenceSession> | null = null;
+export type OrtBackend = 'webgpu' | 'wasm';
+let activeBackend: OrtBackend | null = null;
+/** Set once WebGPU has failed on this machine, so every later session goes straight to WASM. */
+let wasmOnly = false;
 
 async function loadOrt(): Promise<typeof OrtNamespace> {
   if (ortModule) return ortModule;
@@ -62,16 +66,20 @@ export async function getSession(
           ? ort.InferenceSession.create(model.graph, { executionProviders, externalData, logSeverityLevel: 3 })
           : ort.InferenceSession.create(model.graph, { executionProviders, externalData, logSeverityLevel: 3 });
 
-      if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
+      if (!wasmOnly && typeof navigator !== 'undefined' && 'gpu' in navigator) {
         try {
-          return await create([{ name: 'webgpu', storageBufferCacheMode: 'simple' } as never]);
+          const gpuSession = await create([{ name: 'webgpu', storageBufferCacheMode: 'simple' } as never]);
+          activeBackend = 'webgpu';
+          return gpuSession;
         } catch (err) {
           if (process.env.NODE_ENV !== 'production') {
             console.warn('[karaoke] WebGPU session failed, trying WASM', err);
           }
         }
       }
-      return create(['wasm']);
+      const wasmSession = await create(['wasm']);
+      activeBackend = 'wasm';
+      return wasmSession;
     })();
     // A failed load must not poison every later attempt this session.
     sessionPromise.catch(() => {
@@ -81,6 +89,26 @@ export async function getSession(
   const session = await sessionPromise;
   onProgress?.({ phase: 'ready', ratio: 1 });
   return session;
+}
+
+/**
+ * A WebGPU session can build fine and still fail on the first run (driver/validation errors).
+ * Drop it and rebuild on WASM; returns null when there is nothing to recover from.
+ */
+export async function recoverWithWasm(
+  onProgress?: (p: SeparateProgress) => void
+): Promise<OrtNamespace.InferenceSession | null> {
+  if (activeBackend !== 'webgpu') return null;
+  const failed = sessionPromise;
+  wasmOnly = true;
+  sessionPromise = null;
+  activeBackend = null;
+  try {
+    (await failed)?.release();
+  } catch {
+    // The GPU session is already unusable; releasing it is best-effort.
+  }
+  return getSession(onProgress);
 }
 
 async function inferVocals(
