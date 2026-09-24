@@ -29,7 +29,8 @@ One deployment, three owners of state. Read this before changing anything struct
 | State | Owner | Why there |
 |---|---|---|
 | Identity (who you are) | **Convex Auth** | It holds the Google secret and signs session tokens. Our API never touches a credential. |
-| Listener data (likes, playlists, recents, taste, shares) | **Convex** | Durable, and the API reaches it through one `UserStore` seam. |
+| Listener data (likes, playlists, recents, taste, play tally, shares) | **Convex** | Durable, and the API reaches it through one `UserStore` seam. |
+| Song relations (which songs go with which, shared by everyone) | **Convex** `songRelations` | Derived, so allowed to be lost, but kept durable because each one costs several provider calls to work out and every listener reuses it. Reached through `RelationStore`. |
 | Karaoke output | **Browser memory / device storage** | The worker separates audio locally. A model may be cached locally; no stems or track audio are persisted by the API. |
 
 Everything else — search results, lyrics, artwork, recommendations — is cache, and is allowed to be lost.
@@ -65,7 +66,11 @@ Three invariants, each of which was a real bug:
 
 Normal playback uses the original master. Karaoke keeps that element as the transport clock while a
 browser worker produces an instrumental stream near the playhead. Seeking and synced lyrics stay on
-the same clock. When the Mel-Band RoFormer model cannot load, cannot keep up, or the song exceeds
+the same clock. The worker returns both stems (instrumental, and vocals = mix − instrumental), so the
+listener's Vocals / Bass & instruments faders mix two sample-aligned buffers; both at 100% is the
+original. The mid-side fallback has no stems, so the faders are shown locked with a reason.
+Listener preferences (theme, lyrics, karaoke mode and mix, analytics opt-out) live in
+`localStorage['allegra-settings-v1']` on the device, never on the server. When the Mel-Band RoFormer model cannot load, cannot keep up, or the song exceeds
 the device limit, the client falls back to local mid-side reduction or shows a capability message.
 
 No API route starts a separation job, no track audio is uploaded, and no cloud GPU or per-song state
@@ -96,6 +101,18 @@ repeat.
 | `UserStore` | `ConvexUserStore`, `MemoryUserStore` (tests, and local dev without Convex) |
 | `TokenVerifier` | `GuestTokenVerifier`, `ConvexTokenVerifier`, `FirstMatchVerifier` |
 | `CacheStore` | `MemoryCacheStore` |
+| `RelationStore` | `ConvexRelationStore`, `MemoryRelationStore` (tests, and local dev without Convex) |
+
+## Recommendations (Quick Picks)
+
+Modelled on Echo's Quick Picks. Every play grows a per-listener **play tally** (`profile.playStats`,
+capped at 200 songs: plays, seconds ever, and seconds halving weekly). A shelf takes up to twenty
+seeds — now playing, the last five plays, this week's top five, the all-time top ten, the latest
+likes — and reads each seed's **song relation**: YouTube Music's song radio and the catalog's
+suggestions, merged and matched to catalog rows (`services/songRelations.ts`). Every seed votes for
+its neighbours, so a song many of your plays point to ranks first. Missing relations are worked out a
+few per shelf (no background jobs), so the map grows as people listen; each is refreshed after 30
+days. Audio never comes from YouTube — see `docs/provider-integration.md` rule 14.
 
 Each has a fake used by tests, which is why the suite runs with no network and no cloud account.
 

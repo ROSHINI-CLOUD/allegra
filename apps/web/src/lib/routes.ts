@@ -2,7 +2,7 @@
  * The app's URL space, in one place. The shell reads the pathname through
  * parseRoute; everything that navigates builds its href through `paths`.
  */
-export type AppView = 'home' | 'discover' | 'library' | 'album' | 'artist' | 'playlist' | 'liked' | 'shared';
+export type AppView = 'home' | 'discover' | 'library' | 'album' | 'artist' | 'playlist' | 'liked' | 'shared' | 'settings';
 
 export interface Route {
   readonly view: AppView;
@@ -17,6 +17,7 @@ export const paths = {
   library: '/library',
   liked: '/liked',
   album: '/album',
+  settings: '/settings',
   artist: (name: string): string => `/artist/${encodeURIComponent(name)}`,
   playlist: (id: string): string => `/playlist/${encodeURIComponent(id)}`,
   shared: (code: string): string => `/shared/${encodeURIComponent(code)}`
@@ -44,6 +45,8 @@ export function parseRoute(pathname: string): Route {
       return { view: 'liked', ...NO_PARAMS };
     case 'album':
       return { view: 'album', ...NO_PARAMS };
+    case 'settings':
+      return { view: 'settings', ...NO_PARAMS };
     case 'artist': {
       const artistName = decode(second);
       return artistName ? { view: 'artist', ...NO_PARAMS, artistName } : { view: 'home', ...NO_PARAMS };

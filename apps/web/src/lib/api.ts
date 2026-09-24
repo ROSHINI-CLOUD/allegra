@@ -1,4 +1,4 @@
-import type { AccountProfile, ApiResponse, ArtistProfile, ArtistSummary, HomePayload, LyricLine, LyricsPayload, SharedPlaylist, TasteSummary, UnifiedSong } from '@shared/types';
+import type { AccountProfile, ApiResponse, ArtistProfile, ArtistSummary, HomePayload, LyricLine, LyricsPayload, MotionArtwork, SharedPlaylist, TasteSummary, UnifiedSong } from '@shared/types';
 
 export interface LibraryRecord {
   readonly id: string;
@@ -183,6 +183,54 @@ export async function fetchLyrics(song: UnifiedSong, signal?: AbortSignal): Prom
     }).toString()}`,
     { signal }
   );
+}
+
+/** Explicitly requested alternatives, not the normal fast lyric cascade. */
+export async function fetchLyricsAlternatives(song: UnifiedSong, signal?: AbortSignal): Promise<LyricsPayload[]> {
+  return request(
+    `/api/lyrics/alternatives?${new URLSearchParams({
+      songId: song.id,
+      title: song.title,
+      artist: song.artist,
+      duration: String(song.duration),
+      syncedOnly: 'false'
+    }).toString()}`,
+    { signal }
+  );
+}
+
+/** Optional Apple Music editorial motion artwork. `null` keeps the normal cover untouched. */
+export async function fetchCanvasArtwork(song: Pick<UnifiedSong, 'title' | 'artist' | 'album' | 'duration'>, signal?: AbortSignal): Promise<MotionArtwork | null> {
+  return request(
+    `/api/canvas?${new URLSearchParams({
+      title: song.title,
+      artist: song.artist,
+      ...(song.album ? { album: song.album } : {}),
+      ...(song.duration > 0 ? { duration: String(Math.round(song.duration)) } : {})
+    }).toString()}`,
+    { signal }
+  );
+}
+
+/** `GET /api/health` (not enveloped: `{ ok, version }`). Null when the server can't be reached. */
+export async function fetchHealth(signal?: AbortSignal): Promise<{ readonly ok: boolean; readonly version: string } | null> {
+  const timeout = new AbortController();
+  const timer = window.setTimeout(() => timeout.abort(), 6000);
+  const onAbort = (): void => timeout.abort();
+  signal?.addEventListener('abort', onAbort);
+  try {
+    const response = await fetch(resolveApiUrl('/api/health'), { signal: timeout.signal, cache: 'no-store' });
+    if (!response.ok) return null;
+    const body: unknown = await response.json();
+    if (typeof body !== 'object' || body === null) return null;
+    const record = body as Record<string, unknown>;
+    return { ok: record.ok === true, version: typeof record.version === 'string' ? record.version : 'unknown' };
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  }
 }
 
 /** Placeholder synced lines when the lyrics API returns 404. */

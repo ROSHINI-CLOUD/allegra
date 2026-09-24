@@ -1,13 +1,13 @@
 'use client';
 
-import { ArrowLeft, ChevronRight, House, Heart as HeartIcon, Moon, Sun, Disc3, Pause, Play, SkipBack, SkipForward, Sparkles, Waves, Clock, Compass, Library as LibraryIcon, ListMusic, PanelLeftClose, PanelLeftOpen, Repeat, Repeat1, Search as SearchIcon, Shuffle, Volume2, VolumeX, X } from 'lucide-react';
+import { ArrowLeft, ChevronRight, House, Heart as HeartIcon, Moon, Sun, Disc3, Pause, Play, SkipBack, SkipForward, Sparkles, Waves, Clock, Compass, Library as LibraryIcon, ListMusic, PanelLeftClose, PanelLeftOpen, Repeat, Repeat1, Search as SearchIcon, Settings as SettingsIcon, Shuffle, Volume2, VolumeX, X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 
-import type { ArtistProfile, HomePayload, LyricLine, SharedPlaylist, UnifiedSong } from '@shared/types';
+import type { ArtistProfile, HomePayload, LyricLine, LyricsPayload, SharedPlaylist, UnifiedSong } from '@shared/types';
 import { deriveMoodPrompts } from '@shared/moodPrompts';
 
 import { AlbumPage } from './components/AlbumPage';
@@ -23,6 +23,7 @@ import { useSignIn } from './auth/SignInContext';
 import { CommandPalette } from './components/CommandPalette';
 import { HomePage } from './components/HomePage';
 import { PlayerPanel } from './components/PlayerPanel';
+import { SettingsPage } from './components/SettingsPage';
 import { MusicFlowShader } from './components/shader/MusicFlowShader';
 import type { ImmersivePlayerMode } from './components/PlayerPanel';
 import { SearchResults, artistsFromSongs } from './components/SearchResults';
@@ -33,12 +34,14 @@ import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { useLiveKaraoke } from './hooks/useLiveKaraoke';
 import { useMediaSession } from './hooks/useMediaSession';
 import { useNarrowViewport } from './hooks/useNarrowViewport';
+import { useSettings } from './hooks/useSettings';
 import { PlaylistsContext, usePlaylists } from './hooks/usePlaylists';
 import { collectAlbumTracks } from './lib/album';
 import { tapHaptic } from './lib/haptics';
+import { lockScroll } from './lib/scrollLock';
 import { DEFAULT_PALETTE, extractPalette, shadePalette } from './lib/palette';
 import type { Palette } from './lib/palette';
-import { ApiError, ensureSession, fetchArtist, fetchArtistFaces, fallbackLyrics, fetchAiRecommendations, fetchHome, fetchLikedSongs, fetchLyrics, fetchRecentlyPlayed, fetchSharedPlaylist, fetchSuggestions, recordRecentlyPlayed, saveSharedPlaylist, searchSongs, setLikedSong, translateLyrics } from './lib/api';
+import { ApiError, ensureSession, fetchArtist, fetchArtistFaces, fallbackLyrics, fetchAiRecommendations, fetchHome, fetchLikedSongs, fetchLyrics, fetchLyricsAlternatives, fetchRecentlyPlayed, fetchSharedPlaylist, fetchSuggestions, recordRecentlyPlayed, saveSharedPlaylist, searchSongs, setLikedSong, translateLyrics } from './lib/api';
 import { shouldStartRadio, uniqueByIdentity } from './lib/songIdentity';
 import { legacyHashToPath, parseRoute, paths } from './lib/routes';
 import { pickTopResult } from './lib/topResult';
@@ -89,8 +92,12 @@ export default function App() {
   const [searching, setSearching] = useState(true);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
+  const [lyricsPayload, setLyricsPayload] = useState<LyricsPayload | null>(null);
   const [lyricsLoading, setLyricsLoading] = useState(false);
   const [lyricsError, setLyricsError] = useState<string | null>(null);
+  const [lyricsAlternatives, setLyricsAlternatives] = useState<LyricsPayload[] | null>(null);
+  const [lyricsAlternativesLoading, setLyricsAlternativesLoading] = useState(false);
+  const [lyricsAlternativesError, setLyricsAlternativesError] = useState<string | null>(null);
   const [translatedLyrics, setTranslatedLyrics] = useState<LyricLine[] | null>(null);
   const [showTranslated, setShowTranslated] = useState(false);
   const [translating, setTranslating] = useState(false);
@@ -127,16 +134,21 @@ export default function App() {
   const [suggestions, setSuggestions] = useState<UnifiedSong[]>([]);
   const [palette, setPalette] = useState<Palette>(DEFAULT_PALETTE);
   const [ambientColor, setAmbientColor] = useState('#2d7fe4');
-  const [motionPaused, setMotionPaused] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    try { return window.localStorage.getItem('allegra-theme') === 'light' ? 'light' : 'dark'; } catch { return 'dark'; }
-  });
+  const [settings, updateSettings] = useSettings();
+  // Background motion and theme are saved settings; the header buttons are shortcuts to them.
+  const motionPaused = !settings.animatedBackground;
+  const [systemLight, setSystemLight] = useState(() => window.matchMedia?.('(prefers-color-scheme: light)').matches ?? false);
+  useEffect(() => {
+    if (settings.theme !== 'system' || !window.matchMedia) return undefined;
+    const query = window.matchMedia('(prefers-color-scheme: light)');
+    const onChange = (): void => setSystemLight(query.matches);
+    onChange();
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, [settings.theme]);
+  const theme: 'dark' | 'light' = settings.theme === 'system' ? (systemLight ? 'light' : 'dark') : settings.theme;
   const toggleTheme = (): void => {
-    setTheme((current) => {
-      const next = current === 'dark' ? 'light' : 'dark';
-      try { window.localStorage.setItem('allegra-theme', next); } catch { /* storage unavailable: the choice just won't persist */ }
-      return next;
-    });
+    updateSettings({ theme: theme === 'dark' ? 'light' : 'dark' });
   };
   const [navCollapsed, setNavCollapsed] = useState(() => {
     try { return window.localStorage.getItem('allegra-nav-collapsed') === 'true'; } catch { return false; }
@@ -490,24 +502,34 @@ export default function App() {
     const song = audio.currentSong;
     if (!song) {
       setLyrics([]);
+      setLyricsPayload(null);
       setLyricsError(null);
+      setLyricsAlternatives(null);
+      setLyricsAlternativesError(null);
       return undefined;
     }
     const generation = ++lyricsGeneration.current;
     const controller = new AbortController();
     setLyricsLoading(true);
     setLyricsError(null);
+    setLyricsAlternatives(null);
+    setLyricsAlternativesError(null);
     void fetchLyrics(song, controller.signal)
       .then((response) => {
-        if (generation === lyricsGeneration.current) setLyrics(response.lines);
+        if (generation === lyricsGeneration.current) {
+          setLyrics(response.lines);
+          setLyricsPayload(response);
+        }
       })
       .catch((error: unknown) => {
         if (generation !== lyricsGeneration.current || (error instanceof DOMException && error.name === 'AbortError')) return;
         if (error instanceof ApiError && error.status === 404) {
           setLyrics(fallbackLyrics(song.duration));
+          setLyricsPayload(null);
           setLyricsError(null);
         } else {
           setLyrics([]);
+          setLyricsPayload(null);
           setLyricsError(error instanceof Error ? error.message : 'Lyrics could not be loaded.');
         }
       })
@@ -810,7 +832,7 @@ export default function App() {
     // Active search → always radio. Title hits are remasters/remixes of the same
     // song; Next should pull similar-vibe tracks, not the next cover variant.
     const fromSearch = Boolean(query.trim()) && queue === displaySongs;
-    const radio = fromSearch || shouldStartRadio(song, queue);
+    const radio = settings.autoplaySimilar && (fromSearch || shouldStartRadio(song, queue));
     radioActiveRef.current = radio;
     radioForSongRef.current = radio ? song.id : null;
     audio.selectSong(song, radio ? [song] : uniqueByIdentity(queue));
@@ -872,12 +894,47 @@ export default function App() {
     setLyricsLoading(true);
     setLyricsError(null);
     void fetchLyrics(song)
-      .then((response) => setLyrics(response.lines))
+      .then((response) => {
+        setLyrics(response.lines);
+        setLyricsPayload(response);
+      })
       .catch((error: unknown) => {
-        if (error instanceof ApiError && error.status === 404) setLyrics(fallbackLyrics(song.duration));
+        if (error instanceof ApiError && error.status === 404) {
+          setLyrics(fallbackLyrics(song.duration));
+          setLyricsPayload(null);
+        }
         else setLyricsError(error instanceof Error ? error.message : 'Lyrics could not be loaded.');
       })
       .finally(() => setLyricsLoading(false));
+  };
+
+  const loadLyricsAlternatives = (): void => {
+    const song = audio.currentSong;
+    if (!song || lyricsAlternativesLoading) return;
+    const generation = lyricsGeneration.current;
+    setLyricsAlternativesLoading(true);
+    setLyricsAlternativesError(null);
+    void fetchLyricsAlternatives(song)
+      .then((versions) => {
+        if (generation === lyricsGeneration.current) setLyricsAlternatives(versions);
+      })
+      .catch((error: unknown) => {
+        if (generation === lyricsGeneration.current) {
+          setLyricsAlternativesError(error instanceof Error ? error.message : 'Other lyric versions could not be loaded.');
+        }
+      })
+      .finally(() => {
+        if (generation === lyricsGeneration.current) setLyricsAlternativesLoading(false);
+      });
+  };
+
+  const selectLyricsAlternative = (alternative: LyricsPayload): void => {
+    setLyrics(alternative.lines);
+    setLyricsPayload(alternative);
+    setTranslatedLyrics(null);
+    setShowTranslated(false);
+    setTranslateError(null);
+    setTranslateProvider(null);
   };
 
   const toggleTranslate = (): void => {
@@ -930,22 +987,7 @@ export default function App() {
 
   useEffect(() => {
     if (!immersiveOpen) return undefined;
-    const root = document.documentElement;
-    const body = document.body;
-    const previousRootOverflow = root.style.overflow;
-    const previousBodyOverflow = body.style.overflow;
-    const previousRootOverscroll = root.style.overscrollBehavior;
-    const previousBodyOverscroll = body.style.overscrollBehavior;
-    root.style.overflow = 'hidden';
-    body.style.overflow = 'hidden';
-    root.style.overscrollBehavior = 'none';
-    body.style.overscrollBehavior = 'none';
-    return () => {
-      root.style.overflow = previousRootOverflow;
-      body.style.overflow = previousBodyOverflow;
-      root.style.overscrollBehavior = previousRootOverscroll;
-      body.style.overscrollBehavior = previousBodyOverscroll;
-    };
+    return lockScroll();
   }, [immersiveOpen]);
 
   useEffect(() => {
@@ -991,14 +1033,14 @@ export default function App() {
                 <small>{account.profile && !account.profile.isGuest ? <><i aria-hidden="true" /> Signed in</> : 'Sign in to keep your music'}</small>
               </span>
             </button>
-            <div className="header-buttons"><button className="icon-button theme-toggle" type="button" aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}</button><button className="motion-toggle icon-button" type="button" aria-label={motionPaused ? 'Resume background motion' : 'Pause background motion'} title={motionPaused ? 'Resume background motion' : 'Pause background motion'} onClick={() => setMotionPaused((value) => !value)}>{motionPaused ? <Play size={15} fill="currentColor" aria-hidden="true" /> : <Pause size={15} aria-hidden="true" />}</button></div>
+            <div className="header-buttons"><button className="icon-button theme-toggle" type="button" aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}</button><button className="motion-toggle icon-button" type="button" aria-label={motionPaused ? 'Resume background motion' : 'Pause background motion'} title={motionPaused ? 'Resume background motion' : 'Pause background motion'} onClick={() => updateSettings((current) => ({ animatedBackground: !current.animatedBackground }))}>{motionPaused ? <Play size={15} fill="currentColor" aria-hidden="true" /> : <Pause size={15} aria-hidden="true" />}</button><Link className={`icon-button settings-link${view === 'settings' ? ' is-active' : ''}`} href={paths.settings} aria-label="Settings" title="Settings" aria-current={view === 'settings' ? 'page' : undefined}><SettingsIcon size={15} aria-hidden="true" /></Link></div>
           </div>
       </header>
 
-      <main id="main-content" ref={mainRef} tabIndex={-1} aria-label={view === 'home' ? 'Home' : view === 'library' ? 'Your listening library' : view === 'album' ? 'Album' : 'Discover music'} className={`content-wrap ${view !== 'discover' ? 'inner-page-wrap' : ''} ${isDetailView ? 'is-detail' : ''} ${isCollectionView ? 'is-collection' : ''}`}>
+      <main id="main-content" ref={mainRef} tabIndex={-1} aria-label={view === 'home' ? 'Home' : view === 'library' ? 'Your listening library' : view === 'album' ? 'Album' : view === 'settings' ? 'Settings' : 'Discover music'} className={`content-wrap ${view !== 'discover' ? 'inner-page-wrap' : ''} ${isDetailView ? 'is-detail' : ''} ${isCollectionView ? 'is-collection' : ''}`}>
         <div className="panel-topbar">
             {isDetailView || isCollectionView ? <button type="button" className="topbar-back" onClick={() => goBack(view === 'liked' || view === 'playlist' ? '#library' : view === 'shared' ? '#home' : '#discover')} aria-label="Back"><ArrowLeft size={17} aria-hidden="true" /><span>Back</span></button> : null}
-            <nav className="crumbs" aria-label="Breadcrumb"><span>{view === 'home' || view === 'shared' ? 'Home' : view === 'library' || view === 'liked' || view === 'playlist' ? 'Library' : 'Browse'}</span><ChevronRight size={14} aria-hidden="true" /><strong>{view === 'home' ? 'For you' : view === 'shared' ? 'Shared playlist' : view === 'library' ? 'Your music' : view === 'album' ? 'Album' : view === 'artist' ? 'Artist' : view === 'liked' ? 'Liked Songs' : view === 'playlist' ? 'Playlist' : query.trim() ? 'Search' : 'Made for you'}</strong></nav>
+            <nav className="crumbs" aria-label="Breadcrumb"><span>{view === 'home' || view === 'shared' ? 'Home' : view === 'library' || view === 'liked' || view === 'playlist' ? 'Library' : view === 'settings' ? 'Allegra' : 'Browse'}</span><ChevronRight size={14} aria-hidden="true" /><strong>{view === 'home' ? 'For you' : view === 'shared' ? 'Shared playlist' : view === 'library' ? 'Your music' : view === 'album' ? 'Album' : view === 'artist' ? 'Artist' : view === 'liked' ? 'Liked Songs' : view === 'playlist' ? 'Playlist' : view === 'settings' ? 'Settings' : query.trim() ? 'Search' : 'Made for you'}</strong></nav>
             <div className="mood-pills" role="group" aria-label="Quick picks"><span className="mood-pills-label" aria-hidden="true">Quick picks</span>{moodPrompts.map((prompt) => <button key={prompt} type="button" className="mood-pill" aria-pressed={query === prompt} onClick={() => { if (view !== 'discover') router.push(paths.discover); setQuery(query === prompt ? '' : prompt); }}><span>{prompt}</span></button>)}</div>
             <CommandPalette
               open={paletteOpen}
@@ -1068,6 +1110,14 @@ export default function App() {
               }}
             />
           )
+        ) : view === 'settings' ? (
+          <SettingsPage
+            account={account.profile ? { isGuest: account.profile.isGuest, name: account.profile.displayName ?? null, email: account.profile.email ?? null } : null}
+            signInAvailable={signIn.available}
+            onOpenAccount={() => setAuthOpen(true)}
+            karaokeBackend={liveKaraoke.backend}
+            karaokeActive={liveKaraoke.active}
+          />
         ) : view === 'library' ? <LibraryPage likedSongs={likedSongs} recentlyPlayed={recentlyPlayed} likedIds={likedIds} loading={personalLoading} error={personalError} actionError={personalActionError} currentSongId={audio.currentSong?.id} isPlaying={audio.isPlaying} onPlay={playSong} onLike={toggleLike} onRetry={() => void loadPersonalSpace()} onDiscover={() => { router.push(paths.discover); window.setTimeout(() => setPaletteOpen(true), 0); }} /> : view === 'liked' ? <CollectionPage kind="liked" title="Liked Songs" songs={likedSongs} loading={personalLoading} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onToggle={audio.togglePlayback} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={(shuffle) => playAlbumTracks(likedSongs, shuffle)} onLike={toggleLike} onOpenAlbum={openAlbum} onDiscover={() => { router.push(paths.discover); window.setTimeout(() => setPaletteOpen(true), 0); }} /> : view === 'playlist' ? <CollectionPage kind="playlist" title={activePlaylist?.name ?? (playlists.loading ? 'Playlist' : 'Playlist not found')} songs={activePlaylistSongs} loading={playlists.loading || (activePlaylist !== null && activePlaylistSongs.length < activePlaylist.songIds.length)} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onToggle={audio.togglePlayback} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={(shuffle) => playAlbumTracks(activePlaylistSongs, shuffle)} onLike={toggleLike} onOpenAlbum={openAlbum} onDiscover={() => { router.push(paths.discover); window.setTimeout(() => setPaletteOpen(true), 0); }} {...(activePlaylist ? { onDelete: () => { void playlists.remove(activePlaylist.id); router.push(paths.library); }, share: { libraryId: activePlaylist.id, isPublic: activePlaylist.isPublic, onChanged: () => { void playlists.reload(); } }, cover: { libraryId: activePlaylist.id, ...(activePlaylist.coverUrl ? { coverUrl: activePlaylist.coverUrl } : {}), onUpload: playlists.setCover } } : {})} /> : view === 'artist' && artistName ? <ArtistPage name={artistName} profile={artistProfile} photoFallback={faces[artistName.toLocaleLowerCase()] || null} songs={artistTracks} related={relatedArtists} loading={artistLoading && artistTracks.length === 0} error={artistTracks.length === 0 ? artistError : null} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onBack={() => goBack(paths.discover)} onRetry={() => setArtistReload((count) => count + 1)} onToggle={audio.togglePlayback} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={(shuffle) => playAlbumTracks(artistTracks, shuffle)} onLike={toggleLike} onOpenAlbum={openAlbumByName} onOpenArtist={openArtist} /> : view === 'album' && albumSeed ? <AlbumPage seed={albumSeed} tracks={albumTracks} palette={palette} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={() => playAlbumTracks(albumTracks, false)} onShuffle={() => playAlbumTracks(albumTracks, true)} onLike={toggleLike} onLikeAlbum={() => toggleLike(albumSeed)} albumLiked={likedIds.has(albumSeed.id)} /> : <>
         <div className="browse-grid">
           <div className="browse-main">
@@ -1115,7 +1165,7 @@ export default function App() {
           {lightSong ? <div className="light-scene-grid"><div className="light-scene-art"><button onClick={() => playSong(lightSong)} aria-label={`Play ${lightSong.title}`}><Artwork song={lightSong} size="large" /></button><div className="light-scene-track"><strong>{lightSong.title}</strong><span>{lightSong.artist}</span></div></div><div className="light-scene-copy"><h2 id="light-scene-heading">Keep listening</h2><p>One more track from your queue, ready when you are.</p><TactileButton variant="primary" icon={Play} aria-label={`Play ${lightSong.title}`} onClick={() => playSong(lightSong)}>Play next</TactileButton></div></div> : <div className="light-scene-empty"><Disc3 size={22} aria-hidden="true" /><p>Play something and your next pick shows up here.</p></div>}
         </section>
 
-            <section id="words" className="lyrics-teaser"><div className="teaser-intro"><div><h2>Lyrics <em>in time</em></h2><p>Follow along with the song you are playing.</p></div><TactileButton variant="secondary" icon={Waves} onClick={() => { if (audio.currentSong) setPlayerMode('workspace'); }}>Open lyrics</TactileButton></div><LyricsPanel lines={displayLyrics} currentTime={audio.currentTime} loading={lyricsLoading} error={lyricsError} onRetry={retryLyrics} onSeek={(time) => void audio.seek(time)} onActivateLine={activateLyricLine} artworkUrl={activeSong?.artwork} translating={translating} translated={showTranslated} translateError={translateError} translateProvider={translateProvider} onToggleTranslate={toggleTranslate} softFocus /></section>
+            <section id="words" className="lyrics-teaser"><div className="teaser-intro"><div><h2>Lyrics <em>in time</em></h2><p>Follow along with the song you are playing.</p></div><TactileButton variant="secondary" icon={Waves} onClick={() => { if (audio.currentSong) setPlayerMode('workspace'); }}>Open lyrics</TactileButton></div><LyricsPanel lines={displayLyrics} currentTime={audio.currentTime} loading={lyricsLoading} error={lyricsError} onRetry={retryLyrics} onSeek={(time) => void audio.seek(time)} onActivateLine={activateLyricLine} artworkUrl={activeSong?.artwork} translating={translating} translated={showTranslated} translateError={translateError} translateProvider={translateProvider} onToggleTranslate={toggleTranslate} source={lyricsPayload?.source} matchReason={lyricsPayload?.matchReason} alternatives={lyricsAlternatives} alternativesLoading={lyricsAlternativesLoading} alternativesError={lyricsAlternativesError} onLoadAlternatives={loadLyricsAlternatives} onSelectAlternative={selectLyricsAlternative} songId={activeSong?.id ?? null} softFocus /></section>
           </div>
 
           <aside id="queue" ref={nowPlayingRef} className="now-panel" aria-label="Now playing">
@@ -1359,7 +1409,15 @@ export default function App() {
           translated: showTranslated,
           translateError,
           translateProvider,
-          onToggleTranslate: toggleTranslate
+          onToggleTranslate: toggleTranslate,
+          source: lyricsPayload?.source,
+          matchReason: lyricsPayload?.matchReason,
+          alternatives: lyricsAlternatives,
+          alternativesLoading: lyricsAlternativesLoading,
+          alternativesError: lyricsAlternativesError,
+          onLoadAlternatives: loadLyricsAlternatives,
+          onSelectAlternative: selectLyricsAlternative,
+          songId: audio.currentSong?.id ?? null
         }}
         palette={palette}
         light={theme === 'light'}

@@ -4,9 +4,10 @@ import test from 'node:test';
 import { legacyHashToPath, parseRoute, paths } from './routes.ts';
 
 test('every static view has a path that parses back to it', () => {
-  for (const view of ['discover', 'library', 'liked', 'album'] as const) {
+  for (const view of ['discover', 'library', 'liked', 'album', 'settings'] as const) {
     assert.equal(parseRoute(`/${view}`).view, view);
   }
+  assert.equal(parseRoute(paths.settings).view, 'settings');
   assert.equal(parseRoute('/').view, 'home');
   assert.equal(parseRoute('/nonsense').view, 'home');
 });

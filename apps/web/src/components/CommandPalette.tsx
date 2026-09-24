@@ -1,5 +1,5 @@
 import { paths } from '../lib/routes';
-import { ArrowRight, Clock, Compass, Disc3, Heart, House, Library, ListMusic, Moon, Search, Sun, User } from 'lucide-react';
+import { ArrowRight, Clock, Compass, Disc3, Heart, House, Library, ListMusic, Moon, Search, Settings, Sun, User } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
@@ -185,6 +185,7 @@ export function CommandPalette({ open, onOpen, onClose, activeQuery, recent, the
       { id: 'go-playlists', section: 'Go to', title: 'Playlists', icon: <ListMusic size={16} />, run: go(paths.library) }
     ];
     const actions: CommandItem[] = [
+      { id: 'settings', section: 'Settings', title: 'Open settings', hint: 'Playback, lyrics, karaoke, privacy', icon: <Settings size={16} />, run: go(paths.settings) },
       { id: 'theme', section: 'Settings', title: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme', icon: theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />, run: onToggleTheme }
     ];
     if (activeQuery) actions.unshift({ id: 'clear', section: 'Settings', title: 'Clear current search', icon: <Search size={16} />, run: onClearSearch });

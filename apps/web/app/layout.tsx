@@ -1,5 +1,3 @@
-import { Analytics } from '@vercel/analytics/next';
-import { SpeedInsights } from '@vercel/speed-insights/next';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
@@ -11,6 +9,7 @@ import '../src/styles/app.css';
 import '../src/styles/coverflow.css';
 
 import { ClientShell } from './ClientShell';
+import { Telemetry } from './Telemetry';
 
 export const metadata: Metadata = {
   title: 'Allegra — good music, ready when you are',
@@ -44,8 +43,7 @@ export default function RootLayout({ children }: { readonly children: ReactNode 
       <body>
         <ClientShell />
         {children}
-        <Analytics />
-        <SpeedInsights />
+        <Telemetry />
       </body>
     </html>
   );
