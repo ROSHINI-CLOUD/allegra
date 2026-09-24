@@ -52,6 +52,12 @@ export interface ArtistProfile extends ArtistSummary {
   readonly similar: ArtistSummary[];
 }
 
+/** Album motion artwork (`GET /api/canvas`). `videoUrl` is always an https://*.apple.com URL. */
+export interface MotionArtwork {
+  readonly source: 'Apple Music';
+  readonly videoUrl: string;
+}
+
 export interface HomePayload {
   readonly trending: UnifiedSong[];
   readonly madeForYou: UnifiedSong[];

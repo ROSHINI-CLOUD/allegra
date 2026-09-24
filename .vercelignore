@@ -1,0 +1,31 @@
+# `vercel deploy` uploads this folder as-is and does not read .gitignore, so local-only files are
+# listed here. Anything the build needs (apps/, api/, packages/, package*.json, vercel.json) stays.
+
+# Dependencies and build output: Vercel installs and builds on its side.
+node_modules
+.next
+dist
+
+# Secrets never leave this machine; Vercel reads its own environment variables.
+.env
+.env.*
+!.env.example
+
+# Karaoke models (~750 MB). Production downloads them on the listener's device from the
+# pinned Hugging Face URL in apps/web/src/lib/liveKaraoke/roformer/config.ts.
+apps/web/public/models/**/*.onnx
+apps/web/public/models/**/*.onnx.data
+apps/web/public/models/**/*.ort
+
+# Local tooling, caches and scratch.
+.tools
+.playwright-cli
+output
+graft
+.gstack
+.claude
+.agents
+.convex
+.planning
+_build-log.txt
+mobile allegra.png
