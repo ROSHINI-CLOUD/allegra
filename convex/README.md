@@ -1,10 +1,10 @@
-# Convex — user data (likes, recents, playlists, settings)
+# Convex — identity, listener data, covers, and OAuth grants
 
-One table (`users`), keyed by `userId`, holding everything the `UserStore` seam needs
-(`apps/api/src/user/store.ts`). Two functions gate every call behind a shared secret
-that only the Express API holds — Convex functions are public URLs with no auth of
-their own, so `CONVEX_SERVER_SECRET` is the only thing stopping a stranger from
-reading or overwriting user rows.
+Convex Auth owns the `users` table. Allegra keeps its listener data in `profiles`, keyed by the
+authenticated user's stable ID, with `shares` for public playlists, `oauthGrants` for one-time MCP
+authorization-code and refresh-token use, and Convex storage for uploaded covers. The Express API
+uses `CONVEX_SERVER_SECRET` for its server-to-server profile and grant calls; browser identity comes
+from Convex Auth rather than a user ID supplied by the caller.
 
 ## Local dev
 
@@ -37,14 +37,13 @@ production deployment URL + that secret into the Vercel project's environment va
 
 ## Schema
 
-`convex/schema.ts` — one `users` table, indexed on `userId`.
+`convex/schema.ts` — `profiles` (indexed by user ID and email), `shares`, and `oauthGrants`
+(indexed by token id and expiry). Convex Auth supplies `users`; do not add a competing user table.
 
 ## Functions
 
-`convex/users.ts`:
-- `get({ secret, userId })` → the user row, or `null` if missing or the secret is wrong.
-- `save({ secret, user })` → upsert by `userId`.
-
-Both throw `Unauthorized` on a bad secret; the API's `ConvexUserStore`
-(`apps/api/src/db/convex.ts`) treats any thrown/malformed response as "no data"
-rather than crashing the request.
+`convex/profiles.ts` provides the profile read, lookup, save, and identity functions.
+`convex/covers.ts` creates upload URLs and manages cover storage. `convex/oauth.ts` atomically
+consumes a grant token id once; its expiry sweep is internal. Server-only functions reject an invalid
+shared secret, and the API treats an unavailable or malformed Convex response as a safe failure
+rather than crashing a request.

@@ -16,7 +16,7 @@ closes (`src/mcp/server.ts`). Nothing about a caller is kept in memory between c
 re-reads the user fresh from Convex (or the in-memory store in local dev) on every single call,
 never a snapshot taken earlier in the request.
 
-## Authentication — `Authorization: Bearer <token>`, not a tool argument
+## Authentication — OAuth 2.1, bearer tokens, never tool arguments
 
 Checked against the [MCP authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization):
 the spec **requires** the bearer token in the `Authorization` HTTP header on every request
@@ -27,22 +27,22 @@ inside the JSON-RPC payload the model itself constructs and reasons over, which 
 up in the model's own context, transcripts, and any logging the AI provider does on tool-call
 arguments. The header never reaches the model at all.
 
-`POST /api/mcp` now verifies the bearer token **before** any JSON-RPC is parsed. Missing or invalid →
-`401` with `WWW-Authenticate: Bearer realm="allegra-mcp"`, per spec. A valid token resolves to a
-`userId`, which every registered tool for that request closes over — each tool still does its own
-fresh `auth.getUser(userId)` read rather than trusting a copy taken at the top of the request.
+`POST /api/mcp` verifies the bearer token **before** any JSON-RPC is parsed. Missing or invalid →
+`401` with a `WWW-Authenticate` header that points the client to
+`/.well-known/oauth-protected-resource/api/mcp`.
 
-**Setting up a connector (v1 — bearer token, not full OAuth):** call `POST /api/auth/anon` (or log
-into an existing account) to get a token, then configure your MCP client to send it as
-`Authorization: Bearer <token>` on every request to `/api/mcp`. This satisfies the header requirement
-above but **not** the rest of the spec's OAuth 2.1 machinery — there is no
-`/.well-known/oauth-protected-resource` metadata endpoint, no authorization-server discovery, and
-no token audience binding (RFC 8707), because Allegra is both its own resource server and its own
-authorization server here (a self-issued JWT, not a third-party-issued one). That's a real gap
-against a fully spec-compliant OAuth 2.1 resource server, tracked as a v2 stretch goal in the plan
-doc — it matters for a client that expects to *discover* how to authenticate automatically, less
-for one (like ChatGPT's "API key" custom-connector mode) that just wants a static header configured
-once.
+MCP hosts discover the authorization server from that protected-resource document, then use
+`/.well-known/oauth-authorization-server` for the authorization, token, and registration endpoints.
+The flow is OAuth 2.1 authorization code with S256 PKCE, RFC 8707 resource binding, and refresh-token
+rotation. Dynamic registration accepts public clients only and allows HTTPS redirects or localhost
+HTTP redirects; client-ID metadata documents are fetched with redirect, size, and private-address
+guards. Authorization codes and refresh tokens are one-time and their spent-token ledger is durable
+in Convex in production.
+
+An issued access token is for this exact `/api/mcp` resource and this exact host. App session tokens,
+codes, refresh tokens, and tokens minted for another host or resource are refused. A valid token
+resolves to a `userId`, which every registered tool for that request closes over — each tool still
+does its own fresh user read rather than trusting a request-start snapshot.
 
 ## Error shape
 
@@ -50,7 +50,8 @@ Every tool returns a normal MCP `CallToolResult`. On success: `{ content: [{ typ
 '<JSON>' }] }` — the JSON is documented per tool below. On failure: the same shape with `isError:
 true` and a user-facing sentence in `text` — never a stack trace, never a raw provider error (same
 rule as the HTTP API). A tool never throws a protocol-level error for an expected failure
-(not-found song, no AI configured); that discipline lives in `withUser()` in `src/mcp/tools.ts`.
+(not-found song, no available translation, or insufficient listening context); that discipline lives
+in `withUser()` in `src/mcp/tools.ts`.
 Auth failures are the one thing that short-circuits *before* any tool runs — see above.
 
 ## Tools
@@ -67,7 +68,7 @@ is never listed as a tool argument.
 | `search_catalog` | `query`, `limit?` (≤25) | `{ id, title, artist, album?, duration, language?, artwork }[]` — no `streamUrl`, on purpose: an external AI has no reason to hold a playback URL |
 | `get_lyrics` | `songId`, `syncedOnly?` | `LyricsPayload` (`{ source, type, matchScore, matchReason, lines }`), same as `GET /api/lyrics` |
 | `translate_lyrics` | `songId`, `targetLanguage?` (default `English`) | `{ lines, provider }` |
-| `get_recommendations` | *(none)* | `{ reasoning, songs }` — same taste-aware engine as `GET /api/ai/recommendations`, via the shared `buildRecommendationInput` helper |
+| `get_recommendations` | *(none)* | `{ reasoning, songs }` — same catalogue-and-taste engine as `GET /api/recommendations`, via the shared `buildRecommendationInput` helper |
 | `list_playlists` | *(none)* | `{ id, name, description?, isPublic, songIds, createdAt }[]` |
 
 ### Write
@@ -100,8 +101,8 @@ a victim's browser. `/api/mcp` is a public HTTPS endpoint called server-to-serve
 ChatGPT's backend, not from inside a user's browser tab), so that attack doesn't apply here — noted
 so this isn't mistaken for an oversight.
 
-## Known gap before real users
+## Token lifetime
 
-There is **no token revoke/rotate endpoint**. A connector holds a 30-day bearer JWT; if it leaks,
-the only recourse today is waiting out the expiry. Ship plan work item 7 before pointing real
-accounts at this.
+Access tokens last one hour. Refresh tokens last 30 days and rotate on every use; replaying a spent
+refresh token fails. There is no manual revocation endpoint yet, so removing an existing connector
+still requires its access token to expire and its refresh token to become unusable at its next rotation.

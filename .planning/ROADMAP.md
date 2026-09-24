@@ -7,7 +7,7 @@ Updated 2026-09-24.
 | Area | State |
 |---|---|
 | Next.js App Router + real routes | **Done.** Verified: playback survives navigation on the same `<audio>` element. |
-| One Vercel deployment (web + Express) | **Done.** Verified with a local `vercel build`: the `/api` rewrite precedes Next's catch-all, and a Range request returns `206`. |
+| One Vercel deployment (web + Express) | **Ready to deploy.** `vercel.json` keeps the `/api` rewrite ahead of Next's catch-all; confirm the production build and Range `206` after each deploy. |
 | npm workspaces, one lockfile | **Done.** |
 | Browser-local Karaoke | **Done in code.** A worker separates near the playhead and falls back locally; no cloud job or API polling exists. |
 | Free translation + recommendations | **Done in code.** MyMemory with optional self-hosted LibreTranslate fallback; catalog + listener taste, no LLM. |

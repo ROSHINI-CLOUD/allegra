@@ -4,8 +4,8 @@ Convex holds the Google secret and signs the session token. The Express API only
 against Convex's published keys, so **no Google credential ever reaches this repo, the API host, or
 the browser bundle**.
 
-Until the steps below are done the app runs guest-only: listening, search, playlists and Sing all
-work, and the account dialog says accounts are not switched on.
+Until the steps below are done the app runs guest-only: listening, search, playlists, and browser-local
+Karaoke all work, and the account dialog says accounts are not switched on.
 
 ---
 

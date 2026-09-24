@@ -18,7 +18,7 @@ Browser  (Next.js App Router · React 19 · Motion)
          `-- /api -> Express     apps/api, as a Vercel Function
                |-- JioSaavn -> Gaana   catalog + audio (server-side, because of CORS)
                |-- iTunes Search       artwork
-               |-- LRCLIB (+ Lyrica)   time-synced lyrics
+               |-- LRCLIB (+ Lyrica / BetterLyrics)  time-synced lyrics
                |-- Convex              Google sign-in, likes, recents, playlists
                `-- Browser worker      on-device karaoke separation
 ```
@@ -90,8 +90,7 @@ commercial music service and is not pitched as one. The `UnifiedSong` normalisat
 [`.planning/`](.planning/) — the PRD and roadmap ·
 [`.planning/LEARNING-LOG.md`](.planning/LEARNING-LOG.md) — things that bit us
 
-## AI coding tools
+## Development verification
 
-- **Claude Code (Anthropic)**: planning, implementation and review across the API, the web app, the
-  Convex setup and the on-device karaoke pipeline. Every change was run through typecheck, lint and tests,
-  and behaviour that is visible in a browser was checked in a browser.
+Run typecheck, lint, tests, and the production build before shipping. Browser-visible changes also
+need a browser check; a successful build alone does not prove playback, OAuth, or on-device Karaoke.
