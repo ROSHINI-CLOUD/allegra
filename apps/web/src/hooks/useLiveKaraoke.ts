@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 
 import type { UnifiedSong } from '@shared/types';
 
+import { useSettings } from './useSettings';
 import { ensureElementGraph } from '../lib/audioGraph';
+import type { KaraokeMix } from '../lib/karaokeMix';
 import {
   audioBufferToStereo44k,
   fetchAndDecodeSong,
@@ -31,6 +33,16 @@ export interface LiveKaraokeController {
   readonly monoWarning: boolean;
   /** Set when the AI model was skipped and mid-side ran instead. */
   readonly fallbackReason: string | null;
+  /** Basic (mid-side) mode because the listener chose it in Settings, not because the model failed. */
+  readonly basicByChoice: boolean;
+  /** Vocal / instrument levels. Saved on this device and applied live. */
+  readonly mix: KaraokeMix;
+  readonly setMix: (mix: KaraokeMix) => void;
+  /**
+   * Whether the sliders can do anything right now: only the on-device model produces two
+   * real stems. Mid-side has one rendered instrumental, so there is nothing to mix.
+   */
+  readonly supportsMix: boolean;
   readonly toggle: () => Promise<void>;
   readonly clearError: () => void;
 }
@@ -42,6 +54,7 @@ const DECODED_AT = 0.1;
 const MODEL_SPAN = 0.8;
 
 const TOO_SLOW = 'this device separates slower than the song plays';
+const BASIC_CHOSEN = 'Basic mode is selected in Settings';
 /**
  * Set once the model has been measured slower than playback. The device will not get
  * faster this page session, so later presses go straight to mid-side instead of paying
@@ -72,6 +85,11 @@ export function useLiveKaraoke(
   const [error, setError] = useState<string | null>(null);
   const [monoWarning, setMonoWarning] = useState(false);
   const [fallbackReason, setFallbackReason] = useState<string | null>(null);
+  const [settings, updateSettings] = useSettings();
+  const mix = settings.karaokeMix;
+  const mixRef = useRef(mix);
+  mixRef.current = mix;
+  const basicOnly = settings.karaokeMode === 'basic';
 
   const playbackRef = useRef(playback);
   playbackRef.current = playback;
@@ -145,6 +163,13 @@ export function useLiveKaraoke(
       window.setTimeout(() => URL.revokeObjectURL(stale), 0);
     }
   }, [song?.id, song?.streamUrl, disposeStream, setBusyBoth, setMode]);
+
+  // Slider moves (here or in Settings, or in another tab) reach the stream as they happen.
+  useEffect(() => {
+    streamRef.current?.stream.setMix(mix);
+  }, [mix]);
+
+  const setMix = useCallback((next: KaraokeMix): void => updateSettings({ karaokeMix: next }), [updateSettings]);
 
   useEffect(() => {
     return () => {
@@ -240,7 +265,7 @@ export function useLiveKaraoke(
         onError: (message) => {
           if (!stale()) fallBack(message);
         }
-      });
+      }, mixRef.current);
       streamRef.current = { songId: current.id, stream };
       stream.enable();
       return true;
@@ -295,7 +320,7 @@ export function useLiveKaraoke(
 
     // Same song as before: the separator kept its work, so this is instant.
     const kept = streamRef.current;
-    if (kept && kept.songId === current.id) {
+    if (kept && kept.songId === current.id && !basicOnly) {
       // Mode first: enable() reports failures synchronously and those must win.
       setMode('stream');
       setBackend('roformer');
@@ -320,7 +345,7 @@ export function useLiveKaraoke(
     // may only start from one, and the model download overlaps the song download.
     const audio = playback.audioRef.current;
     let useModel = false;
-    if (audio && !modelTooSlow && isRoformerLikelySupported() && ensureElementGraph(audio)) {
+    if (audio && !basicOnly && !modelTooSlow && isRoformerLikelySupported() && ensureElementGraph(audio)) {
       try {
         getSeparator().warm();
         useModel = true;
@@ -345,14 +370,14 @@ export function useLiveKaraoke(
           }
         }
       }
-      const reason = useModel ? 'AI model unavailable' : modelTooSlow ? TOO_SLOW : undefined;
+      const reason = useModel ? 'AI model unavailable' : basicOnly ? BASIC_CHOSEN : modelTooSlow ? TOO_SLOW : undefined;
       await runMidSide(current, decoded, generation, reason);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       if (generation !== generationRef.current) return;
       fail(err instanceof Error ? err.message : 'Live karaoke failed.');
     }
-  }, [disposeStream, fail, playback, runMidSide, setBusyBoth, setMode, song, startStream, turnOff]);
+  }, [basicOnly, disposeStream, fail, playback, runMidSide, setBusyBoth, setMode, song, startStream, turnOff]);
 
   return {
     status,
@@ -363,6 +388,10 @@ export function useLiveKaraoke(
     error,
     monoWarning,
     fallbackReason,
+    basicByChoice: backend === 'midside' && fallbackReason === BASIC_CHOSEN,
+    mix,
+    setMix,
+    supportsMix: backend === 'roformer',
     toggle,
     clearError: () => setError(null)
   };

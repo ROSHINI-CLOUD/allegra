@@ -9,9 +9,10 @@ import {
   streamChunkCount
 } from './roformer/chunks';
 import { ROFORMER_SAMPLE_RATE } from './roformer/config';
-import { getSeparator, type SeparatorJobHandlers } from './roformer/separatorClient';
+import { getSeparator, type ChunkStems, type SeparatorJobHandlers } from './roformer/separatorClient';
 import type { StereoPcm } from './roformer/stft';
-import { KaraokeStreamPlayer } from './streamPlayer';
+import type { KaraokeMix } from '../karaokeMix';
+import { KaraokeStreamPlayer, type SegmentStems } from './streamPlayer';
 
 /**
  * How often readiness at the playhead is checked and the separator re-aimed. Playback
@@ -43,20 +44,27 @@ export interface StreamSessionEvents {
 }
 
 interface Segment {
-  readonly pcm: StereoPcm;
+  readonly stems: SegmentStems;
   /** False while its head is chunk k's raw output, waiting for chunk k - 1's tail. */
   blended: boolean;
+}
+
+interface Tail {
+  readonly instrumental: StereoPcm;
+  readonly vocals: StereoPcm;
 }
 
 /**
  * One song's live karaoke: separated chunks arrive from the worker, get stitched into
  * playable segments, and the stream player swaps them in for the original audio.
+ * Each segment keeps both stems (instrumental and vocals) so the listener can mix them;
+ * that doubles the memory held, roughly 170 MB for a four-minute song.
  * Turning karaoke off pauses the separator but keeps what is done, so turning it back on
  * for the same song is instant.
  */
 export class LiveKaraokeStream {
   private readonly segments = new Map<number, Segment>();
-  private readonly tails = new Map<number, StereoPcm>();
+  private readonly tails = new Map<number, Tail>();
   private readonly player: KaraokeStreamPlayer;
   private readonly totalSamples: number;
   private readonly chunkCount: number;
@@ -75,7 +83,8 @@ export class LiveKaraokeStream {
     private readonly audio: HTMLAudioElement,
     graph: ElementGraph,
     mix: StereoPcm,
-    private readonly events: StreamSessionEvents
+    private readonly events: StreamSessionEvents,
+    initialMix?: KaraokeMix
   ) {
     this.mix = mix;
     this.totalSamples = Math.min(mix.left.length, mix.right.length);
@@ -83,9 +92,15 @@ export class LiveKaraokeStream {
     this.player = new KaraokeStreamPlayer(
       audio,
       graph,
-      (index) => this.segments.get(index)?.pcm ?? null,
-      this.totalSamples / ROFORMER_SAMPLE_RATE
+      (index) => this.segments.get(index)?.stems ?? null,
+      this.totalSamples / ROFORMER_SAMPLE_RATE,
+      initialMix
     );
+  }
+
+  /** Live vocal / instrument levels; takes effect within a few milliseconds. */
+  public setMix(mix: KaraokeMix): void {
+    this.player.setMix(mix);
   }
 
   /** Share of the song already separated, 0–1. */
@@ -139,9 +154,9 @@ export class LiveKaraokeStream {
   private handlers(): SeparatorJobHandlers {
     return {
       onProgress: (ratio) => this.events.onModelProgress(ratio),
-      onChunk: (index, pcm, ms) => {
+      onChunk: (index, stems, ms) => {
         if (this.disposed) return;
-        this.store(index, pcm);
+        this.store(index, stems);
         this.judgePace(ms);
         this.chunkMs = this.chunkMs * 0.5 + ms * 0.5;
         this.player.segmentReady();
@@ -154,10 +169,13 @@ export class LiveKaraokeStream {
   }
 
   /** Keep only what playback needs: the segment itself and the tail its successor blends in. */
-  private store(index: number, chunk: StereoPcm): void {
+  private store(index: number, chunk: ChunkStems): void {
     const prevTail = this.tails.get(index - 1) ?? null;
     this.segments.set(index, {
-      pcm: assembleSegment(index, this.totalSamples, chunk, prevTail),
+      stems: {
+        instrumental: assembleSegment(index, this.totalSamples, chunk.instrumental, prevTail?.instrumental ?? null),
+        vocals: assembleSegment(index, this.totalSamples, chunk.vocals, prevTail?.vocals ?? null)
+      },
       blended: index === 0 || prevTail !== null
     });
     if (prevTail) this.tails.delete(index - 1);
@@ -165,10 +183,12 @@ export class LiveKaraokeStream {
     const next = this.segments.get(index + 1);
     if (next && !next.blended) {
       // Its predecessor arrived late (it was separated first after a seek): finish its crossfade.
-      crossfadeHead(next.pcm, chunkTail(chunk));
+      // The crossfade is linear, so blending each stem keeps their sum equal to the blended mix.
+      crossfadeHead(next.stems.instrumental, chunkTail(chunk.instrumental));
+      crossfadeHead(next.stems.vocals, chunkTail(chunk.vocals));
       next.blended = true;
     } else if (!next && index + 1 < this.chunkCount) {
-      this.tails.set(index, chunkTail(chunk));
+      this.tails.set(index, { instrumental: chunkTail(chunk.instrumental), vocals: chunkTail(chunk.vocals) });
     }
   }
 

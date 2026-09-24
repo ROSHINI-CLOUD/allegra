@@ -9,6 +9,7 @@
 import { sliceChunk, streamChunkCount, STREAM_HOP_SAMPLES } from './chunks';
 import { ROFORMER_SAMPLE_RATE } from './config';
 import { getSession, recoverWithWasm, separateChunk } from './separate';
+import { subtractStereo } from './stems';
 import type { StereoPcm } from './stft';
 
 export type SeparatorRequest =
@@ -32,8 +33,12 @@ export type SeparatorResponse =
       readonly type: 'chunk';
       readonly jobId: number;
       readonly index: number;
+      /** Instrumental. */
       readonly left: Float32Array;
       readonly right: Float32Array;
+      /** Vocals: the chunk's mix minus the instrumental, so the two stems sum to the mix. */
+      readonly vocalLeft: Float32Array;
+      readonly vocalRight: Float32Array;
       readonly ms: number;
       readonly residualPass: boolean;
     }
@@ -95,23 +100,35 @@ async function pump(): Promise<void> {
       }
       const residualPass = j.residualPass ?? false;
       const started = performance.now();
+      const mixChunk = sliceChunk(j.mix, k);
       let out;
       try {
-        out = await separateChunk(session, sliceChunk(j.mix, k), residualPass);
+        out = await separateChunk(session, mixChunk, residualPass);
       } catch (err) {
         // WebGPU can build a session and still fail at run time; retry once on WASM.
         const recovered = await recoverWithWasm(onProgress);
         if (!recovered) throw err;
         session = recovered;
-        out = await separateChunk(session, sliceChunk(j.mix, k), residualPass);
+        out = await separateChunk(session, mixChunk, residualPass);
       }
       const ms = performance.now() - started;
       if (job !== j) continue; // cancelled or replaced while the GPU was busy
       j.done[k] = 1;
       if (j.residualPass === null) j.residualPass = canAffordResidual(ms);
+      const vocals = subtractStereo(mixChunk, out, out.left.length);
       post(
-        { type: 'chunk', jobId: j.id, index: k, left: out.left, right: out.right, ms, residualPass },
-        [out.left.buffer, out.right.buffer]
+        {
+          type: 'chunk',
+          jobId: j.id,
+          index: k,
+          left: out.left,
+          right: out.right,
+          vocalLeft: vocals.left,
+          vocalRight: vocals.right,
+          ms,
+          residualPass
+        },
+        [out.left.buffer, out.right.buffer, vocals.left.buffer, vocals.right.buffer]
       );
     }
   } catch (err) {

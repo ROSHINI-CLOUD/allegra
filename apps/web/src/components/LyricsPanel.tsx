@@ -1,4 +1,4 @@
-import { Languages, LoaderCircle, Mic, Minus, Plus, RefreshCw } from 'lucide-react';
+import { Languages, LoaderCircle, Mic, Minus, Plus, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
 import {
   memo,
@@ -9,12 +9,15 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent,
   type MutableRefObject
 } from 'react';
 
-import type { LyricLine } from '@shared/types';
+import type { LyricLine, LyricsPayload } from '@shared/types';
 
-import { EmptyState, TactileButton } from './ui';
+import { EmptyState, IconButton, TactileButton } from './ui';
+import { useSettings } from '../hooks/useSettings';
+import { clampLyricsOffset, withLyricsOffset, type LyricsSize } from '../lib/settings';
 import { clamp } from '../lib/utils';
 
 interface LyricsPanelProps {
@@ -43,10 +46,26 @@ interface LyricsPanelProps {
   readonly karaokeProgressRatio?: number | null;
   readonly karaokeDisabled?: boolean;
   readonly karaokeError?: string | null;
-  readonly onToggleKaraoke?: () => void;
+  /** Receives the press so the caller can tell a double tap from a single one. */
+  readonly onToggleKaraoke?: (event: MouseEvent<HTMLElement>) => void;
+  /** Opens the vocal / instrument mix. Shown beside Karaoke while it is on. */
+  readonly onOpenKaraokeMix?: (event: MouseEvent<HTMLElement>) => void;
+  /** The song these lines belong to, so a sync nudge can be remembered for it. */
+  readonly songId?: string | null;
+  /** The version currently on stage; provenance helps a listener decide whether to compare it. */
+  readonly source?: string | null;
+  readonly matchReason?: string | null;
+  readonly alternatives?: readonly LyricsPayload[] | null;
+  readonly alternativesLoading?: boolean;
+  readonly alternativesError?: string | null;
+  readonly onLoadAlternatives?: () => void;
+  readonly onSelectAlternative?: (alternative: LyricsPayload) => void;
 }
 
 const FOLLOW_RESUME_MS = 2200;
+
+/** Multiplies every lyric font-size rule (see `--lyrics-scale` in the stylesheets). */
+const LYRICS_SCALE: Record<LyricsSize, number> = { small: 0.85, medium: 1, large: 1.2 };
 
 /** easeOutCubic: fast start, gentle settle — reads as a snap rather than a drift. */
 function easeOutCubic(t: number): number {
@@ -80,7 +99,16 @@ export function LyricsPanel({
   karaokeProgressRatio = null,
   karaokeDisabled = false,
   karaokeError = null,
-  onToggleKaraoke
+  onToggleKaraoke,
+  onOpenKaraokeMix,
+  songId = null,
+  source = null,
+  matchReason = null,
+  alternatives = null,
+  alternativesLoading = false,
+  alternativesError = null,
+  onLoadAlternatives,
+  onSelectAlternative
 }: LyricsPanelProps) {
   const reduced = useReducedMotion();
   const lineRefs = useRef<Record<number, HTMLButtonElement | null>>({});
@@ -95,19 +123,32 @@ export function LyricsPanel({
   /** False until the list has been positioned once, so opening mid-song lands on the line instead of gliding from the top. */
   const positionedRef = useRef(false);
   const [followPaused, setFollowPaused] = useState(false);
+  const [alternativesOpen, setAlternativesOpen] = useState(false);
+
+  const [settings, updateSettings] = useSettings();
+  const rememberOffset = settings.rememberLyricsOffset && songId !== null;
+  const savedOffset = rememberOffset ? (settings.lyricsOffsets[songId] ?? 0) : 0;
 
   /** Listener sync nudge in seconds: positive delays the lyrics, negative shows them earlier. */
-  const [syncOffset, setSyncOffset] = useState(0);
+  const [syncOffset, setSyncOffsetState] = useState(savedOffset);
   const syncedTime = currentTime - syncOffset;
+  const setSyncOffset = useCallback(
+    (next: number) => {
+      const resolved = clampLyricsOffset(next);
+      setSyncOffsetState(resolved);
+      if (rememberOffset && songId) {
+        updateSettings((current) => ({ lyricsOffsets: withLyricsOffset(current.lyricsOffsets, songId, resolved) }));
+      }
+    },
+    [rememberOffset, songId, updateSettings]
+  );
 
   const activeIndex = useMemo(() => findActiveLine(lines, syncedTime), [syncedTime, lines]);
   const lineProgress = useMemo(
     () => (karaokeProgress ? activeLineProgress(lines, activeIndex, syncedTime) : 0),
     [lines, activeIndex, syncedTime, karaokeProgress]
   );
-  const nudgeSync = useCallback((delta: number) => {
-    setSyncOffset((value) => clamp(Math.round((value + delta) * 10) / 10, -5, 5));
-  }, []);
+  const nudgeSync = useCallback((delta: number) => setSyncOffset(syncOffset + delta), [setSyncOffset, syncOffset]);
 
   const songKey = useMemo(
     () => (lines.length > 0 ? `${lines[0]?.timestamp ?? 0}:${lines.length}:${lines[lines.length - 1]?.timestamp ?? 0}` : ''),
@@ -144,12 +185,14 @@ export function LyricsPanel({
   useLayoutEffect(() => {
     if (!songKey || songKey === lastSongKeyRef.current) return;
     lastSongKeyRef.current = songKey;
-    setSyncOffset(0);
+    // A remembered nudge for this song comes back; otherwise timing starts true.
+    setSyncOffsetState(savedOffset);
     resumeFollowNow();
     if (scrollAnimationRef.current) window.cancelAnimationFrame(scrollAnimationRef.current);
     isAnimatingRef.current = false;
     const container = scrollRef.current;
     if (container) container.scrollTop = 0;
+    // Only a new lyric set re-reads the saved offset (so it is not a dependency); the nudge keeps it current.
   }, [songKey, resumeFollowNow]);
 
   const scrollActiveIntoView = useCallback(
@@ -233,10 +276,18 @@ export function LyricsPanel({
     [onActivateLine, onSeek, reduced, resumeFollowNow, scrollActiveIntoView, syncOffset]
   );
 
+  const toggleAlternatives = (): void => {
+    setAlternativesOpen((open) => {
+      if (!open && alternatives === null && !alternativesLoading) onLoadAlternatives?.();
+      return !open;
+    });
+  };
+
   return (
     <section
       className={`ytm-lyrics ${compact ? 'ytm-lyrics--compact' : ''} ${hideBackdrop ? 'ytm-lyrics--nobackdrop' : ''} ${softFocus && !compact ? 'ytm-lyrics--softfocus' : ''}${followPaused ? ' is-user-scrolling' : ''}`}
       aria-labelledby="lyrics-heading"
+      style={{ '--lyrics-scale': LYRICS_SCALE[settings.lyricsSize] } as CSSProperties}
     >
       {!hideBackdrop && (
         <>
@@ -264,7 +315,9 @@ export function LyricsPanel({
               variant={karaokeActive ? 'primary' : 'ghost'}
               icon={Mic}
               onClick={onToggleKaraoke}
-              disabled={karaokeBusy || karaokeDisabled}
+              // Not `disabled` while preparing: a double tap must still reach the mix.
+              disabled={karaokeDisabled}
+              aria-disabled={karaokeBusy || undefined}
               aria-pressed={karaokeActive}
               aria-busy={karaokeBusy || undefined}
               aria-label={
@@ -285,18 +338,82 @@ export function LyricsPanel({
                   : 'Karaoke'}
             </TactileButton>
           ) : null}
+          {onOpenKaraokeMix && (karaokeActive || karaokeBusy) ? (
+            <IconButton
+              icon={SlidersHorizontal}
+              label="Karaoke mix: vocals and instruments"
+              aria-haspopup="dialog"
+              className="ytm-lyrics__mix-btn"
+              onClick={onOpenKaraokeMix}
+            />
+          ) : null}
           {onToggleTranslate && lines.length > 0 ? (
             <TactileButton
               variant="ghost"
               icon={translating ? LoaderCircle : Languages}
               onClick={onToggleTranslate}
               aria-label={translated ? 'Show original lyrics' : 'Translate lyrics to English'}
+              className="ytm-lyrics__translate-button"
             >
               {translating ? 'Translating…' : translated ? 'Original' : 'Translate'}
             </TactileButton>
           ) : null}
+          {onLoadAlternatives ? (
+            <TactileButton
+              variant={alternativesOpen ? 'secondary' : 'ghost'}
+              icon={RefreshCw}
+              onClick={toggleAlternatives}
+              aria-expanded={alternativesOpen}
+              aria-controls="lyrics-alternatives"
+              className="ytm-lyrics__alternatives-button"
+            >
+              Other lyrics
+            </TactileButton>
+          ) : null}
         </div>
       </div>
+      {(settings.showLyricsSource && (source || matchReason)) || alternativesOpen ? (
+        <div className="ytm-lyrics__provenance">
+          {source ? <span className="ytm-lyrics__source">{formatSource(source)}</span> : null}
+          {matchReason ? <span>{matchReason}</span> : null}
+        </div>
+      ) : null}
+      {alternativesOpen ? (
+        <div id="lyrics-alternatives" className="lyrics-alternatives" aria-live="polite">
+          <div className="lyrics-alternatives__intro">
+            <strong>Choose a lyric version</strong>
+            <span>These are real matches from the lyric providers currently available for this song.</span>
+          </div>
+          {alternativesLoading ? <p className="lyrics-alternatives__status">Looking for other versions…</p> : null}
+          {alternativesError ? <p className="ytm-lyrics__alert">{alternativesError}</p> : null}
+          {!alternativesLoading && !alternativesError && alternatives?.length === 0 ? (
+            <p className="lyrics-alternatives__status">No other lyric version was found for this recording.</p>
+          ) : null}
+          {!alternativesLoading && alternatives && alternatives.length > 0 ? (
+            <div className="lyrics-alternatives__list" role="list" aria-label="Other lyric versions">
+              {alternatives.map((alternative, index) => {
+                const selected = alternative.source === source && alternative.lines.length === lines.length && alternative.lines[0]?.text === lines[0]?.text;
+                return (
+                  <button
+                    key={`${alternative.source}-${alternative.lines[0]?.timestamp ?? index}-${index}`}
+                    type="button"
+                    className={`lyrics-alternative${selected ? ' is-selected' : ''}`}
+                    aria-pressed={selected}
+                    onClick={() => {
+                      onSelectAlternative?.(alternative);
+                      setAlternativesOpen(false);
+                    }}
+                    role="listitem"
+                  >
+                    <span><strong>{formatSource(alternative.source)}</strong><small>{alternative.matchReason}</small></span>
+                    <span className="lyrics-alternative__type">{alternative.type === 'synced' ? 'Synced' : 'Plain'}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {karaokeBusy ? (
         <p className="ytm-lyrics__note ytm-lyrics__busy" role="status">
           Preparing karaoke{karaokeProgressRatio != null ? ` ${Math.round(karaokeProgressRatio * 100)}%` : '…'}
@@ -383,6 +500,12 @@ export function LyricsPanel({
       ) : null}
     </section>
   );
+}
+
+function formatSource(source: string): string {
+  if (source === 'interpolated') return 'Plain lyrics';
+  if (source === 'LRCLIB-search') return 'LRCLIB match';
+  return source.replace(/\(([^)]+)\)/, ' · $1');
 }
 
 const LyricLineButton = memo(function LyricLineButton({

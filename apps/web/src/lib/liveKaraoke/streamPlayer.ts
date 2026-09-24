@@ -1,4 +1,5 @@
 import type { ElementGraph } from '../audioGraph';
+import { DEFAULT_KARAOKE_MIX, normalizeMix, type KaraokeMix } from '../karaokeMix';
 import { ROFORMER_SAMPLE_RATE } from './roformer/config';
 import { STREAM_HOP_SAMPLES } from './roformer/chunks';
 import type { StereoPcm } from './roformer/stft';
@@ -10,18 +11,35 @@ const QUEUE_AHEAD_SECONDS = 12;
 /** Re-lock to the element when the two clocks disagree by more than this. */
 const MAX_DRIFT_SECONDS = 0.12;
 const RAMP_SECONDS = 0.015;
+/** Slider moves glide over ~20 ms (time constant) so dragging never clicks. */
+const MIX_SMOOTHING_SECONDS = 0.02;
 const TICK_MS = 250;
 const SEGMENT_SECONDS = STREAM_HOP_SAMPLES / ROFORMER_SAMPLE_RATE;
 
+/** One playable segment, as two stems that sum to the original. */
+export interface SegmentStems {
+  readonly instrumental: StereoPcm;
+  readonly vocals: StereoPcm;
+}
+
 interface Scheduled {
-  readonly node: AudioBufferSourceNode;
+  readonly nodes: readonly AudioBufferSourceNode[];
   readonly index: number;
   readonly endCtx: number;
 }
 
+function toBuffer(ctx: BaseAudioContext, pcm: StereoPcm): AudioBuffer {
+  const buffer = ctx.createBuffer(2, Math.max(1, pcm.left.length), ROFORMER_SAMPLE_RATE);
+  buffer.copyToChannel(pcm.left as Float32Array<ArrayBuffer>, 0);
+  buffer.copyToChannel(pcm.right as Float32Array<ArrayBuffer>, 1);
+  return buffer;
+}
+
 /**
- * Plays a separated instrumental in place of the <audio> element's own sound, segment by
- * segment, as the separator produces them.
+ * Plays the separated stems in place of the <audio> element's own sound, segment by
+ * segment, as the separator produces them. Both stems of a segment start on the same
+ * context tick from buffers of the same length, so they stay sample-aligned and any mix
+ * of the two sounds clean (no comb filtering against the element's own clock).
  *
  * The element stays the clock and keeps playing its original stream — its src never
  * changes, so play/pause/seek, the progress bar and the lyrics keep working untouched.
@@ -34,6 +52,9 @@ export class KaraokeStreamPlayer {
   private readonly wet: GainNode;
   /** Mirrors the element's volume and mute, which the processed path would otherwise skip. */
   private readonly volume: GainNode;
+  /** Listener's stem levels. Persistent, so a slider move reaches every queued segment. */
+  private readonly instrumentGain: GainNode;
+  private readonly vocalGain: GainNode;
   private scheduled: Scheduled[] = [];
   /** Maps context time to song time while the chain runs: song = pos + (ctx - ctx0). */
   private anchor: { ctx0: number; pos: number } | null = null;
@@ -44,13 +65,36 @@ export class KaraokeStreamPlayer {
   constructor(
     private readonly audio: HTMLAudioElement,
     private readonly graph: ElementGraph,
-    private readonly getSegment: (index: number) => StereoPcm | null,
-    private readonly totalSeconds: number
+    private readonly getSegment: (index: number) => SegmentStems | null,
+    private readonly totalSeconds: number,
+    initialMix: KaraokeMix = DEFAULT_KARAOKE_MIX
   ) {
-    this.wet = graph.context.createGain();
+    const ctx = graph.context;
+    this.wet = ctx.createGain();
     this.wet.gain.value = 0;
-    this.volume = graph.context.createGain();
+    this.volume = ctx.createGain();
+    this.instrumentGain = ctx.createGain();
+    this.vocalGain = ctx.createGain();
+    const mix = normalizeMix(initialMix);
+    this.instrumentGain.gain.value = mix.instruments;
+    this.vocalGain.gain.value = mix.vocals;
+    this.instrumentGain.connect(this.wet);
+    this.vocalGain.connect(this.wet);
     this.wet.connect(this.volume).connect(graph.bus);
+  }
+
+  /** Vocal and instrument levels, 0–1. Glides rather than jumps. */
+  public setMix(mix: KaraokeMix): void {
+    const next = normalizeMix(mix);
+    const now = this.graph.context.currentTime;
+    for (const [gain, value] of [
+      [this.instrumentGain.gain, next.instruments],
+      [this.vocalGain.gain, next.vocals]
+    ] as const) {
+      gain.cancelScheduledValues(now);
+      gain.setValueAtTime(gain.value, now);
+      gain.setTargetAtTime(value, now, MIX_SMOOTHING_SECONDS);
+    }
   }
 
   public get isEnabled(): boolean {
@@ -91,6 +135,8 @@ export class KaraokeStreamPlayer {
 
   public dispose(): void {
     this.disable();
+    this.instrumentGain.disconnect();
+    this.vocalGain.disconnect();
     this.wet.disconnect();
     this.volume.disconnect();
   }
@@ -121,12 +167,14 @@ export class KaraokeStreamPlayer {
   /** Stop everything queued. Mute the dry path only if we can take over the moment playback resumes. */
   private halt(): void {
     for (const s of this.scheduled) {
-      try {
-        s.node.stop();
-      } catch {
-        /* already stopped */
+      for (const node of s.nodes) {
+        try {
+          node.stop();
+        } catch {
+          /* already stopped */
+        }
+        node.disconnect();
       }
-      s.node.disconnect();
     }
     this.scheduled = [];
     this.anchor = null;
@@ -161,23 +209,30 @@ export class KaraokeStreamPlayer {
     const chainStart = startCtx;
 
     while (startCtx - now < QUEUE_AHEAD_SECONDS && songPos < this.totalSeconds) {
-      const pcm = this.getSegment(index);
-      if (!pcm) break;
+      const stems = this.getSegment(index);
+      if (!stems) break;
       const segStart = index * SEGMENT_SECONDS;
       const offset = Math.max(0, songPos - segStart);
-      const buffer = ctx.createBuffer(2, Math.max(1, pcm.left.length), ROFORMER_SAMPLE_RATE);
-      buffer.copyToChannel(pcm.left as Float32Array<ArrayBuffer>, 0);
-      buffer.copyToChannel(pcm.right as Float32Array<ArrayBuffer>, 1);
-      if (offset >= buffer.duration) {
+      const instrumental = toBuffer(ctx, stems.instrumental);
+      if (offset >= instrumental.duration) {
         index += 1;
         continue;
       }
-      const node = ctx.createBufferSource();
-      node.buffer = buffer;
-      node.connect(this.wet);
-      node.start(startCtx, offset);
-      const endCtx = startCtx + (buffer.duration - offset);
-      this.scheduled.push({ node, index, endCtx });
+      const vocals = toBuffer(ctx, stems.vocals);
+      const nodes = (
+        [
+          [instrumental, this.instrumentGain],
+          [vocals, this.vocalGain]
+        ] as const
+      ).map(([buffer, gain]) => {
+        const node = ctx.createBufferSource();
+        node.buffer = buffer;
+        node.connect(gain);
+        node.start(startCtx, offset);
+        return node;
+      });
+      const endCtx = startCtx + (instrumental.duration - offset);
+      this.scheduled.push({ nodes, index, endCtx });
       startCtx = endCtx;
       songPos = this.songTimeAt(startCtx);
       index += 1;

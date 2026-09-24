@@ -16,7 +16,9 @@ export { probeScnetAvailability } from './scnetWorker.client';
 export { processToInstrumentalBlob } from './processInWorker';
 export {
   audioBufferToStereo44k,
+  clearRoformerCache,
   ensureRoformerModel,
+  roformerCacheBytes,
   getSeparator,
   isRoformerLikelySupported,
   ROFORMER_MODEL

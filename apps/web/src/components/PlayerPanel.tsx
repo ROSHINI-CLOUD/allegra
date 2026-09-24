@@ -8,6 +8,7 @@ import {
   Mic,
   SkipBack,
   SkipForward,
+  SlidersHorizontal,
   Sparkles,
   Volume2,
   VolumeX,
@@ -15,13 +16,14 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion, useDragControls, useReducedMotion } from 'motion/react';
 import type { Variants } from 'motion/react';
-import type { CSSProperties, ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { UnifiedSong } from '@shared/types';
+import type { MotionArtwork, UnifiedSong } from '@shared/types';
 
 import { DynamicLyricsBackground } from './DynamicLyricsBackground';
 import { FluidArtBackground } from './FluidArtBackground';
+import { KaraokeMixSheet } from './KaraokeMixSheet';
 import { LyricsPanel } from './LyricsPanel';
 import { PlaylistMenu } from './PlaylistMenu';
 import { Artwork, IconButton, TactileButton } from './ui';
@@ -31,6 +33,8 @@ import { usePress } from '../hooks/usePress';
 import type { LiveKaraokeController } from '../hooks/useLiveKaraoke';
 import type { Palette } from '../lib/palette';
 import { tapHaptic } from '../lib/haptics';
+import { createDoubleTap } from '../lib/karaokeMix';
+import { fetchCanvasArtwork } from '../lib/api';
 import { creditedArtists, formatTime, clamp } from '../lib/utils';
 import { motionTokens, spring } from '../motion';
 
@@ -165,6 +169,41 @@ export function PlayerPanel({
   useEffect(() => {
     if (mode === 'workspace') setTab('lyrics');
   }, [mode]);
+
+  // Karaoke: every Karaoke button shares one gesture. Tap toggles; double tap opens the mix.
+  const [mixOpen, setMixOpen] = useState(false);
+  const mixOpenerRef = useRef<HTMLElement | null>(null);
+  const karaokeRef = useRef(liveKaraoke);
+  karaokeRef.current = liveKaraoke;
+  const karaokeTap = useMemo(
+    () =>
+      createDoubleTap({
+        onSingle: () => {
+          tapHaptic(10);
+          void karaokeRef.current?.toggle();
+        },
+        onDouble: () => {
+          tapHaptic(14);
+          setMixOpen(true);
+        },
+        shouldWait: () => Boolean(karaokeRef.current?.active)
+      }),
+    []
+  );
+  useEffect(() => () => karaokeTap.cancel(), [karaokeTap]);
+  useEffect(() => {
+    if (!song) setMixOpen(false);
+  }, [song]);
+  const pressKaraoke = (event: ReactMouseEvent<HTMLElement>): void => {
+    mixOpenerRef.current = event.currentTarget;
+    karaokeTap.tap();
+  };
+  const openKaraokeMix = (event: ReactMouseEvent<HTMLElement>): void => {
+    mixOpenerRef.current = event.currentTarget;
+    tapHaptic(10);
+    setMixOpen((open) => !open);
+  };
+  const karaokeOn = Boolean(liveKaraoke?.active || liveKaraoke?.busy);
 
   // The panel is a persistent portion of the tree (App.tsx keeps `song` null while
   // closed rather than unmounting PlayerPanel), so `song` is the "currently visible"
@@ -359,6 +398,7 @@ export function PlayerPanel({
                       exit="exit"
                     >
                       <Artwork song={song} size="large" />
+                      <AppleMotionArtwork song={song} enabled={isNarrowViewport} isPlaying={isPlaying} />
                     </motion.div>
                   </AnimatePresence>
                 </motion.div>
@@ -448,14 +488,22 @@ export function PlayerPanel({
                           liveKaraoke.busy ? 'Preparing karaoke' : liveKaraoke.active ? 'Turn karaoke off' : 'Turn karaoke on'
                         }
                         active={liveKaraoke.active}
-                        disabled={liveKaraoke.busy}
+                        aria-disabled={liveKaraoke.busy || undefined}
                         aria-pressed={liveKaraoke.active}
                         aria-busy={liveKaraoke.busy || undefined}
                         className={`np-action--tool${liveKaraoke.busy ? ' is-busy' : ''}`}
-                        onClick={() => {
-                          tapHaptic(10);
-                          void liveKaraoke.toggle();
-                        }}
+                        onClick={pressKaraoke}
+                      />
+                    ) : null}
+                    {liveKaraoke && karaokeOn ? (
+                      <IconButton
+                        icon={SlidersHorizontal}
+                        label="Karaoke mix: vocals and instruments"
+                        aria-haspopup="dialog"
+                        aria-expanded={mixOpen}
+                        active={mixOpen}
+                        className="np-action--tool"
+                        onClick={openKaraokeMix}
                       />
                     ) : null}
                     {showTranslate ? (
@@ -473,17 +521,16 @@ export function PlayerPanel({
                   </div>
                   {song ? (
                     <div className="np-live-karaoke">
+                      <div className="np-live-karaoke-row">
                       <TactileButton
                         variant={liveKaraoke?.active ? 'primary' : 'secondary'}
                         icon={Mic}
                         className={`np-live-karaoke-btn${liveKaraoke?.busy ? ' is-busy' : ''}${liveKaraoke?.active ? ' is-on' : ''}`}
-                        disabled={Boolean(liveKaraoke?.busy)}
+                        // Not `disabled` while preparing: a double tap must still reach the mix.
+                        aria-disabled={liveKaraoke?.busy || undefined}
                         aria-pressed={liveKaraoke?.active ?? false}
                         aria-busy={liveKaraoke?.busy || undefined}
-                        onClick={() => {
-                          tapHaptic(10);
-                          void liveKaraoke?.toggle();
-                        }}
+                        onClick={pressKaraoke}
                       >
                         {liveKaraoke?.busy
                           ? liveKaraoke.progress != null
@@ -493,6 +540,18 @@ export function PlayerPanel({
                             ? 'Karaoke on'
                             : 'Karaoke'}
                       </TactileButton>
+                      {liveKaraoke && karaokeOn ? (
+                        <IconButton
+                          icon={SlidersHorizontal}
+                          label="Karaoke mix: vocals and instruments"
+                          aria-haspopup="dialog"
+                          aria-expanded={mixOpen}
+                          active={mixOpen}
+                          className="np-live-karaoke-mix"
+                          onClick={openKaraokeMix}
+                        />
+                      ) : null}
+                      </div>
                       {liveKaraoke ? <KaraokeStatus karaoke={liveKaraoke} /> : null}
                     </div>
                   ) : null}
@@ -513,14 +572,9 @@ export function PlayerPanel({
                       karaokeProgressRatio={liveKaraoke?.progress ?? null}
                       karaokeDisabled={false}
                       karaokeError={liveKaraoke?.error ?? null}
-                      onToggleKaraoke={
-                        song
-                          ? () => {
-                              tapHaptic(10);
-                              void liveKaraoke?.toggle();
-                            }
-                          : undefined
-                      }
+                      onToggleKaraoke={song && liveKaraoke ? pressKaraoke : undefined}
+                      onOpenKaraokeMix={liveKaraoke ? openKaraokeMix : undefined}
+                      songId={song.id}
                     />
                   </>
                 ) : null}
@@ -578,10 +632,82 @@ export function PlayerPanel({
               </div>
             </div>
           </div>
+          {liveKaraoke ? (
+            <KaraokeMixSheet
+              open={mixOpen}
+              karaoke={liveKaraoke}
+              onClose={() => setMixOpen(false)}
+              returnFocusRef={mixOpenerRef}
+            />
+          ) : null}
         </motion.div>
       ) : null}
     </AnimatePresence>
   );
+}
+
+/**
+ * Apple editorial video artwork is a real release asset, not a generated visualizer.
+ * The API only returns a match when a server-side lookup finds one; otherwise this renders
+ * nothing and the existing static cover remains exactly as-is.
+ */
+function AppleMotionArtwork({ song, enabled, isPlaying }: { readonly song: UnifiedSong; readonly enabled: boolean; readonly isPlaying: boolean }) {
+  const [canvas, setCanvas] = useState<MotionArtwork | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Keyed on the song's fields, not the object: the player hands down a fresh object for the
+  // same song on unrelated re-renders, which would otherwise refetch.
+  const { title, artist, album, duration } = song;
+
+  useEffect(() => {
+    if (!enabled) {
+      setCanvas(null);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setCanvas(null);
+    void fetchCanvasArtwork({ title, artist, ...(album ? { album } : {}), duration }, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) setCanvas(result && canPlayMotion(result.videoUrl) ? result : null);
+      })
+      .catch(() => {
+        // Motion art is optional decoration; an unavailable provider must never surface as playback failure.
+        if (!controller.signal.aborted) setCanvas(null);
+      });
+    return () => controller.abort();
+  }, [enabled, title, artist, album, duration]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (isPlaying) {
+      void video.play().catch(() => undefined);
+    } else {
+      video.pause();
+    }
+  }, [canvas, isPlaying]);
+
+  if (!canvas) return null;
+  return (
+    <video
+      ref={videoRef}
+      className="np-art__canvas"
+      src={canvas.videoUrl}
+      poster={song.artwork}
+      muted
+      loop
+      playsInline
+      autoPlay={isPlaying}
+      preload="metadata"
+      aria-hidden="true"
+      onError={() => setCanvas(null)}
+    />
+  );
+}
+
+/** MP4 plays everywhere; an HLS-only asset is shown only where the browser plays HLS natively (Safari, iOS). */
+function canPlayMotion(url: string): boolean {
+  if (!/\.m3u8(?:$|[?#])/i.test(url)) return true;
+  return document.createElement('video').canPlayType('application/vnd.apple.mpegurl') !== '';
 }
 
 function PlayPauseGlyph({ isPlaying }: { readonly isPlaying: boolean }) {
@@ -721,6 +847,7 @@ function MarqueeText({ text, children }: { readonly text: string; readonly child
   );
 }
 
+
 /** One quiet status line under the Karaoke button; the detail lives behind an info button. */
 function KaraokeStatus({ karaoke }: { readonly karaoke: LiveKaraokeController }) {
   const [open, setOpen] = useState(false);
@@ -745,7 +872,8 @@ function KaraokeStatus({ karaoke }: { readonly karaoke: LiveKaraokeController })
 
   let tone: 'error' | 'basic' | 'ai' | 'idle' = 'idle';
   let summary = 'Removes vocals, keeps bass and instruments';
-  let detail: string | null = null;
+  let detail: string | null =
+    'Double-tap Karaoke to open the mix and choose how much voice and music you hear. Separation runs on this device; nothing is uploaded.';
   let technical: string | null = null;
 
   if (karaoke.error) {
@@ -757,6 +885,11 @@ function KaraokeStatus({ karaoke }: { readonly karaoke: LiveKaraokeController })
     tone = 'basic';
     summary = 'Mono track — vocals may remain';
     detail = 'This recording is mono, so the basic vocal remover has little to work with. A stereo version will sound much cleaner.';
+  } else if (karaoke.active && karaoke.basicByChoice) {
+    tone = 'basic';
+    summary = 'Basic mode';
+    detail =
+      'You chose Basic mode in Settings: a lighter vocal remover that needs no AI model. Some vocals remain, and the vocal mix is unavailable. Set Karaoke to Auto in Settings for the on-device AI model.';
   } else if (karaoke.active && karaoke.backend === 'midside') {
     tone = 'basic';
     summary = 'Basic mode';
@@ -766,7 +899,8 @@ function KaraokeStatus({ karaoke }: { readonly karaoke: LiveKaraokeController })
   } else if (karaoke.active && karaoke.backend === 'roformer') {
     tone = 'ai';
     summary = 'On-device AI vocal removal';
-    detail = 'A vocal-separation model runs privately on this device. Nothing is uploaded.';
+    detail =
+      'A vocal-separation model runs privately on this device. Nothing is uploaded. Double-tap Karaoke (or use the sliders button) to mix vocals and instruments.';
   }
 
   const hasDetail = detail !== null;

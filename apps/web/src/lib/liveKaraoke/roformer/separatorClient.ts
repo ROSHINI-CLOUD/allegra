@@ -1,9 +1,15 @@
 import type { StereoPcm } from './stft';
 import type { SeparatorRequest, SeparatorResponse } from './separatorWorker';
 
+export interface ChunkStems {
+  readonly instrumental: StereoPcm;
+  readonly vocals: StereoPcm;
+}
+
 export interface SeparatorJobHandlers {
   readonly onProgress?: (ratio: number, message?: string) => void;
-  readonly onChunk: (index: number, pcm: StereoPcm, ms: number, residualPass: boolean) => void;
+  /** Both stems of one chunk; `instrumental + vocals` is the chunk's original mix. */
+  readonly onChunk: (index: number, stems: ChunkStems, ms: number, residualPass: boolean) => void;
   readonly onError: (message: string) => void;
 }
 
@@ -89,7 +95,15 @@ class SeparatorClient {
         break;
       case 'chunk':
         if (msg.jobId === this.jobId) {
-          this.handlers?.onChunk(msg.index, { left: msg.left, right: msg.right }, msg.ms, msg.residualPass);
+          this.handlers?.onChunk(
+            msg.index,
+            {
+              instrumental: { left: msg.left, right: msg.right },
+              vocals: { left: msg.vocalLeft, right: msg.vocalRight }
+            },
+            msg.ms,
+            msg.residualPass
+          );
         }
         break;
       case 'complete':

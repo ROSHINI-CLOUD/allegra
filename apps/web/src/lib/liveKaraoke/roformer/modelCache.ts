@@ -40,6 +40,39 @@ async function writeOpfsFile(name: string, data: ArrayBuffer): Promise<void> {
   await w.close();
 }
 
+/** Bytes the downloaded model takes in this browser's private storage; 0 when none or unknown. */
+export async function roformerCacheBytes(): Promise<number> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle(OPFS_DIR);
+    let total = 0;
+    for (const name of [ROFORMER_MODEL.graphFile, ROFORMER_MODEL.dataFile]) {
+      try {
+        total += (await (await dir.getFileHandle(name)).getFile()).size;
+      } catch {
+        // Not downloaded (or partly): count what is there.
+      }
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Delete the downloaded model. A model already loaded this visit keeps working until the
+ * page reloads; the next Karaoke start downloads it again.
+ */
+export async function clearRoformerCache(): Promise<boolean> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    await root.removeEntry(OPFS_DIR, { recursive: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function downloadFile(
   url: string,
   onProgress?: (loaded: number, total: number) => void,

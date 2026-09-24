@@ -9,6 +9,7 @@ import {
 } from './config';
 import { ensureRoformerModel, type ModelProgress } from './modelCache';
 import { residualRatio, softSubtractResidual } from './residual';
+import { subtractStereo } from './stems';
 import {
   applyComplexMasks,
   decodeIstftPacked,
@@ -133,14 +134,7 @@ async function inferVocals(
 }
 
 function subtract(mix: StereoPcm, vocals: StereoPcm): StereoPcm {
-  const n = ROFORMER_CHUNK_SAMPLES;
-  const left = new Float32Array(n);
-  const right = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    left[i] = (mix.left[i] ?? 0) - (vocals.left[i] ?? 0);
-    right[i] = (mix.right[i] ?? 0) - (vocals.right[i] ?? 0);
-  }
-  return { left, right };
+  return subtractStereo(mix, vocals, ROFORMER_CHUNK_SAMPLES);
 }
 
 /**
