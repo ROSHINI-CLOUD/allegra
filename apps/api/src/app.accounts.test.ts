@@ -4,6 +4,7 @@ import request from 'supertest';
 
 import { createApp } from './app.js';
 import { createServices } from './services.js';
+import type { TokenVerifier } from './auth/verifier.js';
 import { applySeeds, applySignal, mergeTaste, playWeight, SIGNAL_WEIGHT } from './user/taste.js';
 
 const rawSong = {
@@ -46,6 +47,24 @@ function app() {
   });
   return createApp({ version: 'test', jwtSecret: 'test-secret', services, rateLimit: false });
 }
+
+test('createApp forwards an account verifier so signed-in profiles are not treated as guests', async () => {
+  const verifier: TokenVerifier = {
+    verify: async (token) => token === 'account-token' ? { userId: 'account-1', source: 'convex' } : null
+  };
+  const server = createApp({
+    version: 'test',
+    jwtSecret: 'test-secret',
+    saavnApiUrl: 'https://saavn.test/api',
+    accountVerifier: verifier,
+    rateLimit: false
+  });
+
+  const response = await request(server).get('/api/auth/me').set('Authorization', 'Bearer account-token');
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.isGuest, false);
+});
 
 async function guest(server: ReturnType<typeof app>): Promise<string> {
   const response = await request(server).post('/api/auth/anon');

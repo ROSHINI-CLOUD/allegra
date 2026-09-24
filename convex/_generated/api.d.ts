@@ -9,7 +9,10 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as covers from "../covers.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
+import type * as oauth from "../oauth.js";
 import type * as profiles from "../profiles.js";
 import type * as shares from "../shares.js";
 
@@ -21,7 +24,10 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  covers: typeof covers;
+  crons: typeof crons;
   http: typeof http;
+  oauth: typeof oauth;
   profiles: typeof profiles;
   shares: typeof shares;
 }>;

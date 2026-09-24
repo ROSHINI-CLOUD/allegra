@@ -6,6 +6,7 @@ import { pinoHttp } from 'pino-http';
 
 import type { MusicBrainzConfig, TranslationConfig } from './config.js';
 import { createServices, type AppServices } from './services.js';
+import type { TokenVerifier } from './auth/verifier.js';
 import type { CacheStore } from './lib/cache.js';
 import { createLogger, REDACTED_PATHS } from './lib/logger.js';
 import { artworkRouter } from './routes/artwork.js';
@@ -45,6 +46,10 @@ export interface AppOptions {
   readonly betterLyricsApiKey?: string;
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
+  /** Convex Auth issuer; used to verify Google session tokens at the API boundary. */
+  readonly convexSiteUrl?: string;
+  /** Injectable account-token verifier for tests and alternate identity providers. */
+  readonly accountVerifier?: TokenVerifier;
   readonly translation?: TranslationConfig;
   readonly cacheStore?: CacheStore;
   readonly fetchImpl?: typeof fetch;
@@ -106,6 +111,8 @@ export function createApp(options: AppOptions): Express {
     ...(options.betterLyricsApiKey ? { betterLyricsApiKey: options.betterLyricsApiKey } : {}),
     ...(options.convexUrl ? { convexUrl: options.convexUrl } : {}),
     ...(options.convexServerSecret ? { convexServerSecret: options.convexServerSecret } : {}),
+    ...(options.convexSiteUrl ? { convexSiteUrl: options.convexSiteUrl } : {}),
+    ...(options.accountVerifier ? { accountVerifier: options.accountVerifier } : {}),
     ...(options.translation ? { translation: options.translation } : {}),
     ...(options.cacheStore ? { cacheStore: options.cacheStore } : {}),
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
