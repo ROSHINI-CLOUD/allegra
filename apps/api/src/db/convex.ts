@@ -1,11 +1,15 @@
 import { ConvexHttpClient } from 'convex/browser';
 import { anyApi } from 'convex/server';
 
+import type { CoverStorage, StoredCover } from '../lib/covers.js';
+import type { GrantLedger } from '../oauth/ledger.js';
 import type { LibraryRecord, RecentRecord, ShareRecord, TasteEntry, TasteProfile, UserData, UserStore } from '../user/store.js';
 
 /** Function references into convex/profiles.ts and convex/shares.ts. anyApi is untyped, so name what we use. */
 const profilesApi = anyApi.profiles as unknown as { readonly get: unknown; readonly byEmail: unknown; readonly save: unknown; readonly identity: unknown };
 const sharesApi = anyApi.shares as unknown as { readonly get: unknown; readonly byLibrary: unknown; readonly save: unknown; readonly remove: unknown };
+const oauthApi = anyApi.oauth as unknown as { readonly consume: unknown };
+const coversApi = anyApi.covers as unknown as { readonly generateUploadUrl: unknown; readonly inspect: unknown; readonly remove: unknown };
 
 /** The two calls the store needs. Narrow on purpose so tests can fake it. */
 export interface ConvexClientLike {
@@ -131,4 +135,63 @@ function parseUserData(value: unknown): UserData | null {
     ...(typeof record.email === 'string' ? { email: record.email } : {}),
     ...(taste ? { taste } : {})
   };
+}
+
+/** Playlist covers in Convex file storage (convex/covers.ts), behind the same server secret. */
+export class ConvexCoverStorage implements CoverStorage {
+  private readonly client: ConvexClientLike;
+  private readonly secret: string;
+
+  public constructor(options: ConvexUserStoreOptions) {
+    this.client = options.client ?? (new ConvexHttpClient(options.url) as unknown as ConvexClientLike);
+    this.secret = options.serverSecret;
+  }
+
+  public async uploadUrl(): Promise<string> {
+    const url = await this.client.mutation(coversApi.generateUploadUrl, { secret: this.secret });
+    if (typeof url !== 'string' || !url.startsWith('https://')) throw new Error('Convex returned no upload URL.');
+    return url;
+  }
+
+  public async inspect(storageId: string): Promise<StoredCover | null> {
+    try {
+      const raw = await this.client.query(coversApi.inspect, { secret: this.secret, storageId });
+      if (!raw || typeof raw !== 'object') return null;
+      const record = raw as Record<string, unknown>;
+      if (typeof record.url !== 'string' || typeof record.size !== 'number') return null;
+      return { url: record.url, size: record.size, contentType: typeof record.contentType === 'string' ? record.contentType : '' };
+    } catch {
+      // A malformed id fails Convex's own validator: same as "no such file".
+      return null;
+    }
+  }
+
+  public async remove(storageId: string): Promise<void> {
+    try {
+      await this.client.mutation(coversApi.remove, { secret: this.secret, storageId });
+    } catch {
+      // Best effort by contract.
+    }
+  }
+}
+
+/** Single-use OAuth tokens across serverless instances (convex/oauth.ts). */
+export class ConvexGrantLedger implements GrantLedger {
+  private readonly client: ConvexClientLike;
+  private readonly secret: string;
+
+  public constructor(options: ConvexUserStoreOptions) {
+    this.client = options.client ?? (new ConvexHttpClient(options.url) as unknown as ConvexClientLike);
+    this.secret = options.serverSecret;
+  }
+
+  public async consume(jti: string, expiresAtMs: number): Promise<boolean> {
+    // A Convex failure refuses the grant: a code must never be accepted twice because the
+    // ledger was unreachable.
+    try {
+      return (await this.client.mutation(oauthApi.consume, { secret: this.secret, jti, expiresAt: expiresAtMs })) === true;
+    } catch {
+      return false;
+    }
+  }
 }

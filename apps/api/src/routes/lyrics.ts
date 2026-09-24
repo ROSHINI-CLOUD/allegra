@@ -1,13 +1,13 @@
 import { Router } from 'express';
 
 import type { LyricsService } from '../services/lyrics.js';
-import { sendFailure, sendSuccess, queryString } from './common.js';
+import { sendFailure, sendSuccess, boundedString } from './common.js';
 
 export function lyricsRouter(lyrics: LyricsService): Router {
   const router = Router();
   router.get('/lyrics', async (request, response) => {
-    const title = queryString(request.query.title);
-    const artist = queryString(request.query.artist);
+    const title = boundedString(request.query.title);
+    const artist = boundedString(request.query.artist);
     const duration = typeof request.query.duration === 'string' ? Number(request.query.duration) : undefined;
     const syncedOnly = request.query.syncedOnly === 'true';
     if (!title || !artist) {
@@ -26,8 +26,8 @@ export function lyricsRouter(lyrics: LyricsService): Router {
     }
   });
   router.get('/lyrics/search', async (request, response) => {
-    const title = queryString(request.query.title);
-    const artist = queryString(request.query.artist);
+    const title = boundedString(request.query.title);
+    const artist = boundedString(request.query.artist);
     const duration = typeof request.query.duration === 'string' ? Number(request.query.duration) : undefined;
     if (!title || !artist) {
       response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });

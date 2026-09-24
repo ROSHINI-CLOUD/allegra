@@ -44,6 +44,11 @@
   grid-template: 1fr / 1fr;
   place-items: center;
   perspective: 1100px;
+  /* Side covers are transformed well past this box on narrow screens (SIDE_COUNT reaches
+   * 112% of the card width). The mask already fades them to nothing at the edge, so clipping
+   * here changes nothing visible — it only stops that off-screen geometry from widening the
+   * page's own horizontal scroll range on phones. */
+  overflow: hidden;
   /* Sideways belongs to the shelf, up and down still scrolls the page. */
   touch-action: pan-y;
   cursor: grab;

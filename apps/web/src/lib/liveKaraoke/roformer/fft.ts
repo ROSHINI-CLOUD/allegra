@@ -54,10 +54,11 @@ export function ifft(re: Float32Array, im: Float32Array): void {
   }
 }
 
+/** Periodic Hann, matching torch.hann_window(n) (the window the model was trained with). */
 export function hannWindow(n: number): Float32Array {
   const w = new Float32Array(n);
   for (let i = 0; i < n; i++) {
-    w[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (n - 1)));
+    w[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / n));
   }
   return w;
 }

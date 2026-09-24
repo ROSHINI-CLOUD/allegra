@@ -10,15 +10,13 @@ npm run dev          # API on :8080, web on :5173
 `npm run dev` starts both. The web app calls same-origin `/api`, which Next rewrites to the API in
 development — so there is no CORS setup and no `localhost` vs `127.0.0.1` trap.
 
-Nothing needs credentials to run. With no Convex the app is guest-only and user data is in memory;
-with no AWS karaoke config the Sing routes answer `503` and the button stays hidden. Everything else
-works.
+Nothing needs credentials to run. With no Convex the app is guest-only and user data is in memory.
+Karaoke runs on the listener's device, so it has no API or cloud configuration.
 
 | Want | Add to `apps/api/.env` |
 |---|---|
 | Durable user data + Google sign-in | `CONVEX_URL`, `CONVEX_SERVER_SECRET` (+ `NEXT_PUBLIC_CONVEX_URL` in `apps/web/.env.local`) — see [auth-convex-google.md](./auth-convex-google.md) |
-| Sing / karaoke | `AWS_BATCH_JOB_QUEUE`, `AWS_BATCH_JOB_DEFINITION`, `KARAOKE_S3_BUCKET` — see [karaoke-aws-deploy.md](./karaoke-aws-deploy.md) |
-| Recommendations, lyric translation | any one AI key (`GEMINI_API_KEY`, `GROQ_API_KEY`, …) |
+| Recommendations, lyric translation | No key. Recommendations use catalog + listener taste; MyMemory translates lyrics. Set `LIBRETRANSLATE_API_URL` only for a self-hosted fallback. |
 
 ## The gate
 
@@ -29,13 +27,6 @@ npm test             # all green
 ```
 
 All three before opening a PR. They run across every workspace from the root.
-
-The worker and infrastructure have their own checks, which CI also runs:
-
-```bash
-cd workers/stem-separator && python -m unittest discover -p "test_*.py"
-cfn-lint infra/aws/*.yaml
-```
 
 Frontend work is also checked at 360 / 768 / 1280 / 1920, and the hero transition is profiled on a
 **real phone**, not a laptop.
@@ -101,10 +92,8 @@ curl -sI -H "Range: bytes=0-1023" https://allegravibe.vercel.app/api/stream/<son
 Preview deployments sit behind Vercel's SSO protection, so a public `curl` against one returns a
 login redirect rather than your app. Verify against the production alias.
 
-AWS karaoke infrastructure is deployed separately and deliberately by hand — a GPU job costs money.
-See [karaoke-aws-deploy.md](./karaoke-aws-deploy.md).
-
 ## Scope
 
 Anything that ships a control which does nothing is out. The Premium page is a labelled UI demo with
-no payments. Karaoke sliders are real: they mix two generated stems locally.
+no payments. Karaoke is real: it separates locally in a browser worker, with a mid-side fallback
+when the model cannot run on the current device.

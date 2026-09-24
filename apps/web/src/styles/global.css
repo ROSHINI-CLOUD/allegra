@@ -1096,7 +1096,7 @@ input:focus-visible,
 .icon-button:active,
 .icon-button[data-pressed='true'] { transform: translateY(1px) scale(0.94); }
 
-.card-title-row .icon-button { width: 32px; height: 32px; opacity: 0; }
+.card-title-row .icon-button { width: 44px; height: 44px; opacity: 0; }
 .track-row:hover .card-title-row .icon-button,
 .card-title-row .icon-button:focus-visible,
 .card-title-row .icon-button.is-active { opacity: 1; }
@@ -1938,7 +1938,7 @@ body::before { opacity: 0.045; }
 .header-actions { gap: 14px; }
 .session-label { color: #818188; }
 .session-label i { background: var(--stage-blue); box-shadow: 0 0 12px rgba(111, 193, 255, 0.7); }
-.motion-toggle { width: 38px; height: 38px; border-color: rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.045); color: #f5f2eb; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 0 #050608; }
+.motion-toggle { width: 44px; height: 44px; border-color: rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.045); color: #f5f2eb; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 0 #050608; }
 
 .content-wrap { width: min(1240px, calc(100% - 64px)); padding: 0 0 120px; }
 .content-wrap:focus { outline: none; }
@@ -2096,7 +2096,7 @@ body::before { opacity: 0.045; }
   .nav-link { padding: 0 8px; font-size: 11px; }
   .nav-link svg, .session-label { display: none; }
   .header-actions { gap: 6px; }
-  .motion-toggle { width: 34px; height: 34px; }
+  .motion-toggle { width: 44px; height: 44px; }
   .content-wrap { width: calc(100% - 28px); padding-bottom: 108px; }
   .hero-section { gap: 20px; padding: 22px 0 38px; }
   .hero-feature { min-height: 540px; padding: 15px; border-radius: 28px; }
@@ -2630,10 +2630,13 @@ body,
 .site-header-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .nav-collapse-toggle { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border: 1px solid var(--listen-line); border-radius: 10px; background: rgba(255, 255, 255, 0.045); color: var(--listen-muted); transition: background var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard); }
 .nav-collapse-toggle:hover { border-color: rgba(217, 255, 101, 0.38); background: rgba(217, 255, 101, 0.1); color: var(--listen-accent); }
+/* Documented exception (CLAUDE.md rule 5): nav-label width transition is a real layout-affecting nav-collapse action, not decorative motion — a transform-only rewrite needs a rail markup change, out of scope for this CSS-only pass. */
 .nav-label { min-width: 0; overflow: hidden; white-space: nowrap; transition: opacity var(--d-fast) var(--ease-standard), width var(--d-fast) var(--ease-standard); }
 
 @media (min-width: 861px) {
+  /* Documented exception (CLAUDE.md rule 5): real layout-affecting nav-collapse action, not decorative motion — a transform-only rewrite needs a rail markup change, out of scope for this CSS-only pass. */
   .site-header { width: 246px; transition: width var(--d-panel) var(--ease-standard), padding var(--d-panel) var(--ease-standard); }
+  /* Documented exception (CLAUDE.md rule 5): same nav-collapse action as above, mirrored onto the content margin. */
   .content-wrap,
   .content-wrap.inner-page-wrap { margin-left: 246px; transition: margin-left var(--d-panel) var(--ease-standard); }
   .app-shell.is-nav-collapsed .site-header { width: 82px; padding-right: 10px; padding-left: 10px; }
@@ -3021,7 +3024,7 @@ body::before { background: radial-gradient(circle at 64% -10%, rgba(180, 198, 25
 .header-actions { display: flex; align-items: center; gap: 10px; margin-top: auto; padding: 18px 12px 0; border-top: 1px solid var(--listen-line); }
 .session-label { min-width: 0; color: var(--listen-faint); font-size: 11px; letter-spacing: 0.03em; text-transform: none; }
 .session-label i { background: var(--listen-accent); box-shadow: 0 0 0 3px rgba(217, 255, 101, 0.13); }
-.motion-toggle { width: 34px; height: 34px; margin-left: auto; border-color: var(--listen-line); background: var(--listen-surface-soft); color: var(--listen-muted); }
+.motion-toggle { width: 44px; height: 44px; margin-left: auto; border-color: var(--listen-line); background: var(--listen-surface-soft); color: var(--listen-muted); }
 .motion-toggle:hover { border-color: rgba(217, 255, 101, 0.38); color: var(--listen-accent); }
 
 .content-wrap,
@@ -3244,10 +3247,13 @@ body::before { background: radial-gradient(circle at 64% -10%, rgba(180, 198, 25
 .site-header-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .nav-collapse-toggle { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border: 1px solid var(--listen-line); border-radius: 10px; background: rgba(255, 255, 255, 0.045); color: var(--listen-muted); transition: background var(--d-fast) var(--ease-standard), color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard); }
 .nav-collapse-toggle:hover { border-color: rgba(217, 255, 101, 0.38); background: rgba(217, 255, 101, 0.1); color: var(--listen-accent); }
+/* Documented exception (CLAUDE.md rule 5): nav-label width transition is a real layout-affecting nav-collapse action, not decorative motion — a transform-only rewrite needs a rail markup change, out of scope for this CSS-only pass. */
 .nav-label { min-width: 0; overflow: hidden; white-space: nowrap; transition: opacity var(--d-fast) var(--ease-standard), width var(--d-fast) var(--ease-standard); }
 
 @media (min-width: 861px) {
+  /* Documented exception (CLAUDE.md rule 5): real layout-affecting nav-collapse action, not decorative motion — a transform-only rewrite needs a rail markup change, out of scope for this CSS-only pass. */
   .site-header { width: 246px; transition: width var(--d-panel) var(--ease-standard), padding var(--d-panel) var(--ease-standard); }
+  /* Documented exception (CLAUDE.md rule 5): same nav-collapse action as above, mirrored onto the content margin. */
   .content-wrap,
   .content-wrap.inner-page-wrap { margin-left: 246px; transition: margin-left var(--d-panel) var(--ease-standard); }
   .app-shell.is-nav-collapsed .site-header { width: 82px; padding-right: 10px; padding-left: 10px; }

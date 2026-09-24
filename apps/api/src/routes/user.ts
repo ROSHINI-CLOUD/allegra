@@ -3,20 +3,21 @@ import { Router } from 'express';
 
 import type { AuthService } from '../auth/auth.js';
 import type { CatalogService } from '../catalog/catalog.js';
-import { forPersistence, isOwnedCoverKey, withCoverUrl, withCoverUrls } from '../lib/covers.js';
+import { parseLanguages } from '../lib/languages.js';
+import { MAX_COVER_BYTES, isCoverContentType, looksLikeStorageId, type CoverStorage } from '../lib/covers.js';
 import type { LibraryRecord, TasteProfile, UserData } from '../user/store.js';
+import { deriveMoodPrompts } from '../user/moodPrompts.js';
 import { SIGNAL_WEIGHT, applySeeds, applySignal, emptyTaste, playWeight } from '../user/taste.js';
 import { getUserId, sendUnauthorized } from './auth.js';
 import { asRecord, sendFailure, sendSuccess, sanitizeSettings, songId } from './common.js';
 
-export function userRouter(auth: AuthService, catalog: CatalogService, coversPublicBaseUrl?: string): Router {
+export function userRouter(auth: AuthService, catalog: CatalogService, covers?: CoverStorage): Router {
   const router = Router();
-  const present = (library: LibraryRecord): LibraryRecord => withCoverUrl(library, coversPublicBaseUrl);
 
   router.get('/libraries', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    sendSuccess(response, withCoverUrls(user.libraries, coversPublicBaseUrl));
+    sendSuccess(response, user.libraries);
   });
 
   router.post('/libraries', async (request, response) => {
@@ -39,7 +40,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService, coversPub
     };
     try {
       await saveUser(auth, { ...user, libraries: [...user.libraries, library] });
-      sendSuccess(response, present(library), 201);
+      sendSuccess(response, library, 201);
     } catch (error) {
       sendFailure(response, error);
     }
@@ -60,19 +61,34 @@ export function userRouter(auth: AuthService, catalog: CatalogService, coversPub
       return;
     }
 
-    let coverKeyUpdate: { coverKey?: string } | undefined;
+    // A new cover is a Convex storage id the browser just uploaded to. Check what was actually
+    // stored before attaching it; anything wrong is deleted, never kept.
+    let cover: { coverKey: string; coverUrl: string } | null | undefined;
     if (body.coverKey === null) {
-      coverKeyUpdate = {};
+      cover = null;
     } else if (typeof body.coverKey === 'string') {
-      const coverKey = body.coverKey.trim();
-      if (!isOwnedCoverKey(coverKey, user.userId, current.id)) {
+      const storageId = body.coverKey.trim();
+      if (!covers) {
+        response.status(503).json({ success: false, data: null, error: 'Cover uploads are not available right now.' });
+        return;
+      }
+      const stored = looksLikeStorageId(storageId) ? await covers.inspect(storageId) : null;
+      if (!stored) {
         response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
         return;
       }
-      coverKeyUpdate = { coverKey };
+      if (!isCoverContentType(stored.contentType) || stored.size > MAX_COVER_BYTES) {
+        await covers.remove(storageId);
+        response.status(400).json({ success: false, data: null, error: 'Use a WebP or JPEG image for the cover.' });
+        return;
+      }
+      cover = { coverKey: storageId, coverUrl: stored.url };
     }
 
-    const base = forPersistence(current);
+    const base = current;
+    const keptCover = base.coverKey || base.coverUrl
+      ? { ...(base.coverKey ? { coverKey: base.coverKey } : {}), ...(base.coverUrl ? { coverUrl: base.coverUrl } : {}) }
+      : {};
     const updated: LibraryRecord = {
       id: base.id,
       name: typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 100) : base.name,
@@ -84,19 +100,15 @@ export function userRouter(auth: AuthService, catalog: CatalogService, coversPub
       isPublic: typeof body.isPublic === 'boolean' ? body.isPublic : base.isPublic,
       songIds: base.songIds,
       createdAt: base.createdAt,
-      ...(coverKeyUpdate
-        ? coverKeyUpdate.coverKey
-          ? { coverKey: coverKeyUpdate.coverKey }
-          : {}
-        : base.coverKey
-          ? { coverKey: base.coverKey }
-          : {})
+      ...(cover === undefined ? keptCover : cover === null ? {} : cover)
     };
     const libraries = [...user.libraries];
     libraries[index] = updated;
     try {
       await saveUser(auth, { ...user, libraries });
-      sendSuccess(response, present(updated));
+      // The replaced image is no longer referenced by this playlist.
+      if (cover !== undefined && base.coverKey && base.coverKey !== cover?.coverKey) await covers?.remove(base.coverKey);
+      sendSuccess(response, updated);
     } catch (error) {
       sendFailure(response, error);
     }
@@ -105,13 +117,15 @@ export function userRouter(auth: AuthService, catalog: CatalogService, coversPub
   router.delete('/libraries/:id', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    const libraries = user.libraries.filter((library) => library.id !== request.params.id);
-    if (libraries.length === user.libraries.length) {
+    const removed = user.libraries.find((library) => library.id === request.params.id);
+    if (!removed) {
       response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
       return;
     }
+    const libraries = user.libraries.filter((library) => library.id !== removed.id);
     try {
       await saveUser(auth, { ...user, libraries });
+      if (removed.coverKey) await covers?.remove(removed.coverKey);
       response.status(204).end();
     } catch (error) {
       sendFailure(response, error);
@@ -139,7 +153,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService, coversPub
     try {
       const taught = adding ? await learn(catalog, user, id, () => SIGNAL_WEIGHT.playlistAdd) : user;
       await saveUser(auth, { ...taught, libraries });
-      sendSuccess(response, present(updated));
+      sendSuccess(response, updated);
     } catch (error) {
       sendFailure(response, error);
     }
@@ -163,7 +177,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService, coversPub
     libraries[index] = updated;
     try {
       await saveUser(auth, { ...user, libraries });
-      sendSuccess(response, present(updated));
+      sendSuccess(response, updated);
     } catch (error) {
       sendFailure(response, error);
     }
@@ -251,7 +265,11 @@ export function userRouter(auth: AuthService, catalog: CatalogService, coversPub
   router.patch('/me/settings', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    const settings = { ...sanitizeSettings(user.settings), ...sanitizeSettings(request.body) };
+    const body = asRecord(request.body);
+    const settings: Record<string, string | number | boolean> = { ...sanitizeSettings(user.settings), ...sanitizeSettings(body) };
+    // Languages arrive as ["hindi", "tamil"] or "hindi,tamil"; stored as a known, ordered list.
+    // An empty list means every language.
+    if ('languages' in body) settings.languages = parseLanguages(body.languages).join(',');
     try {
       await saveUser(auth, { ...user, settings });
       sendSuccess(response, settings);
@@ -275,7 +293,10 @@ export function userRouter(auth: AuthService, catalog: CatalogService, coversPub
     const languages = stringList(body.languages, 8);
     try {
       const taste = applySeeds(user.taste, artists, languages);
-      await saveUser(auth, { ...user, taste });
+      // Onboarding's language picks become the language setting; Settings changes it later.
+      const picked = parseLanguages(languages);
+      const settings = picked.length > 0 ? { ...user.settings, languages: picked.join(',') } : user.settings;
+      await saveUser(auth, { ...user, taste, settings });
       sendSuccess(response, tasteSummary(taste));
     } catch (error) {
       sendFailure(response, error);
@@ -306,13 +327,17 @@ export function userRouter(auth: AuthService, catalog: CatalogService, coversPub
 }
 
 /** The slice of taste the browser needs: who they love, in what language, and whether to ask them to pick favourites. */
-export function tasteSummary(taste: TasteProfile | undefined): { topArtists: { name: string; score: number }[]; languages: { name: string; score: number }[]; signals: number; onboarded: boolean } {
+export function tasteSummary(taste: TasteProfile | undefined): { topArtists: { name: string; score: number }[]; languages: { name: string; score: number }[]; signals: number; onboarded: boolean; prompts: string[] } {
   const value = taste ?? emptyTaste();
-  return {
+  const summary = {
     topArtists: value.artists.slice(0, 12).map((entry) => ({ name: entry.name, score: entry.score })),
     languages: value.languages.slice(0, 5).map((entry) => ({ name: entry.name, score: entry.score })),
     signals: value.signals,
     onboarded: value.onboarded
+  };
+  return {
+    ...summary,
+    prompts: deriveMoodPrompts(summary)
   };
 }
 

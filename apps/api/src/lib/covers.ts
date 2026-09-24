@@ -1,53 +1,33 @@
-import type { LibraryRecord } from '../user/store.js';
+/**
+ * Playlist covers live in Convex file storage. The browser resizes an image to a small square
+ * WebP (JPEG where WebP encoding is missing) before it uploads, so a cover is tens of KB; the
+ * cap below is generous for that and far below what a raw photo would be.
+ */
+export const MAX_COVER_BYTES = 300 * 1024;
 
-/** Hard cap enforced both in our route and by the signed Content-Length on the PUT. */
-export const MAX_COVER_BYTES = 2 * 1024 * 1024;
+export const COVER_CONTENT_TYPES = ['image/webp', 'image/jpeg'] as const;
 
-export const COVER_CONTENT_TYPES = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp'
-} as const;
-
-export type CoverContentType = keyof typeof COVER_CONTENT_TYPES;
-
-export function isCoverContentType(value: string): value is CoverContentType {
-  return Object.prototype.hasOwnProperty.call(COVER_CONTENT_TYPES, value);
+export function isCoverContentType(value: string): value is (typeof COVER_CONTENT_TYPES)[number] {
+  return (COVER_CONTENT_TYPES as readonly string[]).includes(value);
 }
 
-/** Keys always live under covers/<userId>/<libraryId>/ so a PATCH cannot point at someone else's object. */
-export function coverKeyPrefix(userId: string, libraryId: string): string {
-  return `covers/${userId}/${libraryId}/`;
+/** Shape check for a Convex storage id before it is sent anywhere; Convex validates it for real. */
+export function looksLikeStorageId(value: string): boolean {
+  return /^[a-z0-9]{16,64}$/.test(value);
 }
 
-export function isOwnedCoverKey(coverKey: string, userId: string, libraryId: string): boolean {
-  if (!coverKey || coverKey.includes('..') || coverKey.startsWith('/') || coverKey.includes('\\')) {
-    return false;
-  }
-  const prefix = coverKeyPrefix(userId, libraryId);
-  if (!coverKey.startsWith(prefix)) return false;
-  const rest = coverKey.slice(prefix.length);
-  return /^[0-9a-f-]{36}\.(jpg|png|webp)$/i.test(rest);
+export interface StoredCover {
+  readonly url: string;
+  readonly contentType: string;
+  readonly size: number;
 }
 
-export function publicCoverUrl(publicBaseUrl: string, coverKey: string): string {
-  return `${publicBaseUrl.replace(/\/+$/, '')}/${coverKey.replace(/^\/+/, '')}`;
-}
-
-/** Drop any derived coverUrl before writing to the store. */
-export function forPersistence(library: LibraryRecord): LibraryRecord {
-  const { coverUrl: _drop, ...rest } = library as LibraryRecord & { coverUrl?: string };
-  void _drop;
-  return rest;
-}
-
-/** Derive the browser-facing URL from the stored key. coverUrl is never persisted. */
-export function withCoverUrl(library: LibraryRecord, publicBaseUrl?: string): LibraryRecord {
-  const stored = forPersistence(library);
-  if (!stored.coverKey || !publicBaseUrl) return stored;
-  return { ...stored, coverUrl: publicCoverUrl(publicBaseUrl, stored.coverKey) };
-}
-
-export function withCoverUrls(libraries: readonly LibraryRecord[], publicBaseUrl?: string): LibraryRecord[] {
-  return libraries.map((library) => withCoverUrl(library, publicBaseUrl));
+/** Where cover bytes live. Convex implements it; without Convex, uploads are off (503). */
+export interface CoverStorage {
+  /** One-time URL the browser POSTs the image to; answers `{ storageId }`. */
+  uploadUrl(): Promise<string>;
+  /** What was stored under an id, or null when there is no such file. */
+  inspect(storageId: string): Promise<StoredCover | null>;
+  /** Best effort: a leftover file costs a few KB, a failed request must not. */
+  remove(storageId: string): Promise<void>;
 }

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import test from 'node:test';
 
@@ -11,7 +12,7 @@ import { createApp } from '../app.js';
 /** Same exactOptionalPropertyTypes friction as server.ts — see the comment there. */
 async function connectClient(baseUrl: string, token?: string): Promise<Client> {
   const client = new Client({ name: 'test-client', version: '1.0.0' });
-  const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`), {
+  const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/api/mcp`), {
     ...(token ? { requestInit: { headers: { Authorization: `Bearer ${token}` } } } : {})
   });
   await client.connect(transport as unknown as Transport);
@@ -35,8 +36,44 @@ function fakeFetch(input: RequestInfo | URL): Promise<Response> {
   return Promise.resolve(new Response(JSON.stringify({ success: true, data: { results: [] } }), { headers: { 'content-type': 'application/json' } }));
 }
 
+/**
+ * The whole connect flow an assistant runs: register, authorize (PKCE), the listener approves on
+ * /connect (here: the approve call the page makes with their app session), then the code exchange.
+ */
+export async function connectToken(baseUrl: string, sessionToken: string): Promise<{ accessToken: string; refreshToken: string; clientId: string }> {
+  const redirectUri = 'http://localhost:9999/callback';
+  const registered = await fetch(`${baseUrl}/api/oauth/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_name: 'Test Assistant', redirect_uris: [redirectUri] })
+  });
+  const { client_id: clientId } = (await registered.json()) as { client_id: string };
+  const verifier = randomBytes(48).toString('base64url');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  const authorize = new URL(`${baseUrl}/api/oauth/authorize`);
+  for (const [key, value] of Object.entries({ response_type: 'code', client_id: clientId, redirect_uri: redirectUri, code_challenge: challenge, code_challenge_method: 'S256', state: 'xyz', resource: `${baseUrl}/api/mcp` })) {
+    authorize.searchParams.set(key, value);
+  }
+  const consent = await fetch(authorize, { redirect: 'manual' });
+  const request = new URL(consent.headers.get('location') ?? '').searchParams.get('request') ?? '';
+  const approved = await fetch(`${baseUrl}/api/oauth/approve`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ request, decision: 'allow' })
+  });
+  const { data } = (await approved.json()) as { data: { redirectTo: string } };
+  const code = new URL(data.redirectTo).searchParams.get('code') ?? '';
+  const token = await fetch(`${baseUrl}/api/oauth/token`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, client_id: clientId, code_verifier: verifier, resource: `${baseUrl}/api/mcp` })
+  });
+  const tokens = (await token.json()) as { access_token: string; refresh_token: string };
+  return { accessToken: tokens.access_token, refreshToken: tokens.refresh_token, clientId };
+}
+
 /** Real HTTP server + the real MCP client SDK — this is the same handshake ChatGPT would perform. */
-async function withServer(run: (baseUrl: string, guestToken: string) => Promise<void>): Promise<void> {
+async function withServer(run: (baseUrl: string, accessToken: string, sessionToken: string) => Promise<void>): Promise<void> {
   const app = createApp({
     version: 'test',
     jwtSecret: 'test-secret',
@@ -55,7 +92,8 @@ async function withServer(run: (baseUrl: string, guestToken: string) => Promise<
   try {
     const authResponse = await fetch(`${baseUrl}/api/auth/anon`, { method: 'POST' });
     const authBody = (await authResponse.json()) as { data: { token: string } };
-    await run(baseUrl, authBody.data.token);
+    const { accessToken } = await connectToken(baseUrl, authBody.data.token);
+    await run(baseUrl, accessToken, authBody.data.token);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
@@ -69,13 +107,21 @@ function textOf(result: { content: Array<{ type: string; text?: string }> }): st
 
 test('a request with no Authorization header is rejected at the HTTP layer, per the MCP auth spec', async () => {
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/mcp`, {
+    const response = await fetch(`${baseUrl}/api/mcp`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
     });
     assert.equal(response.status, 401);
-    assert.match(response.headers.get('www-authenticate') ?? '', /Bearer/);
+    const challenge = response.headers.get('www-authenticate') ?? '';
+    assert.match(challenge, /^Bearer /);
+    assert.match(challenge, /resource_metadata="http:\/\/127\.0\.0\.1:\d+\/\.well-known\/oauth-protected-resource\/api\/mcp"/);
+  });
+});
+
+test('an app session token is refused at the MCP endpoint: only tokens issued for it are accepted', async () => {
+  await withServer(async (baseUrl, _accessToken, sessionToken) => {
+    await assert.rejects(() => connectClient(baseUrl, sessionToken));
   });
 });
 
@@ -136,7 +182,8 @@ test('record_feedback like/unlike round-trips through the library', async () => 
 test('a second listener never sees the first listener\'s taste — no cross-request state', async () => {
   await withServer(async (baseUrl, tokenA) => {
     const secondAuth = await fetch(`${baseUrl}/api/auth/anon`, { method: 'POST' });
-    const { data: { token: tokenB } } = (await secondAuth.json()) as { data: { token: string } };
+    const { data: { token: sessionB } } = (await secondAuth.json()) as { data: { token: string } };
+    const { accessToken: tokenB } = await connectToken(baseUrl, sessionB);
 
     const clientA = await connectClient(baseUrl, tokenA);
     await clientA.callTool({ name: 'log_listen', arguments: { songId: 'song-1', playedSeconds: 170 } });

@@ -1,9 +1,10 @@
 import {
   ChevronDown,
   Heart,
+  Languages,
   ListMusic,
+  LoaderCircle,
   Mic,
-  Mic2,
   SkipBack,
   SkipForward,
   Sparkles,
@@ -12,6 +13,7 @@ import {
   Waves
 } from 'lucide-react';
 import { AnimatePresence, motion, useDragControls, useReducedMotion } from 'motion/react';
+import type { Variants } from 'motion/react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -25,7 +27,6 @@ import { Artwork, IconButton, TactileButton } from './ui';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useNarrowViewport } from '../hooks/useNarrowViewport';
 import { usePress } from '../hooks/usePress';
-import type { KaraokeController } from '../hooks/useKaraoke';
 import type { LiveKaraokeController } from '../hooks/useLiveKaraoke';
 import type { Palette } from '../lib/palette';
 import { tapHaptic } from '../lib/haptics';
@@ -51,7 +52,6 @@ interface PlayerPanelProps {
   /** @deprecated Kept for call-site compatibility; atmosphere is CSS artwork now. */
   readonly energy?: number;
   readonly suggestions?: UnifiedSong[];
-  readonly karaoke?: KaraokeController;
   readonly liveKaraoke?: LiveKaraokeController;
   readonly onCollapse: () => void;
   readonly onOpenWorkspace: () => void;
@@ -69,6 +69,24 @@ interface PlayerPanelProps {
   readonly muted: boolean;
   readonly onMute: () => void;
 }
+
+/**
+ * Cover deck. A track change slides the old sleeve away and tilts it back, and the next one turns
+ * in from the opposite side, so Next reads as moving forward and Previous as moving back. `custom`
+ * is the direction (1 = forward). Only transform and opacity move.
+ */
+const coverDeck: Variants = {
+  enter: (dir: 1 | -1) => ({ opacity: 0, x: `${dir * 58}%`, scale: 0.84, rotateY: dir * -26 }),
+  center: { opacity: 1, x: '0%', scale: 1, rotateY: 0, transition: { ...spring.hero, opacity: { duration: motionTokens.duration.base, ease: motionTokens.ease.decelerate } } },
+  exit: (dir: 1 | -1) => ({ opacity: 0, x: `${dir * -58}%`, scale: 0.84, rotateY: dir * 26, transition: { duration: motionTokens.duration.base, ease: motionTokens.ease.accelerate } })
+};
+
+/** Reduced motion keeps the change, drops the travel. */
+const coverFade: Variants = {
+  enter: { opacity: 0 },
+  center: { opacity: 1, transition: { duration: motionTokens.duration.instant } },
+  exit: { opacity: 0, transition: { duration: motionTokens.duration.instant } }
+};
 
 /**
  * Listening World - shell from allegra-v2-immersive-shell:
@@ -89,7 +107,6 @@ export function PlayerPanel({
   palette,
   light = false,
   suggestions = [],
-  karaoke,
   liveKaraoke,
   onCollapse,
   onOpenWorkspace,
@@ -106,6 +123,21 @@ export function PlayerPanel({
   onMute
 }: PlayerPanelProps) {
   const reduced = useReducedMotion();
+  // Which way the cover travels. Explicit Next / Previous taps and swipes set `intent`; a track
+  // that changes any other way (queue tap, auto-advance) is read from its place in the queue.
+  const coverDir = useRef<1 | -1>(1);
+  const coverIntent = useRef<1 | -1 | null>(null);
+  const coverPrev = useRef<{ id: string | null; index: number }>({ id: null, index: -1 });
+  const coverId = song?.id ?? null;
+  if (coverPrev.current.id !== coverId) {
+    const index = queue.findIndex((item) => item.id === coverId);
+    const known = coverPrev.current.index >= 0 && index >= 0 && index !== coverPrev.current.index;
+    coverDir.current = coverIntent.current ?? (known ? (index > coverPrev.current.index ? 1 : -1) : 1);
+    coverIntent.current = null;
+    coverPrev.current = { id: coverId, index };
+  }
+  const goNext = (): void => { coverIntent.current = 1; onNext(); };
+  const goPrevious = (): void => { coverIntent.current = -1; onPrevious(); };
   const audioProgress = duration > 0 ? currentTime / duration : 0;
   const [tab, setTab] = useState<ListeningTab>(mode === 'workspace' ? 'lyrics' : 'lyrics');
   const upNext = queue.filter((item) => item.id !== song?.id).slice(0, 8);
@@ -115,10 +147,19 @@ export function PlayerPanel({
   const playPress = usePress();
   const dragControls = useDragControls();
   const isNarrowViewport = useNarrowViewport();
+  // Same cut-off as the phone player rules in app.css.
+  const isPhone = useNarrowViewport(768);
   // Swipe-down-to-dismiss mirrors Apple Music / YT Music on a phone; desktop has no
   // equivalent affordance, and reduced-motion listeners keep the Back button + Escape
   // as their dismiss path rather than a springy drag-to-close.
   const swipeToDismissEnabled = isNarrowViewport && !reduced;
+  // A phone shows one surface at a time: the cover, or a full-height Lyrics / Up Next /
+  // Related view. The default `tab` is 'lyrics', so "immersive + lyrics tab" is the cover
+  // there. Stacking the lyrics under the controls made a page-inside-a-page scroll.
+  const phoneCover = isPhone && mode !== 'workspace' && tab === 'lyrics';
+  const visibleTab: ListeningTab | null = phoneCover ? null : tab;
+  const inPanelView = mode !== 'workspace' && tab !== 'lyrics';
+  const showTranslate = Boolean(lyrics.onToggleTranslate) && lyrics.lines.length > 0;
 
   useEffect(() => {
     if (mode === 'workspace') setTab('lyrics');
@@ -158,6 +199,12 @@ export function PlayerPanel({
     else onOpenImmersive();
   };
 
+  // Back to the cover from any full-height view (the header chip on a phone).
+  const showCover = (): void => {
+    setTab('lyrics');
+    onOpenImmersive();
+  };
+
   // Rise from bottom on open; sink fully off-screen on close (YT Music reveal).
   const sheetTransition = reduced
     ? { duration: motionTokens.duration.instant }
@@ -169,7 +216,7 @@ export function PlayerPanel({
         <motion.div
           key="listening-world"
           ref={panelRef}
-          className={`listening-world${mode === 'workspace' ? ' is-lyrics' : ''}`}
+          className={`listening-world${mode === 'workspace' ? ' is-lyrics' : ''}${inPanelView ? ' is-panel' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="player-title"
@@ -227,23 +274,25 @@ export function PlayerPanel({
                 <ChevronDown size={18} aria-hidden="true" />
                 <span className="listening-collapse__label">Back to browse</span>
               </button>
-              {mode === 'workspace' ? (
-                <div className="mobile-lyrics-chip" aria-hidden={false}>
-                  <div className="mobile-lyrics-chip__art">
+              {/* Phone-only (hidden by CSS elsewhere): a full-height view shows what is playing
+                  and taps back to the cover, like the compact header in Apple Music. */}
+              {mode === 'workspace' || inPanelView ? (
+                <button type="button" className="mobile-lyrics-chip" onClick={showCover} aria-label="Show cover">
+                  <span className="mobile-lyrics-chip__art">
                     <Artwork song={song} size="small" />
-                  </div>
-                  <div className="mobile-lyrics-chip__meta">
+                  </span>
+                  <span className="mobile-lyrics-chip__meta">
                     <span className="mobile-lyrics-chip__title">{song.title}</span>
                     <span className="mobile-lyrics-chip__artist">{song.artist}</span>
-                  </div>
-                </div>
+                  </span>
+                </button>
               ) : null}
               <div className="player-tabs" role="tablist" aria-label="Player surfaces">
                 <button
                   type="button"
                   className="ptab"
                   role="tab"
-                  aria-selected={tab === 'lyrics'}
+                  aria-selected={visibleTab === 'lyrics'}
                   aria-label="Lyrics"
                   onClick={() => selectTab('lyrics')}
                 >
@@ -253,7 +302,7 @@ export function PlayerPanel({
                   type="button"
                   className="ptab"
                   role="tab"
-                  aria-selected={tab === 'queue'}
+                  aria-selected={visibleTab === 'queue'}
                   aria-label="Up next"
                   onClick={() => selectTab('queue')}
                 >
@@ -263,7 +312,7 @@ export function PlayerPanel({
                   type="button"
                   className="ptab"
                   role="tab"
-                  aria-selected={tab === 'related'}
+                  aria-selected={visibleTab === 'related'}
                   aria-label="Related"
                   onClick={() => selectTab('related')}
                 >
@@ -277,6 +326,17 @@ export function PlayerPanel({
               <div className="now-playing">
                 <motion.div
                   className="np-art"
+                  drag={swipeToDismissEnabled && mode !== 'workspace' ? 'x' : false}
+                  dragDirectionLock
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.35}
+                  dragSnapToOrigin
+                  style={{ touchAction: 'pan-y', perspective: 900 }}
+                  onDragEnd={(_, info) => {
+                    // Swipe the cover left for the next track, right for the previous one.
+                    if (info.offset.x < -80 || info.velocity.x < -450) goNext();
+                    else if (info.offset.x > 80 || info.velocity.x > 450) goPrevious();
+                  }}
                   animate={
                     reduced
                       ? { opacity: mode === 'workspace' ? 0 : 1 }
@@ -287,9 +347,27 @@ export function PlayerPanel({
                   transition={reduced ? { duration: motionTokens.duration.instant } : spring.lyrics}
                 >
                   {/* No shared layoutId - shared morphs read as top-left; sheet rises from the bottom. */}
-                  <Artwork song={song} size="large" />
+                  <AnimatePresence initial={false} custom={coverDir.current}>
+                    <motion.div
+                      key={song.id}
+                      className="np-art__slide"
+                      custom={coverDir.current}
+                      variants={reduced ? coverFade : coverDeck}
+                      initial="enter"
+                      animate="center"
+                      exit="exit"
+                    >
+                      <Artwork song={song} size="large" />
+                    </motion.div>
+                  </AnimatePresence>
                 </motion.div>
-                <div className="np-meta">
+                <motion.div
+                  key={`meta-${song.id}`}
+                  className="np-meta"
+                  initial={reduced ? { opacity: 0 } : { opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: motionTokens.duration.base, ease: motionTokens.ease.decelerate, delay: reduced ? 0 : motionTokens.duration.fast }}
+                >
                   <h2 id="player-title" className="np-title">
                     <MarqueeText text={song.title}>
                       {onOpenAlbum ? (
@@ -323,12 +401,12 @@ export function PlayerPanel({
                         ))
                       : song.artist}
                   </p>
-                </div>
+                </motion.div>
                 <div className="np-controls">
                   <Scrubber currentTime={currentTime} duration={duration} progress={audioProgress} onSeek={onSeek} />
                   {playbackError ? <p className="playback-error" role="alert">{playbackError}</p> : null}
                   <div className="np-btns">
-                    <IconButton icon={SkipBack} label="Previous track" onClick={onPrevious} />
+                    <IconButton icon={SkipBack} label="Previous track" onClick={goPrevious} />
                     <button
                       className={`ctrl-play tactile-control${isBuffering ? ' is-buffering' : ''}`}
                       onClick={onToggle}
@@ -341,10 +419,16 @@ export function PlayerPanel({
                           its shape and stays pressable while the track loads. */}
                       {isBuffering ? <span className="ctrl-play-wait" aria-hidden="true" /> : null}
                     </button>
-                    <IconButton icon={SkipForward} label="Next track" onClick={onNext} />
+                    <IconButton icon={SkipForward} label="Next track" onClick={goNext} />
                   </div>
                   <div className="np-actions">
-                    <IconButton icon={Heart} label={liked ? 'Remove from likes' : 'Add to likes'} active={liked} onClick={onLike} />
+                    <IconButton
+                      icon={Heart}
+                      label={liked ? 'Remove from likes' : 'Add to likes'}
+                      active={liked}
+                      className="np-action--like"
+                      onClick={onLike}
+                    />
                     <IconButton
                       icon={Waves}
                       label={mode === 'workspace' ? 'Show cover' : 'Show lyrics'}
@@ -353,76 +437,46 @@ export function PlayerPanel({
                     />
                     <PlaylistMenu song={song} />
                     <IconButton icon={muted ? VolumeX : Volume2} label={muted ? 'Unmute' : 'Mute'} active={muted} onClick={onMute} />
-                  </div>
-                  {karaoke?.available ? (
-                    <div className="np-karaoke">
-                      <TactileButton
-                        variant={karaoke.mode === 'on' ? 'primary' : 'secondary'}
-                        icon={Mic2}
-                        className={`np-karaoke-btn${karaoke.busy ? ' is-busy' : ''}${karaoke.mode === 'on' ? ' is-on' : ''}`}
-                        disabled={karaoke.busy || Boolean(liveKaraoke?.active)}
-                        aria-pressed={karaoke.mode === 'on'}
-                        aria-busy={karaoke.busy || undefined}
+                    {/* Lyrics-view tools. The panel's own Karaoke/Translate chrome is dropped inside the
+                        player, so on a phone they live in the dock beside the like button. CSS shows
+                        these only in the phone lyrics view. */}
+                    {liveKaraoke ? (
+                      <IconButton
+                        icon={Mic}
+                        label={
+                          liveKaraoke.busy ? 'Preparing karaoke' : liveKaraoke.active ? 'Turn karaoke off' : 'Turn karaoke on'
+                        }
+                        active={liveKaraoke.active}
+                        disabled={liveKaraoke.busy}
+                        aria-pressed={liveKaraoke.active}
+                        aria-busy={liveKaraoke.busy || undefined}
+                        className={`np-action--tool${liveKaraoke.busy ? ' is-busy' : ''}`}
                         onClick={() => {
                           tapHaptic(10);
-                          void karaoke.toggle();
+                          void liveKaraoke.toggle();
                         }}
-                      >
-                        {karaoke.busy
-                          ? 'Preparing Sing…'
-                          : karaoke.mode === 'on'
-                            ? 'Sing on'
-                            : 'Sing'}
-                      </TactileButton>
-                      {karaoke.error ? (
-                        <p className="np-karaoke-error" role="alert">
-                          {karaoke.error}
-                        </p>
-                      ) : null}
-                      {karaoke.busy ? (
-                        <p className="np-karaoke-hint">Separating vocals and instruments…</p>
-                      ) : null}
-                      {karaoke.mode === 'on' && !karaoke.busy && karaoke.vocalsUrl ? (
-                        <div className="np-karaoke-sliders">
-                          <label className="np-karaoke-slider">
-                            <span>Voice</span>
-                            <input
-                              type="range"
-                              min={0}
-                              max={100}
-                              value={Math.round(karaoke.vocalsLevel * 100)}
-                              aria-valuetext={`${Math.round(karaoke.vocalsLevel * 100)}%`}
-                              onChange={(event) => karaoke.setVocalsLevel(Number(event.target.value) / 100)}
-                            />
-                            <span className="np-karaoke-pct">{Math.round(karaoke.vocalsLevel * 100)}%</span>
-                          </label>
-                          <label className="np-karaoke-slider">
-                            <span>Instrumental</span>
-                            <input
-                              type="range"
-                              min={0}
-                              max={100}
-                              value={Math.round(karaoke.instrumentalLevel * 100)}
-                              aria-valuetext={`${Math.round(karaoke.instrumentalLevel * 100)}%`}
-                              onChange={(event) => karaoke.setInstrumentalLevel(Number(event.target.value) / 100)}
-                            />
-                            <span className="np-karaoke-pct">{Math.round(karaoke.instrumentalLevel * 100)}%</span>
-                          </label>
-                        </div>
-                      ) : null}
-                      {karaoke.mode === 'on' && !karaoke.busy && !karaoke.vocalsUrl ? (
-                        <p className="np-karaoke-hint">Instrumental playing - sing along with the lyrics.</p>
-                      ) : null}
-                    </div>
-                  ) : null}
-
+                      />
+                    ) : null}
+                    {showTranslate ? (
+                      <IconButton
+                        icon={lyrics.translating ? LoaderCircle : Languages}
+                        label={lyrics.translated ? 'Show original lyrics' : 'Translate lyrics to English'}
+                        active={Boolean(lyrics.translated)}
+                        disabled={Boolean(lyrics.translating)}
+                        aria-pressed={Boolean(lyrics.translated)}
+                        aria-busy={lyrics.translating || undefined}
+                        className={`np-action--tool${lyrics.translating ? ' is-busy' : ''}`}
+                        onClick={lyrics.onToggleTranslate}
+                      />
+                    ) : null}
+                  </div>
                   {song ? (
                     <div className="np-live-karaoke">
                       <TactileButton
                         variant={liveKaraoke?.active ? 'primary' : 'secondary'}
                         icon={Mic}
                         className={`np-live-karaoke-btn${liveKaraoke?.busy ? ' is-busy' : ''}${liveKaraoke?.active ? ' is-on' : ''}`}
-                        disabled={Boolean(liveKaraoke?.busy) || karaoke?.mode === 'on'}
+                        disabled={Boolean(liveKaraoke?.busy)}
                         aria-pressed={liveKaraoke?.active ?? false}
                         aria-busy={liveKaraoke?.busy || undefined}
                         onClick={() => {
@@ -445,8 +499,15 @@ export function PlayerPanel({
                       ) : null}
                       {liveKaraoke?.monoWarning && liveKaraoke.active ? (
                         <p className="np-live-karaoke-hint">
-                          This track is mono — vocal removal may be weak. Prefer stereo or Sing.
+                          This track is mono — vocal removal may be weak. Prefer stereo audio.
                         </p>
+                      ) : liveKaraoke?.active && liveKaraoke.backend === 'midside' ? (
+                        <p className="np-live-karaoke-hint">
+                          Basic mode — the on-device AI model couldn&apos;t load here, so some vocals remain.
+                          {liveKaraoke.fallbackReason ? ` (${liveKaraoke.fallbackReason})` : null}
+                        </p>
+                      ) : liveKaraoke?.active && liveKaraoke.backend === 'roformer' ? (
+                        <p className="np-live-karaoke-hint">On-device AI vocal removal</p>
                       ) : !liveKaraoke?.error ? (
                         <p className="np-live-karaoke-hint">
                           Removes vocals, keeps bass and instruments
@@ -457,8 +518,8 @@ export function PlayerPanel({
                 </div>
               </div>
 
-              <div className={`player-sidepanel ${tab === 'lyrics' ? 'is-lyrics' : ''}`} role="tabpanel">
-                {tab === 'lyrics' ? (
+              <div className={`player-sidepanel ${tab === 'lyrics' ? 'is-lyrics' : ''}`} role="tabpanel" hidden={phoneCover}>
+                {tab === 'lyrics' && !phoneCover ? (
                   <>
                     <p className="panel-title">Lyrics</p>
                     <LyricsPanel
@@ -469,7 +530,7 @@ export function PlayerPanel({
                       karaokeActive={liveKaraoke?.active ?? false}
                       karaokeBusy={liveKaraoke?.busy ?? false}
                       karaokeProgressRatio={liveKaraoke?.progress ?? null}
-                      karaokeDisabled={karaoke?.mode === 'on'}
+                      karaokeDisabled={false}
                       karaokeError={liveKaraoke?.error ?? null}
                       onToggleKaraoke={
                         song

@@ -1,17 +1,5 @@
-import { audioBufferToBlobUrl, audioBufferToWav, encodeWavPcm16, midSideVocalRemove } from './midSideVocalRemove';
 import { processToInstrumentalBlob } from './processInWorker';
-import {
-  isRoformerLikelySupported,
-  separateInstrumentalRoformer,
-  type KaraokeQualityMode
-} from './roformer';
-import { probeScnetAvailability } from './scnetWorker.client';
-import { fetchAndDecodeSong } from './streamFetch';
-import type {
-  LiveKaraokeBackend,
-  LiveKaraokePrepareResult,
-  LiveKaraokeStatus
-} from './types';
+import type { LiveKaraokePrepareResult, LiveKaraokeStatus } from './types';
 
 export type {
   LiveKaraokeBackend,
@@ -27,17 +15,15 @@ export { LiveKaraokePlayer } from './LiveKaraokePlayer';
 export { probeScnetAvailability } from './scnetWorker.client';
 export { processToInstrumentalBlob } from './processInWorker';
 export {
-  separateInstrumentalRoformer,
+  audioBufferToStereo44k,
   ensureRoformerModel,
-  ROFORMER_MODEL,
-  type KaraokeQualityMode
+  getSeparator,
+  isRoformerLikelySupported,
+  ROFORMER_MODEL
 } from './roformer';
+export { LiveKaraokeStream, type StreamSessionEvents } from './streamSession';
 
-export interface PrepareLiveKaraokeInput {
-  readonly streamUrl: string;
-  readonly songId?: string;
-  readonly preferBackend?: LiveKaraokeBackend;
-  readonly qualityMode?: KaraokeQualityMode;
+export interface MidSideKaraokeInput {
   readonly signal?: AbortSignal;
   readonly midAttenuation?: number;
   readonly bassKeepHz?: number;
@@ -45,64 +31,19 @@ export interface PrepareLiveKaraokeInput {
   readonly airKeep?: number;
   readonly sideBoost?: number;
   readonly makeupGain?: number;
+  /** Why the AI model is not being used, shown to the listener. */
+  readonly fallbackReason?: string;
   readonly onProgress?: (ratio: number) => void;
 }
 
 /**
- * Prefer Mel-Band RoFormer (on-device ONNX). Fall back to bass-preserving mid-side
- * if WebGPU/WASM session or model download fails.
+ * The fallback when the AI model cannot run here (or cannot keep up): a bass-preserving
+ * mid-side vocal remover rendered to a blob the player swaps in for the original.
  */
-export async function prepareLiveKaraoke(
-  input: PrepareLiveKaraokeInput
+export async function prepareMidSideKaraoke(
+  decoded: AudioBuffer,
+  input: MidSideKaraokeInput = {}
 ): Promise<LiveKaraokePrepareResult> {
-  if (input.signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
-  }
-
-  const onProgress = input.onProgress;
-  const prefer = input.preferBackend;
-  const qualityMode = input.qualityMode ?? 'clean';
-
-  onProgress?.(0.03);
-  const decoded = await fetchAndDecodeSong(input.streamUrl, input.songId, input.signal);
-  if (input.signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
-  }
-  onProgress?.(0.2);
-
-  const tryRoformer =
-    prefer !== 'midside' && prefer !== 'scnet' && isRoformerLikelySupported();
-
-  if (tryRoformer) {
-    try {
-      const sep = await separateInstrumentalRoformer(
-        decoded,
-        qualityMode,
-        (p) => onProgress?.(0.2 + p.ratio * 0.75),
-        input.signal
-      );
-      const wav = encodeWavPcm16([sep.left, sep.right], sep.sampleRate);
-      const blobUrl = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
-      onProgress?.(1);
-      return {
-        backend: 'roformer',
-        blobUrl,
-        monoSource: decoded.numberOfChannels < 2
-      };
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') throw err;
-      console.warn('[karaoke] RoFormer failed, using mid-side fallback', err);
-    }
-  }
-
-  if (prefer === 'scnet') {
-    try {
-      await probeScnetAvailability();
-    } catch {
-      /* ignore */
-    }
-  }
-
   const { blobUrl, monoSource } = await processToInstrumentalBlob(
     decoded,
     {
@@ -113,11 +54,10 @@ export async function prepareLiveKaraoke(
       sideBoost: input.sideBoost ?? 1.22,
       makeupGain: input.makeupGain ?? 1.08
     },
-    (ratio) => onProgress?.(0.25 + ratio * 0.75),
+    input.onProgress,
     input.signal
   );
-
-  return { backend: 'midside', blobUrl, monoSource };
+  return { backend: 'midside', blobUrl, monoSource, fallbackReason: input.fallbackReason };
 }
 
 export function statusAfterPrepare(active: boolean): LiveKaraokeStatus {

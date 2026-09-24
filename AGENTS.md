@@ -39,17 +39,12 @@ same thing — remove it rather than documenting around it.
   read.
 - **Convex Auth owns the `users` table.** Listener data lives in `profiles`.
 
-## Costs real money
-
-`workers/` and `infra/aws/` drive GPU jobs. Never deploy a stack, push an image, or submit a job
-unless you were explicitly asked to. Dev capacity is capped at one GPU (`MaxvCpus=4`) on purpose.
-
 ## Testing style
 
-Tests state a behaviour, not a method name: *"20 simultaneous requests across separate instances
-create ONE Batch job"*. Each seam has a fake, which is why the suite needs no network and no cloud
-account. Prove security properties with real primitives — the token tests sign with generated RSA
-keys rather than asserting on a mock.
+Tests state a behaviour, not a method name: *"Karaoke falls back locally when the device cannot run
+the separator"*. Each seam has a fake, which is why the suite needs no network or cloud account.
+Prove security properties with real primitives — the token tests sign with generated RSA keys rather
+than asserting on a mock.
 
 <!-- convex-ai-start -->
 

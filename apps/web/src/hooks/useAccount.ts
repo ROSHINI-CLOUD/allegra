@@ -9,7 +9,7 @@ export interface AccountApi {
   readonly taste: TasteSummary | null;
   /** The first profile/taste load has finished (successfully or not). */
   readonly ready: boolean;
-  readonly refresh: () => Promise<void>;
+  readonly refresh: () => Promise<AccountProfile | null>;
   /** Drops back to a fresh guest session. Called after Convex Auth signs the listener out. */
   readonly startGuest: () => Promise<void>;
   readonly rename: (displayName: string) => Promise<void>;
@@ -25,7 +25,7 @@ export interface AccountApi {
  * `signedIn` is Convex Auth's own view of whether this browser has a Google session. Convex resolves that
  * asynchronously (a redirect round trip, then a token), well after this hook's first mount, so the profile
  * fetched on mount is only ever the guest one. Refreshing again whenever `signedIn` flips is what turns that
- * guest profile into the real account — without it the navbar and onboarding never learn sign-in happened.
+ * guest profile into the real account - without it the navbar and onboarding never learn sign-in happened.
  */
 export function useAccount(signedIn: boolean, onSessionChange: () => void): AccountApi {
   const [profile, setProfile] = useState<AccountProfile | null>(null);
@@ -34,14 +34,16 @@ export function useAccount(signedIn: boolean, onSessionChange: () => void): Acco
   const changed = useRef(onSessionChange);
   changed.current = onSessionChange;
 
-  const refresh = useCallback(async (): Promise<void> => {
+  const refresh = useCallback(async (): Promise<AccountProfile | null> => {
     try {
       await ensureSession();
       const [nextProfile, nextTaste] = await Promise.all([fetchProfile(), fetchTaste()]);
       setProfile(nextProfile);
       setTaste(nextTaste);
+      return nextProfile;
     } catch {
       // Home falls back to Browse-style content without a profile, so a failed load is not fatal.
+      return null;
     } finally {
       setReady(true);
     }
@@ -51,11 +53,33 @@ export function useAccount(signedIn: boolean, onSessionChange: () => void): Acco
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    const onAccount = (): void => {
+      void refresh().then(() => changed.current());
+    };
+    window.addEventListener('allegra:account', onAccount);
+    return () => window.removeEventListener('allegra:account', onAccount);
+  }, [refresh]);
+
   const wasSignedIn = useRef(signedIn);
   useEffect(() => {
     if (wasSignedIn.current === signedIn) return;
     wasSignedIn.current = signedIn;
-    void refresh().then(() => changed.current());
+    let cancelled = false;
+    const run = async (): Promise<void> => {
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        if (cancelled) return;
+        const next = await refresh();
+        changed.current();
+        if (!signedIn) break;
+        if (next && !next.isGuest) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 400));
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [signedIn, refresh]);
 
   const afterSessionChange = useCallback(async (): Promise<void> => {
@@ -84,7 +108,7 @@ export function useAccount(signedIn: boolean, onSessionChange: () => void): Acco
  * Tells the server how long each song was actually listened to, once it has been left. A few seconds counts
  * against a song's artist and most of it counts for them, so the taste profile follows behaviour, not just taps.
  */
-export function useListenTracker(song: UnifiedSong | null, currentTime: number, refreshTaste: () => Promise<void>): void {
+export function useListenTracker(song: UnifiedSong | null, currentTime: number, refreshTaste: () => Promise<unknown>): void {
   const state = useRef<{ id: string | null; seconds: number }>({ id: null, seconds: 0 });
   const id = song?.id ?? null;
   const refreshRef = useRef(refreshTaste);

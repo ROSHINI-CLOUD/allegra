@@ -1,25 +1,16 @@
-import crypto from 'node:crypto';
 import { Router } from 'express';
 
 import type { AuthService } from '../auth/auth.js';
-import type { UploadsConfig } from '../config.js';
-import {
-  COVER_CONTENT_TYPES,
-  MAX_COVER_BYTES,
-  coverKeyPrefix,
-  isCoverContentType,
-  publicCoverUrl
-} from '../lib/covers.js';
-import { presignPutUrl } from '../lib/s3Presign.js';
+import { MAX_COVER_BYTES, isCoverContentType, type CoverStorage } from '../lib/covers.js';
 import { getUserId, sendUnauthorized } from './auth.js';
 import { asRecord, sendFailure, sendSuccess } from './common.js';
 
 /**
- * Short-lived S3 PUT URLs for custom playlist covers. The browser uploads
- * straight to S3; this API never sees the image bytes and never sends AWS keys
- * to the client.
+ * One-time Convex upload URLs for custom playlist covers. The browser resizes the image to a
+ * small WebP first and uploads it straight to Convex; this API never sees the bytes, and only
+ * attaches the result (PATCH /libraries/:id with the storage id) after checking what was stored.
  */
-export function uploadsRouter(auth: AuthService, uploads?: UploadsConfig): Router {
+export function uploadsRouter(auth: AuthService, covers?: CoverStorage): Router {
   const router = Router();
 
   router.post('/uploads/sign', async (request, response) => {
@@ -28,12 +19,8 @@ export function uploadsRouter(auth: AuthService, uploads?: UploadsConfig): Route
       sendUnauthorized(response);
       return;
     }
-    if (!uploads) {
-      response.status(503).json({
-        success: false,
-        data: null,
-        error: 'Cover uploads are not available right now.'
-      });
+    if (!covers) {
+      response.status(503).json({ success: false, data: null, error: 'Cover uploads are not available right now.' });
       return;
     }
 
@@ -47,19 +34,11 @@ export function uploadsRouter(auth: AuthService, uploads?: UploadsConfig): Route
       return;
     }
     if (!isCoverContentType(contentType)) {
-      response.status(400).json({
-        success: false,
-        data: null,
-        error: 'Use a JPEG, PNG or WebP image for the cover.'
-      });
+      response.status(400).json({ success: false, data: null, error: 'Use a WebP or JPEG image for the cover.' });
       return;
     }
     if (!Number.isInteger(contentLength) || contentLength < 1 || contentLength > MAX_COVER_BYTES) {
-      response.status(400).json({
-        success: false,
-        data: null,
-        error: 'Covers must be under 2 MB.'
-      });
+      response.status(400).json({ success: false, data: null, error: 'That cover is too large.' });
       return;
     }
 
@@ -69,36 +48,11 @@ export function uploadsRouter(auth: AuthService, uploads?: UploadsConfig): Route
         sendUnauthorized(response);
         return;
       }
-      const library = user.libraries.find((item) => item.id === libraryId);
-      if (!library) {
+      if (!user.libraries.some((item) => item.id === libraryId)) {
         response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
         return;
       }
-
-      const ext = COVER_CONTENT_TYPES[contentType];
-      const coverKey = `${coverKeyPrefix(userId, libraryId)}${crypto.randomUUID()}.${ext}`;
-      const uploadUrl = presignPutUrl({
-        accessKeyId: uploads.accessKeyId,
-        secretAccessKey: uploads.secretAccessKey,
-        ...(uploads.sessionToken ? { sessionToken: uploads.sessionToken } : {}),
-        region: uploads.region,
-        bucket: uploads.bucket,
-        key: coverKey,
-        contentType,
-        contentLength,
-        expiresInSeconds: uploads.expiresInSeconds
-      });
-
-      sendSuccess(response, {
-        uploadUrl,
-        coverKey,
-        coverUrl: publicCoverUrl(uploads.publicBaseUrl, coverKey),
-        headers: {
-          'Content-Type': contentType,
-          'Content-Length': String(contentLength)
-        },
-        expiresInSeconds: uploads.expiresInSeconds
-      });
+      sendSuccess(response, { uploadUrl: await covers.uploadUrl(), maxBytes: MAX_COVER_BYTES });
     } catch (error) {
       sendFailure(response, error);
     }

@@ -54,6 +54,13 @@ export function queryString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+/** Like {@link queryString}, but rejects anything past `maxLength` instead of accepting it unbounded. */
+export function boundedString(value: unknown, maxLength = 200): string | null {
+  const trimmed = queryString(value);
+  if (!trimmed || trimmed.length > maxLength) return null;
+  return trimmed;
+}
+
 export function songId(value: unknown): string | null {
   const id = queryString(value);
   if (!id || id.length > 200 || /^https?:/i.test(id)) {

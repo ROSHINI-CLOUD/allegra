@@ -1,13 +1,12 @@
-import { LogOut, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useSignIn } from '../auth/SignInContext';
 import type { AccountApi } from '../hooks/useAccount';
 import { motionTokens, spring } from '../motion';
-import { FloatingField } from './ui';
+import { ProfileSheet } from './ProfileSheet';
 
 interface AuthDialogProps {
   readonly open: boolean;
@@ -41,17 +40,15 @@ export function AuthDialog({ open, account, onClose }: AuthDialogProps) {
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [editingName, setEditingName] = useState('');
-  const firstField = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!open) return undefined;
     setError(null);
     setBusy(false);
-    setEditingName(profile?.displayName ?? '');
-    const timer = window.setTimeout(() => firstField.current?.focus(), 80);
-    return () => window.clearTimeout(timer);
-  }, [open, profile?.displayName]);
+    if (signIn.signedIn && (profile === null || profile.isGuest)) {
+      void account.refresh();
+    }
+  }, [open, profile, signIn.signedIn, account]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -88,25 +85,26 @@ export function AuthDialog({ open, account, onClose }: AuthDialogProps) {
     if (busy) return;
     setBusy(true);
     setError(null);
+    // signInWithGoogle() takes no signal, so a blocked popup or a broken redirect
+    // can leave it neither resolving nor rejecting. Race it against a timeout so
+    // the button always recovers instead of staying disabled until a reload.
+    let timedOut = false;
+    const timeout = new Promise<void>((resolve) => {
+      window.setTimeout(() => {
+        timedOut = true;
+        resolve();
+      }, 20000);
+    });
     try {
-      await signIn.signInWithGoogle();
-      // The redirect back from Google re-mounts the app, so there is nothing to
-      // close here on success; only a failure returns to this dialog.
+      await Promise.race([signIn.signInWithGoogle(), timeout]);
+      if (timedOut) {
+        setError("That's taking a while — try again.");
+        setBusy(false);
+      }
+      // Otherwise the redirect back from Google re-mounts the app, so there is
+      // nothing to close here on success; only a failure returns to this dialog.
     } catch {
       setError('Google sign-in did not complete. Try again.');
-      setBusy(false);
-    }
-  };
-
-  const saveName = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await account.rename(editingName);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not save that name.');
-    } finally {
       setBusy(false);
     }
   };
@@ -146,15 +144,32 @@ export function AuthDialog({ open, account, onClose }: AuthDialogProps) {
 
             {signedIn ? (
               <div className="auth-body">
-                <div className="auth-avatar" aria-hidden="true">{(profile.displayName ?? profile.email ?? 'A').slice(0, 1).toUpperCase()}</div>
-                <h2>{profile.displayName ?? 'Your account'}</h2>
-                <p className="auth-lede">{profile.email}</p>
-                <form className="auth-form" onSubmit={(event) => void saveName(event)}>
-                  <FloatingField ref={firstField} label="Display name" value={editingName} maxLength={60} onChange={(event) => setEditingName(event.target.value)} />
-                  <button type="submit" className="btn-glass tactile-control auth-submit" disabled={busy || editingName.trim() === (profile.displayName ?? '')}>Save name</button>
-                </form>
-                {error ? <p className="auth-error" role="alert">{error}</p> : null}
-                <button type="button" className="auth-signout" onClick={() => void leave()} disabled={busy}><LogOut size={15} aria-hidden="true" /> Sign out</button>
+                <ProfileSheet
+                  profile={profile}
+                  busy={busy}
+                  error={error}
+                  onSaveName={async (displayName) => {
+                    setBusy(true);
+                    setError(null);
+                    try {
+                      await account.rename(displayName);
+                    } catch (caught) {
+                      setError(caught instanceof Error ? caught.message : 'Could not save that name.');
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                  onSignOut={async () => {
+                    setBusy(true);
+                    setError(null);
+                    try {
+                      await leave();
+                    } catch (caught) {
+                      setError(caught instanceof Error ? caught.message : 'Could not sign out.');
+                      setBusy(false);
+                    }
+                  }}
+                />
               </div>
             ) : (
               <div className="auth-body">

@@ -9,7 +9,8 @@ const library = v.object({
   isPublic: v.boolean(),
   songIds: v.array(v.string()),
   createdAt: v.string(),
-  coverKey: v.optional(v.string())
+  coverKey: v.optional(v.string()),
+  coverUrl: v.optional(v.string())
 });
 
 const recent = v.object({
@@ -50,9 +51,18 @@ const profileData = v.object({
  */
 export function requireSecret(secret: string): void {
   const expected = process.env.CONVEX_SERVER_SECRET;
-  if (!expected || secret !== expected) {
+  if (!expected || !sameSecret(secret, expected)) {
     throw new Error('Unauthorized');
   }
+}
+
+/** Constant-time compare, so response timing cannot reveal how much of a guess was right. */
+function sameSecret(given: string, expected: string): boolean {
+  let diff = given.length ^ expected.length;
+  for (let i = 0; i < expected.length; i++) {
+    diff |= (given.charCodeAt(i % Math.max(1, given.length)) || 0) ^ expected.charCodeAt(i);
+  }
+  return diff === 0;
 }
 
 export const get = query({

@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 
 import type { UnifiedSong } from '@shared/types';
 
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { searchSongs } from '../lib/api';
 import { motionTokens, spring } from '../motion';
 
@@ -55,9 +56,35 @@ export function CommandPalette({ open, onOpen, onClose, activeQuery, recent, the
   const inputRef = useRef<HTMLInputElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
   const wasOpen = useRef(false);
 
   const trimmed = query.trim();
+
+  useFocusTrap(open, sheetRef);
+
+  // Every other overlay in the app locks document scroll while open; mirrors AuthDialog.
+  useEffect(() => {
+    if (!open) return undefined;
+    const root = document.documentElement;
+    const body = document.body;
+    const previous = {
+      rootOverflow: root.style.overflow,
+      bodyOverflow: body.style.overflow,
+      rootOverscroll: root.style.overscrollBehavior,
+      bodyOverscroll: body.style.overscrollBehavior
+    };
+    root.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    root.style.overscrollBehavior = 'none';
+    body.style.overscrollBehavior = 'none';
+    return () => {
+      root.style.overflow = previous.rootOverflow;
+      body.style.overflow = previous.bodyOverflow;
+      root.style.overscrollBehavior = previous.rootOverscroll;
+      body.style.overscrollBehavior = previous.bodyOverscroll;
+    };
+  }, [open]);
 
   // Fresh sheet each time it opens; hand focus back to the pill when it closes.
   useEffect(() => {
@@ -256,6 +283,7 @@ export function CommandPalette({ open, onOpen, onClose, activeQuery, recent, the
                 onClick={onClose}
               />
               <motion.div
+                ref={sheetRef}
                 layoutId={SHEET_ID}
                 className="cmdk-sheet"
                 style={{ borderRadius: 22 }}
@@ -271,7 +299,7 @@ export function CommandPalette({ open, onOpen, onClose, activeQuery, recent, the
                     ref={inputRef}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search songs, artists, or jump to…"
+                    placeholder="Search songs, artists…"
                     role="combobox"
                     aria-expanded="true"
                     aria-controls="cmdk-list"
@@ -281,6 +309,7 @@ export function CommandPalette({ open, onOpen, onClose, activeQuery, recent, the
                   />
                   {searching ? <span className="cmdk-spinner" aria-label="Searching" /> : null}
                   <kbd>Esc</kbd>
+                  <button type="button" className="cmdk-cancel" onClick={onClose}>Cancel</button>
                 </div>
 
                 <motion.div

@@ -9,9 +9,6 @@ not negotiable.
 | [architecture.md](./architecture.md) | End-to-end design: state owners, playback, karaoke, auth, seams |
 | [workflows.md](./workflows.md) | Develop, verify, ship — including how to prove Range/206 and playback survival |
 | [auth-convex-google.md](./auth-convex-google.md) | Setting up Google sign-in through Convex Auth |
-| [karaoke-aws-deploy.md](./karaoke-aws-deploy.md) | Deploying the GPU stem-separation stack |
-| [karaoke-aws-decisions.md](./karaoke-aws-decisions.md) | Why the karaoke pipeline is shaped the way it is |
-| [karaoke-aws-cost-benchmark.md](./karaoke-aws-cost-benchmark.md) | Measured timings and cost. Empty until a real run fills it. |
 | [motion-design-system.md](./motion-design-system.md) | The motion language: tokens, easing, choreography |
 | [motion-recipes.md](./motion-recipes.md) | Copy-paste motion patterns, then tune |
 | [provider-integration.md](./provider-integration.md) | Adding or repairing a music/lyrics provider |

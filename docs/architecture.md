@@ -19,10 +19,9 @@ One deployment, three owners of state. Read this before changing anything struct
   server-side only, never                                 │             │
   reachable from the browser                              │ • Google    │
                                                           │   sign-in   │
-  ┌──────────────────────────────┐                        │ • profiles  │
-  │ AWS (karaoke only)           │                        │ • shares    │
-  │  Batch → Spot GPU → S3 stems │◄───────────────────────┤             │
-  └──────────────────────────────┘     submit / read      └─────────────┘
+  Browser worker                                          │ • profiles  │
+  • on-device Karaoke                                     │ • shares    │
+  • optional local model cache                            └─────────────┘
 ```
 
 ## The three owners of state
@@ -31,7 +30,7 @@ One deployment, three owners of state. Read this before changing anything struct
 |---|---|---|
 | Identity (who you are) | **Convex Auth** | It holds the Google secret and signs session tokens. Our API never touches a credential. |
 | Listener data (likes, playlists, recents, taste, shares) | **Convex** | Durable, and the API reaches it through one `UserStore` seam. |
-| Separated stems (vocals + instrumental) | **AWS S3** | Produced by a GPU job; deterministic object keys make the whole pipeline idempotent. |
+| Karaoke output | **Browser memory / device storage** | The worker separates audio locally. A model may be cached locally; no stems or track audio are persisted by the API. |
 
 Everything else — search results, lyrics, artwork, recommendations — is cache, and is allowed to be lost.
 
@@ -62,39 +61,16 @@ Three invariants, each of which was a real bug:
    re-fires on the user's own pause and instantly resumes — pause appears to do nothing.
 3. **Seek pauses. Always resume.** Capture `wasPlaying`, set `currentTime`, resume if it was playing.
 
-### Sing mode
+### Karaoke
 
-Normal playback uses the original master. Sing mode plays two stems through separate `GainNode`s:
+Normal playback uses the original master. Karaoke keeps that element as the transport clock while a
+browser worker produces an instrumental stream near the playhead. Seeking and synced lyrics stay on
+the same clock. When the Mel-Band RoFormer model cannot load, cannot keep up, or the song exceeds
+the device limit, the client falls back to local mid-side reduction or shows a capability message.
 
-```
-vocals.m4a  ──► GainNode ──┐
-                           ├──► destination
-instrumental.m4a ──► GainNode ──┘
-```
-
-Moving a slider changes a gain value. It never touches the network, the backend, or a model. Vocals
-at 0% is karaoke; instrumental at 0% is an isolated vocal.
-
-Two independently decoded streams drift, so a guard re-locks the instrumental to the vocals clock and
-a stall in either pauses both. The worker guarantees they start sample-aligned.
-
-## Karaoke: stateless by necessity
-
-The API runs as serverless functions. They freeze after responding, and each instance has its own
-memory — so background polling and in-process locks do not work. AWS is therefore the source of truth:
-
-- **Ready** = `manifest.json` exists in S3. The worker writes it *after* both stems, so its presence
-  implies both are complete.
-- **In flight / failed** = a `karaoke-state/…json` marker plus `DescribeJobs`, reconciled on every
-  status read.
-- **One job per song** = an S3 conditional write (`If-None-Match` / `If-Match`) is the cross-instance
-  lock. A claimer that dies before submitting is taken over after 120 s.
-
-A test fires 20 simultaneous requests from 20 separate simulated instances and asserts exactly one
-Batch job is created. Cost correctness depends on this.
-
-Stem identity is `trackId : sourceFingerprint : separationVersion`. The fingerprint ignores URL query
-strings, so a re-signed CDN link for the same file does not pay for a second separation.
+No API route starts a separation job, no track audio is uploaded, and no cloud GPU or per-song state
+exists. The model may be cached in browser storage, but the derived audio remains local to the
+listener's session.
 
 ## Authentication
 
@@ -119,8 +95,7 @@ repeat.
 |---|---|
 | `UserStore` | `ConvexUserStore`, `MemoryUserStore` (tests, and local dev without Convex) |
 | `TokenVerifier` | `GuestTokenVerifier`, `ConvexTokenVerifier`, `FirstMatchVerifier` |
-| `KaraokeSeparationProvider` | `AwsBatchStemSeparationProvider` (swap the model or vendor here) |
-| `CacheStore` | `MemoryCacheStore`, `DynamoCacheStore`, `LayeredCacheStore` |
+| `CacheStore` | `MemoryCacheStore` |
 
 Each has a fake used by tests, which is why the suite runs with no network and no cloud account.
 

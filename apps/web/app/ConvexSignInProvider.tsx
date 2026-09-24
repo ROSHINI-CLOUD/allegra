@@ -45,7 +45,9 @@ function SignInBridge({ children }: { readonly children: ReactNode }) {
   useEffect(() => {
     if (!signedIn || linked) return;
     setLinked(true);
-    void linkGuestSession();
+    void linkGuestSession().finally(() => {
+      window.dispatchEvent(new CustomEvent('allegra:account'));
+    });
   }, [signedIn, linked]);
 
   const signInWithGoogle = useCallback(async () => {

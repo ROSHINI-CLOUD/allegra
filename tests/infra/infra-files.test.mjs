@@ -64,16 +64,37 @@ test('CI runs the release gates', async () => {
   assert.match(ci, /npm run lint/);
   assert.match(ci, /npm test/);
   assert.match(ci, /npm run build/);
-  assert.match(ci, /cfn-lint/);
 });
 
-test('API only allows the karaoke Batch/S3 AWS SDK clients', async () => {
-  // Karaoke stem separation needs Batch SubmitJob/DescribeJobs and S3 GetObject
-  // with Range. Everything else stays hand-rolled SigV4 (covers, Dynamo, Bedrock).
-  const allowed = ['@aws-sdk/client-batch', '@aws-sdk/client-s3'];
-  const pkg = await json('apps/api/package.json');
-  const awsDeps = Object.keys(pkg.dependencies).filter((name) => name.startsWith('@aws-sdk'));
-  assert.deepEqual(awsDeps.sort(), allowed);
+test('no AWS anywhere: no SDK, no infra stack, no worker', async () => {
+  // Karaoke separation runs in the browser, covers live in Convex storage, the cache is memory.
+  for (const workspace of ['package.json', 'apps/api/package.json', 'apps/web/package.json']) {
+    const pkg = await json(workspace);
+    const deps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
+    assert.deepEqual(deps.filter((name) => name.startsWith('@aws-sdk')), [], workspace);
+  }
+  for (const gone of ['infra/aws/karaoke-batch.yaml', 'workers/stem-separator/worker.py']) {
+    await assert.rejects(text(gone), `${gone} must not come back`);
+  }
+});
+
+test('OAuth discovery for the MCP connector is routed to the API function', async () => {
+  // MCP clients look for these at the site root; without the rewrite Next renders a page there.
+  const vercel = await json('vercel.json');
+  const sources = (vercel.rewrites ?? []).filter((rule) => rule.destination === '/api').map((rule) => rule.source);
+  assert.ok(sources.includes('/.well-known/oauth-protected-resource'));
+  assert.ok(sources.includes('/.well-known/oauth-protected-resource/(.*)'));
+  assert.ok(sources.includes('/.well-known/oauth-authorization-server'));
+  const api = vercel.rewrites.findIndex((rule) => rule.source.startsWith('/api'));
+  assert.equal(api, 0, '/api must stay the first rewrite');
+});
+
+test('Convex has cover storage and the OAuth grant ledger', async () => {
+  const covers = await text('convex/covers.ts');
+  assert.match(covers, /generateUploadUrl/);
+  assert.match(covers, /requireSecret\(args\.secret\)/);
+  const schema = await text('convex/schema.ts');
+  assert.match(schema, /oauthGrants:\s*defineTable/);
 });
 
 test('no provider secrets are reachable from the browser bundle', async () => {

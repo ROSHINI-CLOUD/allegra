@@ -4,17 +4,18 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
-import { bearerToken } from '../auth/auth.js';
+import { publicOrigin, resourceMetadataUrl, verifyMcpAccess } from '../oauth/router.js';
+import type { OAuthSigner } from '../oauth/tokens.js';
 import type { AppServices } from '../services.js';
 import { registerTools } from './tools.js';
 
-const WWW_AUTHENTICATE = 'Bearer realm="allegra-mcp"';
-
-function unauthorized(response: Response): void {
-  // Per the MCP authorization spec: invalid/missing tokens get 401 with WWW-Authenticate, not a
-  // 200 wrapping a tool-level error — this has to be rejected before any JSON-RPC is parsed.
-  response.setHeader('WWW-Authenticate', WWW_AUTHENTICATE);
-  response.status(401).json({ jsonrpc: '2.0', error: { code: -32001, message: 'Missing or invalid bearer token. Send Authorization: Bearer <allegra-token>.' }, id: null });
+function unauthorized(request: Request, response: Response, hadToken: boolean): void {
+  // Per the MCP authorization spec: 401 with a WWW-Authenticate that points at the protected
+  // resource metadata, which is how a client (ChatGPT, Claude…) discovers where to sign in.
+  const metadata = resourceMetadataUrl(publicOrigin(request));
+  const invalid = hadToken ? ', error="invalid_token"' : '';
+  response.setHeader('WWW-Authenticate', `Bearer resource_metadata="${metadata}", scope="music"${invalid}`);
+  response.status(401).json({ jsonrpc: '2.0', error: { code: -32001, message: 'Authorization required. Connect Allegra from your assistant to sign in.' }, id: null });
 }
 
 /**
@@ -23,18 +24,17 @@ function unauthorized(response: Response): void {
  * caller survives between calls — every tool re-reads the user fresh from Convex on its own
  * (see `.planning/19-MCP-CONNECTOR-PLAN.md` and `docs/mcp-contract.md`).
  *
- * Auth is the bearer token in the `Authorization` header — verified once per HTTP request, here,
- * never taken from a tool argument (the MCP spec requires the header; a tool argument would also
- * put the credential in the model's own context/transcript, a materially worse exposure).
+ * Auth is an OAuth access token this API issued for exactly this endpoint (see oauth/router.ts),
+ * in the `Authorization` header — verified once per HTTP request, here, never taken from a tool
+ * argument. App session tokens and tokens for any other resource are refused (no passthrough).
  */
-export function mcpRouter(services: AppServices): Router {
+export function mcpRouter(services: AppServices, signer: OAuthSigner): Router {
   const router = Router();
 
   router.post('/mcp', async (request, response) => {
-    const token = bearerToken(request.header('authorization'));
-    const verified = token ? await services.auth.resolveCaller(token) : null;
+    const verified = verifyMcpAccess(signer, request);
     if (!verified) {
-      unauthorized(response);
+      unauthorized(request, response, Boolean(request.header('authorization')));
       return;
     }
 

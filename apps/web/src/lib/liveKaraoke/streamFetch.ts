@@ -88,17 +88,21 @@ export async function fetchAndDecodeSong(
     );
   }
 
-  const AudioCtx =
-    window.AudioContext ||
-    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  if (!AudioCtx) {
+  // Offline: decoding needs no audio device, and a realtime context per press would count
+  // against the browser's limit on live contexts. At 44.1 kHz the result is already at the
+  // separator's rate, so its input needs no resampling.
+  const OfflineCtx =
+    window.OfflineAudioContext ||
+    (window as unknown as { webkitOfflineAudioContext?: typeof OfflineAudioContext })
+      .webkitOfflineAudioContext;
+  if (!OfflineCtx) {
     throw new Error('Web Audio is not available in this browser.');
   }
 
-  const ctx = new AudioCtx();
+  const ctx = new OfflineCtx(2, 1, 44_100);
   try {
-    const copy = arrayBuffer.slice(0);
-    const decoded = await ctx.decodeAudioData(copy);
+    // The download is not used again, so it can be handed over (decoding detaches it).
+    const decoded = await ctx.decodeAudioData(arrayBuffer);
     if (!decoded || decoded.length === 0) {
       throw new Error('Decoded audio was empty.');
     }
@@ -115,7 +119,5 @@ export async function fetchAndDecodeSong(
       throw err;
     }
     throw new Error('Could not decode this audio format in the browser.');
-  } finally {
-    void ctx.close().catch(() => undefined);
   }
 }

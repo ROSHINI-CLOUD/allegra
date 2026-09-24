@@ -1,12 +1,12 @@
 # MCP CONTRACT — the Allegra connector
 
 > This is a **separate, additive surface**. It does not touch `docs/api-contract.md`, which stays
-> frozen and browser-facing. This doc covers `POST /mcp` only — the endpoint an MCP client
+> frozen and browser-facing. This doc covers `POST /api/mcp` only — the endpoint an MCP client
 > (ChatGPT, Claude, or any other MCP-compatible host) talks to. See
 > `.planning/19-MCP-CONNECTOR-PLAN.md` for the design rationale.
 
-Endpoint: `POST {API_BASE_URL}/mcp` — a stateless [Streamable HTTP](https://modelcontextprotocol.io)
-MCP transport (`@modelcontextprotocol/sdk`). `GET`/`DELETE /mcp` return `405`; there is no session
+Endpoint: `POST {API_BASE_URL}/api/mcp` — a stateless [Streamable HTTP](https://modelcontextprotocol.io)
+MCP transport (`@modelcontextprotocol/sdk`). `GET`/`DELETE /api/mcp` return `405`; there is no session
 to fetch or delete.
 
 ## Statelessness
@@ -27,14 +27,14 @@ inside the JSON-RPC payload the model itself constructs and reasons over, which 
 up in the model's own context, transcripts, and any logging the AI provider does on tool-call
 arguments. The header never reaches the model at all.
 
-`POST /mcp` now verifies the bearer token **before** any JSON-RPC is parsed. Missing or invalid →
+`POST /api/mcp` now verifies the bearer token **before** any JSON-RPC is parsed. Missing or invalid →
 `401` with `WWW-Authenticate: Bearer realm="allegra-mcp"`, per spec. A valid token resolves to a
 `userId`, which every registered tool for that request closes over — each tool still does its own
 fresh `auth.getUser(userId)` read rather than trusting a copy taken at the top of the request.
 
 **Setting up a connector (v1 — bearer token, not full OAuth):** call `POST /api/auth/anon` (or log
 into an existing account) to get a token, then configure your MCP client to send it as
-`Authorization: Bearer <token>` on every request to `/mcp`. This satisfies the header requirement
+`Authorization: Bearer <token>` on every request to `/api/mcp`. This satisfies the header requirement
 above but **not** the rest of the spec's OAuth 2.1 machinery — there is no
 `/.well-known/oauth-protected-resource` metadata endpoint, no authorization-server discovery, and
 no token audience binding (RFC 8707), because Allegra is both its own resource server and its own
@@ -89,14 +89,14 @@ is never listed as a tool argument.
 
 ## Rate limiting
 
-`/mcp` currently falls into the default `api` rate-limit bucket (120 req/min, see `createRateLimiter`
+`/api/mcp` currently falls into the default `api` rate-limit bucket (120 req/min, see `createRateLimiter`
 in `src/app.ts`) — there is no MCP-specific bucket yet (plan work item 8).
 
 ## DNS rebinding protection — reviewed, not applicable
 
 The SDK's transport supports `allowedHosts`/`allowedOrigins`/`enableDnsRebindingProtection`. That
 guards a server listening on `localhost` from a malicious webpage rebinding DNS to reach it through
-a victim's browser. `/mcp` is a public HTTPS endpoint called server-to-server (by
+a victim's browser. `/api/mcp` is a public HTTPS endpoint called server-to-server (by
 ChatGPT's backend, not from inside a user's browser tab), so that attack doesn't apply here — noted
 so this isn't mistaken for an oversight.
 

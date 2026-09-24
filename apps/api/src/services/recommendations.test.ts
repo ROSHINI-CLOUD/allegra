@@ -1,154 +1,126 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { AiClient } from '../ai/aiClient.js';
-import type { AiProvider } from '../ai/types.js';
 import { MemoryCacheStore } from '../lib/cache.js';
-import { RecommendationService, type SongSearcher } from './recommendations.js';
 import type { UnifiedSong } from '../types.js';
+import { RecommendationService, type RecommendationCatalog, type TasteContext } from './recommendations.js';
 
-function song(id: string): UnifiedSong {
-  return { id, title: id, artist: 'Someone', artwork: '', streamUrl: '', duration: 180, hasLyrics: false, playCount: 0, source: 'Saavn' };
+function song(id: string, title: string, artist: string, language = 'hindi', playCount = 1000): UnifiedSong {
+  return { id, title, artist, artwork: '', streamUrl: `/api/stream/${id}`, duration: 200, hasLyrics: true, language, playCount, source: 'Saavn' };
 }
 
-function fakeCatalog(byQuery: Record<string, UnifiedSong[]>): SongSearcher {
-  return {
-    async search(query) {
-      return { results: byQuery[query] ?? [] };
+interface Calls {
+  suggestions: string[];
+  artists: string[];
+  searches: string[];
+}
+
+function fakeCatalog(data: {
+  suggestions?: Record<string, UnifiedSong[]>;
+  artists?: Record<string, UnifiedSong[]>;
+  searches?: Record<string, UnifiedSong[]>;
+  failArtist?: boolean;
+}): { catalog: RecommendationCatalog; calls: Calls } {
+  const calls: Calls = { suggestions: [], artists: [], searches: [] };
+  const catalog: RecommendationCatalog = {
+    getSuggestions: async (id) => {
+      calls.suggestions.push(id);
+      return data.suggestions?.[id] ?? [];
+    },
+    getArtist: async (name) => {
+      calls.artists.push(name);
+      if (data.failArtist) throw new Error('artist page timed out');
+      return { songs: data.artists?.[name] ?? [] };
+    },
+    search: async (query) => {
+      calls.searches.push(query);
+      return { results: data.searches?.[query] ?? [] };
     }
   };
+  return { catalog, calls };
 }
 
-function serviceWith(provider: AiProvider, catalog: SongSearcher, cache = new MemoryCacheStore()): RecommendationService {
-  return new RecommendationService(new AiClient([provider]), catalog, cache);
-}
+const emptyTaste: TasteContext = { seeds: [], favoriteArtists: [], favoriteLanguages: [], languages: [] };
 
-test('turns AI-suggested queries into deduplicated songs, excluding what the listener already has', async () => {
-  const provider: AiProvider = {
-    name: 'fake',
-    async complete() { return JSON.stringify({ queries: ['lofi hindi', 'arijit singh'], reasoning: 'You like soft romantic tracks.' }); }
-  };
-  const catalog = fakeCatalog({
-    'lofi hindi': [song('a'), song('b')],
-    'arijit singh': [song('b'), song('c')] // b overlaps across queries
-  });
-  const service = serviceWith(provider, catalog);
+test('nothing to go on means no shelf, and no catalog calls', async () => {
+  const { catalog, calls } = fakeCatalog({});
+  const result = await new RecommendationService(catalog, new MemoryCacheStore()).recommend(emptyTaste, new Set());
+  assert.equal(result, null);
+  assert.deepEqual(calls, { suggestions: [], artists: [], searches: [] });
+});
 
-  const result = await service.recommend({ likedSongs: [{ title: 'Gehra Hua', artist: 'Arijit Singh' }], recentSongs: [] }, new Set(['already-liked-id']));
+test('songs suggested by several things the listener played rank first', async () => {
+  const a = song('a', 'Seed A', 'Arijit Singh');
+  const b = song('b', 'Seed B', 'Shreya Ghoshal');
+  const shared = song('s', 'Both Like This', 'Pritam');
+  const onlyA = song('x', 'Only A', 'KK');
+  const { catalog } = fakeCatalog({ suggestions: { a: [onlyA, shared], b: [shared] } });
+  const result = await new RecommendationService(catalog, new MemoryCacheStore()).recommend({ ...emptyTaste, seeds: [a, b] }, new Set());
   assert.ok(result);
-  assert.equal(result.provider, 'fake');
-  assert.deepEqual(result.songs.map((s) => s.id), ['a', 'b', 'c']);
-  assert.equal(result.reasoning, 'You like soft romantic tracks.');
+  assert.equal(result.songs[0]?.id, 's');
+  assert.equal(result.provider, 'allegra');
+  assert.match(result.reasoning, /Seed A/);
 });
 
-test('excludeIds actually excludes songs the listener already liked or played', async () => {
-  const provider: AiProvider = { name: 'fake', async complete() { return JSON.stringify({ queries: ['x'] }); } };
-  const catalog = fakeCatalog({ x: [song('already-liked-id'), song('new-one')] });
-  const service = serviceWith(provider, catalog);
-
-  const result = await service.recommend({ likedSongs: [{ title: 'T', artist: 'A' }], recentSongs: [] }, new Set(['already-liked-id']));
-  assert.deepEqual(result?.songs.map((s) => s.id), ['new-one']);
+test('already heard songs are excluded, by id and by recording', async () => {
+  const seed = song('seed', 'Seed', 'A');
+  const heard = song('h1', 'Heard', 'B');
+  const heardOtherRelease = song('h2', 'Heard', 'B');
+  const fresh = song('f', 'Fresh', 'C');
+  const { catalog } = fakeCatalog({ suggestions: { seed: [heardOtherRelease, fresh] } });
+  const result = await new RecommendationService(catalog, new MemoryCacheStore()).recommend({ ...emptyTaste, seeds: [seed] }, new Set(['h1']), [heard]);
+  assert.deepEqual(result?.songs.map((item) => item.id), ['f']);
 });
 
-test('no listening history at all skips the AI call entirely and returns null', async () => {
-  let called = false;
-  const provider: AiProvider = { name: 'fake', async complete() { called = true; return '{}'; } };
-  const service = serviceWith(provider, fakeCatalog({}));
-
-  assert.equal(await service.recommend({ likedSongs: [], recentSongs: [] }, new Set()), null);
-  assert.equal(called, false);
+test('the language setting is a hard filter everywhere', async () => {
+  const seed = song('seed', 'Seed', 'A', 'hindi');
+  const tamil = song('t', 'Tamil Song', 'Anirudh', 'tamil');
+  const hindi = song('h', 'Hindi Song', 'Pritam', 'hindi');
+  const unlabelled = { ...song('u', 'Unknown', 'X'), language: undefined } as unknown as UnifiedSong;
+  const { catalog } = fakeCatalog({ suggestions: { seed: [hindi, tamil, unlabelled] } });
+  const result = await new RecommendationService(catalog, new MemoryCacheStore()).recommend({ ...emptyTaste, seeds: [seed], languages: ['tamil'] }, new Set());
+  assert.deepEqual(result?.songs.map((item) => item.id), ['t']);
 });
 
-test('a malformed AI response (no queries array) returns null instead of throwing', async () => {
-  const provider: AiProvider = { name: 'fake', async complete() { return 'not json at all'; } };
-  const service = serviceWith(provider, fakeCatalog({}));
-  assert.equal(await service.recommend({ likedSongs: [{ title: 'T', artist: 'A' }], recentSongs: [] }, new Set()), null);
+test('favourite artists contribute their top songs, and a failing artist page does not sink the shelf', async () => {
+  const { catalog: ok } = fakeCatalog({ artists: { 'Arijit Singh': [song('1', 'One', 'Arijit Singh'), song('2', 'Two', 'Arijit Singh')] } });
+  const taste: TasteContext = { ...emptyTaste, favoriteArtists: [{ name: 'Arijit Singh', score: 5 }] };
+  const result = await new RecommendationService(ok, new MemoryCacheStore()).recommend(taste, new Set());
+  assert.deepEqual(result?.songs.map((item) => item.id).sort(), ['1', '2']);
+  assert.match(result?.reasoning ?? '', /Arijit Singh/);
+
+  const { catalog: failing } = fakeCatalog({ failArtist: true, searches: { 'top hindi songs': [song('p', 'Popular', 'Z')] } });
+  const fallback = await new RecommendationService(failing, new MemoryCacheStore()).recommend({ ...taste, languages: ['hindi'] }, new Set());
+  assert.deepEqual(fallback?.songs.map((item) => item.id), ['p']);
 });
 
-test('queries delivered as one comma-separated string are still used', async () => {
-  // NVIDIA's Llama answers this prompt with a string rather than the array the
-  // prompt asks for. Reading only the array shape lost every one of its answers.
-  const provider: AiProvider = {
-    name: 'fake',
-    async complete() { return JSON.stringify({ queries: 'lofi hindi, arijit singh', reasoning: 'Soft romantic tracks.' }); }
-  };
-  const catalog = fakeCatalog({ 'lofi hindi': [song('a')], 'arijit singh': [song('b')] });
-  const service = serviceWith(provider, catalog);
-
-  const result = await service.recommend({ likedSongs: [{ title: 'T', artist: 'A' }], recentSongs: [] }, new Set());
-  assert.deepEqual(result?.songs.map((s) => s.id), ['a', 'b']);
+test('no artist takes more than two slots', async () => {
+  const seed = song('seed', 'Seed', 'Seedy');
+  const many = ['1', '2', '3', '4'].map((id) => song(id, `Song ${id}`, 'Same Artist'));
+  const other = song('o', 'Other', 'Someone Else');
+  const { catalog } = fakeCatalog({ suggestions: { seed: [...many, other] } });
+  const result = await new RecommendationService(catalog, new MemoryCacheStore()).recommend({ ...emptyTaste, seeds: [seed] }, new Set());
+  assert.equal(result?.songs.filter((item) => item.artist === 'Same Artist').length, 2);
+  assert.ok(result?.songs.some((item) => item.id === 'o'));
 });
 
-test('a queries value that is neither array nor string returns null rather than throwing', async () => {
-  const provider: AiProvider = {
-    name: 'fake',
-    async complete() { return JSON.stringify({ queries: { calm: 'lofi', upbeat: 'party' } }); }
-  };
-  const service = serviceWith(provider, fakeCatalog({}));
-  assert.equal(await service.recommend({ likedSongs: [{ title: 'T', artist: 'A' }], recentSongs: [] }, new Set()), null);
+test('only languages known: popular songs in those languages', async () => {
+  const { catalog, calls } = fakeCatalog({ searches: { 'top tamil songs': [song('t1', 'Hit', 'Anirudh', 'tamil')] } });
+  const result = await new RecommendationService(catalog, new MemoryCacheStore()).recommend({ ...emptyTaste, languages: ['tamil'] }, new Set());
+  assert.deepEqual(result?.songs.map((item) => item.id), ['t1']);
+  assert.deepEqual(calls.searches, ['top tamil songs']);
+  assert.match(result?.reasoning ?? '', /Tamil/);
 });
 
-test('a song the listener already liked is not recommended back under another release id', async () => {
-  const provider: AiProvider = { name: 'fake', async complete() { return JSON.stringify({ queries: ['x'] }); } };
-  const alreadyLiked = { ...song('liked-id'), title: 'Raga of Revenge', artist: 'Anirudh Ravichander' };
-  const rerelease = { ...song('other-id'), title: 'Raga of Revenge (From "DC")', artist: 'Anirudh Ravichander' };
-  const catalog = fakeCatalog({ x: [rerelease, song('fresh')] });
-  const service = serviceWith(provider, catalog);
-
-  const result = await service.recommend(
-    { likedSongs: [{ title: 'Raga of Revenge', artist: 'Anirudh Ravichander' }], recentSongs: [] },
-    new Set(['liked-id']),
-    [alreadyLiked]
-  );
-  assert.deepEqual(result?.songs.map((s) => s.id), ['fresh']);
-});
-
-test('the same recording returned under two release ids only appears once', async () => {
-  const provider: AiProvider = { name: 'fake', async complete() { return JSON.stringify({ queries: ['one', 'two'] }); } };
-  const rerelease = { ...song('id-2'), title: 'Zaalima (From "Raees")', artist: 'Harshdeep Kaur, Arijit Singh' };
-  const original = { ...song('id-1'), title: 'Zaalima', artist: 'Arijit Singh, Harshdeep Kaur' };
-  const catalog = fakeCatalog({ one: [original], two: [rerelease] });
-  const service = serviceWith(provider, catalog);
-
-  const result = await service.recommend({ likedSongs: [{ title: 'T', artist: 'A' }], recentSongs: [] }, new Set());
-  assert.deepEqual(result?.songs.map((s) => s.id), ['id-1']);
-});
-
-test('a second recommend with the same taste fingerprint is a cache hit and skips the AI', async () => {
-  let calls = 0;
-  const provider: AiProvider = {
-    name: 'fake',
-    async complete() {
-      calls += 1;
-      return JSON.stringify({ queries: ['x'], reasoning: 'Cached taste.' });
-    }
-  };
-  const catalog = fakeCatalog({ x: [song('a'), song('b')] });
-  const cache = new MemoryCacheStore();
-  const service = serviceWith(provider, catalog, cache);
-  const context = { likedSongs: [{ title: 'T', artist: 'A' }], recentSongs: [] as Array<{ title: string; artist: string }> };
-
-  const first = await service.recommend(context, new Set());
-  const second = await service.recommend({ ...context, currentSong: { title: 'Other', artist: 'B' } }, new Set());
-
-  assert.equal(calls, 1);
-  assert.deepEqual(first?.songs.map((s) => s.id), ['a', 'b']);
-  assert.deepEqual(second?.songs.map((s) => s.id), ['a', 'b']);
-});
-
-test('a miss is negatively cached so the AI is not re-queried immediately', async () => {
-  let calls = 0;
-  const provider: AiProvider = {
-    name: 'fake',
-    async complete() {
-      calls += 1;
-      return 'not json';
-    }
-  };
-  const service = serviceWith(provider, fakeCatalog({}));
-  const context = { likedSongs: [{ title: 'T', artist: 'A' }], recentSongs: [] as Array<{ title: string; artist: string }> };
-
-  assert.equal(await service.recommend(context, new Set()), null);
-  assert.equal(await service.recommend(context, new Set()), null);
-  assert.equal(calls, 1);
+test('the pool is cached, and excludes still apply to a cached shelf', async () => {
+  const seed = song('seed', 'Seed', 'A');
+  const one = song('1', 'One', 'B');
+  const two = song('2', 'Two', 'C');
+  const { catalog, calls } = fakeCatalog({ suggestions: { seed: [one, two] } });
+  const service = new RecommendationService(catalog, new MemoryCacheStore());
+  const taste = { ...emptyTaste, seeds: [seed] };
+  await service.recommend(taste, new Set());
+  const second = await service.recommend(taste, new Set(['1']));
+  assert.equal(calls.suggestions.length, 1);
+  assert.deepEqual(second?.songs.map((item) => item.id), ['2']);
 });

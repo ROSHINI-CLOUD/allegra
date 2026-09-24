@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
+import { ensureElementGraph } from '../lib/audioGraph';
 import { createBandTracker } from '../lib/bands';
 import type { AudioBands } from '../lib/bands';
 
@@ -36,18 +37,8 @@ export interface AnalyserHandle {
   readonly binCount: () => number;
 }
 
-interface ElementWithGraph extends HTMLAudioElement {
-  __allegraGraph?: { context: AudioContext; analyser: AnalyserNode };
-}
-
-type AudioContextCtor = new () => AudioContext;
-
-function getAudioContextCtor(): AudioContextCtor | null {
-  const scope = window as unknown as {
-    AudioContext?: AudioContextCtor;
-    webkitAudioContext?: AudioContextCtor;
-  };
-  return scope.AudioContext ?? scope.webkitAudioContext ?? null;
+interface ElementWithAnalyser extends HTMLAudioElement {
+  __allegraAnalyser?: AnalyserNode;
 }
 
 export function useAudioAnalyser(
@@ -55,60 +46,30 @@ export function useAudioAnalyser(
   active: boolean
 ): AnalyserHandle {
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const contextRef = useRef<AudioContext | null>(null);
   const levelRef = useRef(0);
   const scratchRef = useRef<Uint8Array | null>(null);
   const trackerRef = useRef(createBandTracker());
 
   useEffect(() => {
-    const audio = audioRef.current as ElementWithGraph | null;
+    const audio = audioRef.current as ElementWithAnalyser | null;
     if (!audio || !active) return undefined;
 
-    const existing = audio.__allegraGraph;
-    if (existing) {
-      contextRef.current = existing.context;
-      analyserRef.current = existing.analyser;
-      void existing.context.resume().catch(() => undefined);
-      return undefined;
-    }
-
-    const Ctor = getAudioContextCtor();
-    if (!Ctor) return undefined;
-
-    let context: AudioContext;
-    try {
-      context = new Ctor();
-      const source = context.createMediaElementSource(audio);
-      const analyser = context.createAnalyser();
+    // One graph per element, shared with karaoke; the analyser taps its output bus.
+    const graph = ensureElementGraph(audio);
+    if (!graph) return undefined;
+    let analyser = audio.__allegraAnalyser;
+    if (!analyser) {
+      analyser = graph.context.createAnalyser();
       analyser.fftSize = 128;
       // Smoothing is done here rather than per frame so every reader sees the same curve.
       analyser.smoothingTimeConstant = 0.78;
-      source.connect(analyser);
-      analyser.connect(context.destination);
-      audio.__allegraGraph = { context, analyser };
-      contextRef.current = context;
-      analyserRef.current = analyser;
-    } catch {
-      // No graph. The element keeps playing on its own and readers get `false`.
-      return undefined;
+      graph.bus.connect(analyser);
+      audio.__allegraAnalyser = analyser;
     }
-
-    void context.resume().catch(() => undefined);
+    // Resuming the context on play (it can be suspended or interrupted) is the graph's job.
+    analyserRef.current = analyser;
     return undefined;
   }, [active, audioRef]);
-
-  // A context can be auto-suspended by the browser. Resume whenever playback starts,
-  // otherwise routing through Web Audio would leave the element silent.
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return undefined;
-    const resume = (): void => {
-      const context = contextRef.current;
-      if (context && context.state === 'suspended') void context.resume().catch(() => undefined);
-    };
-    audio.addEventListener('play', resume);
-    return () => audio.removeEventListener('play', resume);
-  }, [audioRef]);
 
   const binCount = useCallback((): number => analyserRef.current?.frequencyBinCount ?? 0, []);
 

@@ -3,7 +3,6 @@ import { Router } from 'express';
 
 import type { AuthService } from '../auth/auth.js';
 import type { CatalogService } from '../catalog/catalog.js';
-import { withCoverUrl } from '../lib/covers.js';
 import type { LibraryRecord, UserData } from '../user/store.js';
 import { getUserId, sendUnauthorized } from './auth.js';
 import { sendFailure, sendSuccess } from './common.js';
@@ -21,7 +20,7 @@ const CODE_SHAPE = /^[a-z0-9]{6,12}$/;
  * Sharing. A share is a code that points at one of the owner's playlists, so the link stays live as the owner
  * adds songs. Anyone with the code can read it and save a copy; only the owner can create or revoke it.
  */
-export function sharedRouter(auth: AuthService, catalog: CatalogService, coversPublicBaseUrl?: string): Router {
+export function sharedRouter(auth: AuthService, catalog: CatalogService): Router {
   const router = Router();
   const store = auth.userStore;
 
@@ -86,12 +85,11 @@ export function sharedRouter(auth: AuthService, catalog: CatalogService, coversP
         return;
       }
       const songs = library.songIds.length > 0 ? await catalog.getSongs(library.songIds) : [];
-      const presented = withCoverUrl(library, coversPublicBaseUrl);
       sendSuccess(response, {
         code,
         name: library.name,
         ...(library.description ? { description: library.description } : {}),
-        ...(presented.coverUrl ? { coverUrl: presented.coverUrl } : {}),
+        ...(library.coverUrl ? { coverUrl: library.coverUrl } : {}),
         ownerName: owner.displayName ?? 'A listener',
         songs
       });
@@ -116,7 +114,8 @@ export function sharedRouter(auth: AuthService, catalog: CatalogService, coversP
         response.status(404).json({ success: false, data: null, error: "We couldn't find that. The link may have been turned off." });
         return;
       }
-      // Persist the owner's coverKey only (coverUrl is derived on read). The object is public-read.
+      // The copy shows the owner's cover but does not own the file (no coverKey), so replacing or
+      // deleting it here can never delete the owner's image.
       const stored: LibraryRecord = {
         id: crypto.randomUUID(),
         name: source.name,
@@ -124,10 +123,10 @@ export function sharedRouter(auth: AuthService, catalog: CatalogService, coversP
         isPublic: false,
         songIds: [...source.songIds],
         createdAt: new Date().toISOString(),
-        ...(source.coverKey ? { coverKey: source.coverKey } : {})
+        ...(source.coverUrl ? { coverUrl: source.coverUrl } : {})
       };
       await auth.update({ ...user, libraries: [...user.libraries, stored] });
-      sendSuccess(response, withCoverUrl(stored, coversPublicBaseUrl), 201);
+      sendSuccess(response, stored, 201);
     } catch (error) {
       sendFailure(response, error);
     }

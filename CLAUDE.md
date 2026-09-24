@@ -13,8 +13,6 @@ apps/web          Next.js 16 App Router · React 19 · Tailwind v4 · Motion
 apps/api          Node 22 · Express · TypeScript — ships as one Vercel Function
 packages/shared   types imported by BOTH — the integration seam
 convex/           auth (Google) + listener data: profiles, shares
-workers/          GPU stem-separator container for AWS Batch
-infra/aws/        CloudFormation for the karaoke stack
 docs/             architecture, contract, workflows, setup guides
 .planning/        PRD and roadmap
 tests/            contract + infra
@@ -69,9 +67,9 @@ because it looks fine.
 - **The `/api` rewrite in `vercel.json` must precede Next's catch-all.** Otherwise the site renders
   and every API call 404s, which reads as a frontend bug. Run `vercel build` and inspect
   `.vercel/output/config.json` when touching routing.
-- **Karaoke state must stay in AWS, not in process memory.** The API is serverless: instances freeze
-  after responding and do not share memory. Background polling and in-process locks silently do
-  nothing. One S3 conditional write is the cross-instance lock.
+- **Karaoke stays in the browser.** It never creates an API job, uploads track audio, or depends on
+  server process memory. Model and audio-resource failures must leave playback usable via its local
+  fallback or a clear capability message.
 
 ## Verifying
 
@@ -88,11 +86,8 @@ hero transition is profiled on a **real phone**, not a laptop. See
 ## Deployment
 
 **Vercel only** — one deployment serves the Next.js app and the Express function. No Render, no App
-Runner, no container deploy. AWS is used **only** for karaoke stem separation (plus optional Bedrock
-and a cache table). Convex owns identity and listener data.
-
-**Never run a GPU job, deploy a CloudFormation stack, or deploy to production without being asked.**
-A separation job costs real money.
+Runner, container deploy, or AWS runtime. Karaoke separation runs on the listener's device; Convex
+owns identity and listener data.
 
 ## Commits
 

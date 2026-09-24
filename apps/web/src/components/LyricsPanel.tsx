@@ -92,6 +92,8 @@ export function LyricsPanel({
   /** True while our own animation is moving the container — the scroll handler must ignore it. */
   const isAnimatingRef = useRef(false);
   const lastSongKeyRef = useRef('');
+  /** False until the list has been positioned once, so opening mid-song lands on the line instead of gliding from the top. */
+  const positionedRef = useRef(false);
   const [followPaused, setFollowPaused] = useState(false);
 
   const activeIndex = useMemo(() => findActiveLine(lines, currentTime), [currentTime, lines]);
@@ -197,7 +199,9 @@ export function LyricsPanel({
   useLayoutEffect(() => {
     if (followPausedRef.current) return;
     if (loading || lines.length === 0) return;
-    scrollActiveIntoView(Boolean(reduced));
+    const firstPlacement = !positionedRef.current;
+    positionedRef.current = true;
+    scrollActiveIntoView(Boolean(reduced) || firstPlacement);
   }, [activeIndex, loading, lines.length, reduced, scrollActiveIntoView, followPaused, songKey]);
 
   const handleScroll = useCallback(() => {
@@ -283,6 +287,11 @@ export function LyricsPanel({
           ) : null}
         </div>
       </div>
+      {karaokeBusy ? (
+        <p className="ytm-lyrics__note ytm-lyrics__busy" role="status">
+          Preparing karaoke{karaokeProgressRatio != null ? ` ${Math.round(karaokeProgressRatio * 100)}%` : '…'}
+        </p>
+      ) : null}
       {karaokeError ? (
         <p className="ytm-lyrics__alert" role="alert">
           {karaokeError}

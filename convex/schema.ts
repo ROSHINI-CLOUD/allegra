@@ -9,8 +9,10 @@ const library = v.object({
   isPublic: v.boolean(),
   songIds: v.array(v.string()),
   createdAt: v.string(),
-  /** S3 object key for a custom playlist cover. ASCII path only. */
-  coverKey: v.optional(v.string())
+  /** Convex storage id of a custom playlist cover (owned by this playlist). */
+  coverKey: v.optional(v.string()),
+  /** Served URL for the cover. Kept alongside the id: Convex URLs cannot be derived from it. */
+  coverUrl: v.optional(v.string())
 });
 
 const recent = v.object({
@@ -65,5 +67,13 @@ export default defineSchema({
     createdAt: v.string()
   })
     .index('by_code', ['code'])
-    .index('by_owner_library', ['ownerId', 'libraryId'])
+    .index('by_owner_library', ['ownerId', 'libraryId']),
+
+  /** Spent OAuth codes and refresh tokens (MCP connect), kept only until they expire. */
+  oauthGrants: defineTable({
+    jti: v.string(),
+    expiresAt: v.number()
+  })
+    .index('by_jti', ['jti'])
+    .index('by_expiresAt', ['expiresAt'])
 });

@@ -26,4 +26,6 @@ export interface LiveKaraokePrepareResult {
   readonly blobUrl: string;
   /** True when input was mono — vocal cancel is weak / none. */
   readonly monoSource: boolean;
+  /** Why the AI model was skipped when backend is mid-side (shown to the listener). */
+  readonly fallbackReason?: string;
 }

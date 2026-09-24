@@ -1,15 +1,14 @@
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Heart, ListMusic, Pause, Play, Plus, Shuffle, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Heart, Pause, Play, Shuffle, Sparkles } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, FormEvent, ReactNode, RefObject } from 'react';
+import type { CSSProperties, ReactNode, RefObject } from 'react';
 
 import type { AccountProfile, TasteSummary, UnifiedSong } from '@shared/types';
 
 import { ArtistPreviewCard } from './ArtistPreviewCard';
 import { TasteOnboarding } from './TasteOnboarding';
 import { Artwork, IconButton } from './ui';
-import type { LibraryRecord } from '../lib/api';
 import { paths } from '../lib/routes';
 import { motionTokens } from '../motion';
 
@@ -18,8 +17,6 @@ interface HomePageProps {
   readonly taste: TasteSummary | null;
   readonly recentlyPlayed: readonly UnifiedSong[];
   readonly likedSongs: readonly UnifiedSong[];
-  readonly playlists: readonly LibraryRecord[];
-  readonly playlistSongs: ReadonlyMap<string, UnifiedSong>;
   readonly picks: readonly UnifiedSong[];
   readonly picksReason: string | null;
   readonly picksProvider: string | null;
@@ -35,7 +32,6 @@ interface HomePageProps {
   readonly onToggle: () => void;
   readonly onLike: (song: UnifiedSong) => void;
   readonly onOpenArtist: (name: string) => void;
-  readonly onCreatePlaylist: (name: string) => Promise<unknown>;
   readonly onSeedTaste: (artists: string[], languages: string[]) => Promise<void>;
   readonly onOpenAuth: () => void;
   /** Hand a query to Discover — what the mood tiles do. */
@@ -103,17 +99,17 @@ function shuffled(songs: readonly UnifiedSong[]): UnifiedSong[] {
  * the moods — somewhere to wander when nothing personal is calling.
  */
 export function HomePage({
-  profile, taste, recentlyPlayed, likedSongs, playlists, playlistSongs, picks, picksReason, picksProvider,
+  profile, taste, recentlyPlayed, likedSongs, picks, picksReason, picksProvider,
   trending, madeForYou, recommended, faces,
-  currentSongId, isPlaying, likedIds, loading,
-  onPlay, onToggle, onLike, onOpenArtist, onCreatePlaylist, onSeedTaste, onOpenAuth, onExplore
+  currentSongId, isPlaying, likedIds,
+  onPlay, onToggle, onLike, onOpenArtist, onSeedTaste, onOpenAuth, onExplore
 }: HomePageProps) {
   const reduced = useReducedMotion();
   const [skippedSetup, setSkippedSetup] = useState(() => window.localStorage.getItem('allegra-skip-setup') === '1');
   const name = profile?.displayName?.split(' ')[0];
   const topArtists = taste?.topArtists.slice(0, 10) ?? [];
   const needsSetup = taste !== null && !taste.onboarded && !skippedSetup;
-  const hasActivity = likedSongs.length > 0 || playlists.length > 0 || (taste?.signals ?? 0) >= 6;
+  const hasActivity = likedSongs.length > 0 || (taste?.signals ?? 0) >= 6;
   const inRotation = topArtists.slice(0, 3).map((artist) => artist.name);
 
   const resume = recentlyPlayed[0] ?? null;
@@ -160,8 +156,8 @@ export function HomePage({
         {feature ? (
           <div className="home-spotlight-wash" style={{ backgroundImage: `url("${feature.artwork}")` }} aria-hidden="true" />
         ) : null}
-        <div className="home-spotlight-inner">
-          <div className="home-spotlight-lead">
+        <div className="home-stage">
+          <div className="home-stage__copy">
             <span className="eyebrow eyebrow-accent">{greeting()}</span>
             <h1 id="home-greeting">{name ? `${name}, welcome back` : 'Your music, all in one place'}</h1>
             <p>
@@ -169,74 +165,76 @@ export function HomePage({
                 ? `Lately it is ${inRotation.join(', ')}. Everything below is tuned to you.`
                 : 'Tell us what you love and this page tunes itself to you, more with every song you play.'}
             </p>
+          </div>
 
-            {feature ? (
-              <div className="home-feature">
+          {feature ? (
+            <div className="home-stage__now">
+              <div className="home-stage__sleeve">
                 <button
                   type="button"
-                  className="home-feature-art"
+                  className="home-stage__cover"
                   onClick={playFeature}
                   aria-label={`${currentSongId === feature.id && isPlaying ? 'Pause' : 'Play'} ${feature.title}`}
                 >
                   <Artwork song={feature} size="large" />
-                  <span className="home-feature-play">
+                  <span className="home-stage__play">
                     {currentSongId === feature.id && isPlaying
                       ? <Pause size={20} fill="currentColor" aria-hidden="true" />
                       : <Play size={20} fill="currentColor" aria-hidden="true" />}
                   </span>
                 </button>
-                <div className="home-feature-copy">
-                  <span>{featureIsResume ? 'Pick up where you left off' : 'Start here'}</span>
-                  <strong title={feature.title}>{feature.title}</strong>
-                  <small title={feature.artist}>{feature.artist}</small>
-                  <div className="home-feature-actions">
-                    <button type="button" className="btn-primary tactile-control" onClick={playFeature}>
-                      {currentSongId === feature.id && isPlaying
-                        ? <><Pause size={15} fill="currentColor" aria-hidden="true" /> Pause</>
-                        : <><Play size={15} fill="currentColor" aria-hidden="true" /> Play</>}
-                    </button>
-                    <button type="button" className="btn-glass tactile-control" onClick={shuffleFeature} disabled={featureQueue.length < 2}>
-                      <Shuffle size={15} aria-hidden="true" /> Shuffle
-                    </button>
-                  </div>
+              </div>
+              <div className="home-stage__meta">
+                <span>{featureIsResume ? 'Pick up where you left off' : 'Start here'}</span>
+                <strong title={feature.title}>{feature.title}</strong>
+                <small title={feature.artist}>{feature.artist}</small>
+                <div className="home-feature-actions">
+                  <button type="button" className="btn-primary tactile-control" onClick={playFeature}>
+                    {currentSongId === feature.id && isPlaying
+                      ? <><Pause size={15} fill="currentColor" aria-hidden="true" /> Pause</>
+                      : <><Play size={15} fill="currentColor" aria-hidden="true" /> Play</>}
+                  </button>
+                  <button type="button" className="btn-glass tactile-control" onClick={shuffleFeature} disabled={featureQueue.length < 2} aria-label="Shuffle">
+                    <Shuffle size={15} aria-hidden="true" /> <span className="home-stage__label">Shuffle</span>
+                  </button>
                 </div>
               </div>
-            ) : null}
-          </div>
-
-          {quickPicks.length > 0 ? (
-            <div className="home-quick" aria-label="Quick picks">
-              {quickPicks.map((song) => {
-                const current = song.id === currentSongId;
-                return (
-                  <button
-                    key={song.id}
-                    type="button"
-                    className={`home-quick-card ${current ? 'is-current' : ''}`}
-                    onClick={() => (current ? onToggle() : onPlay(song, [...quickPicks]))}
-                    aria-label={`${current && isPlaying ? 'Pause' : 'Play'} ${song.title}`}
-                  >
-                    <Artwork song={song} size="small" />
-                    <span className="home-quick-copy">
-                      <strong title={song.title}>{song.title}</strong>
-                      <small title={song.artist}>{song.artist}</small>
-                    </span>
-                    <span className="home-quick-play">
-                      {current && isPlaying
-                        ? <Pause size={14} fill="currentColor" aria-hidden="true" />
-                        : <Play size={14} fill="currentColor" aria-hidden="true" />}
-                    </span>
-                  </button>
-                );
-              })}
             </div>
           ) : null}
         </div>
+
+        {quickPicks.length > 0 ? (
+          <div className="home-rail" role="group" aria-label="Quick picks">
+            {quickPicks.map((song) => {
+              const current = song.id === currentSongId;
+              return (
+                <button
+                  key={song.id}
+                  type="button"
+                  className={`home-quick-card ${current ? 'is-current' : ''}`}
+                  onClick={() => (current ? onToggle() : onPlay(song, [...quickPicks]))}
+                  aria-label={`${current && isPlaying ? 'Pause' : 'Play'} ${song.title}`}
+                >
+                  <Artwork song={song} size="small" />
+                  <span className="home-quick-copy">
+                    <strong title={song.title}>{song.title}</strong>
+                    <small title={song.artist}>{song.artist}</small>
+                  </span>
+                  <span className="home-quick-play">
+                    {current && isPlaying
+                      ? <Pause size={14} fill="currentColor" aria-hidden="true" />
+                      : <Play size={14} fill="currentColor" aria-hidden="true" />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </motion.section>
 
       {profile?.isGuest && hasActivity ? (
         <div className="guest-nudge" role="note">
-          <span>You are listening as a guest. Make an account to keep your likes and playlists on every device.</span>
+          <span>You are listening as a guest. Make an account to keep your likes and taste on every device.</span>
           <button type="button" className="btn-glass tactile-control" onClick={onOpenAuth}>Create account</button>
         </div>
       ) : null}
@@ -282,7 +280,9 @@ export function HomePage({
         />
       ) : null}
 
-      <PlaylistsShelf playlists={playlists} songs={playlistSongs} loading={loading} reduced={reduced} onCreate={onCreatePlaylist} />
+      {recommended.length > 0 ? (
+        <Shelf id="home-fresh" title="Somewhere new to wander" hint="See all" href={paths.discover} songs={recommended.slice(0, 14)} {...{ reduced, currentSongId, isPlaying, likedIds, onPlay, onLike }} />
+      ) : null}
 
       {likedSongs.length > 0 ? (
         <Shelf id="home-liked" title="Songs you love" hint={`${likedSongs.length} liked`} href={paths.liked} songs={likedSongs.slice(0, 14)} {...{ reduced, currentSongId, isPlaying, likedIds, onPlay, onLike }} />
@@ -351,14 +351,9 @@ export function HomePage({
       {madeForYou.length > 0 ? (
         <Shelf id="home-loved" title="Loved right now" hint="What everyone has on" songs={madeForYou.slice(0, 14)} {...{ reduced, currentSongId, isPlaying, likedIds, onPlay, onLike }} />
       ) : null}
-
-      {recommended.length > 0 ? (
-        <Shelf id="home-fresh" title="Somewhere new to wander" hint="See all" href={paths.discover} songs={recommended.slice(0, 14)} {...{ reduced, currentSongId, isPlaying, likedIds, onPlay, onLike }} />
-      ) : null}
     </div>
   );
 }
-
 /* ----------------------------------------------------------------- sections */
 
 interface SectionProps {
@@ -401,7 +396,6 @@ function Section({ id, title, hint, href, eyebrow, reduced, actions, children }:
     </motion.section>
   );
 }
-
 interface ShelfScroll {
   readonly ref: RefObject<HTMLDivElement | null>;
   readonly atStart: boolean;
@@ -463,7 +457,6 @@ function ShelfArrows({ scroll, label }: { readonly scroll: ShelfScroll; readonly
     </div>
   );
 }
-
 interface ShelfProps {
   readonly id: string;
   readonly title: string;
@@ -509,71 +502,6 @@ function Shelf({ id, title, hint, href, eyebrow, songs, reduced, currentSongId, 
                 <IconButton icon={Heart} className="tile-like" label={likedIds.has(song.id) ? 'Remove from likes' : 'Add to likes'} active={likedIds.has(song.id)} onClick={() => onLike(song)} />
               </div>
             </article>
-          );
-        })}
-      </div>
-    </Section>
-  );
-}
-
-interface PlaylistsShelfProps {
-  readonly playlists: readonly LibraryRecord[];
-  readonly songs: ReadonlyMap<string, UnifiedSong>;
-  readonly loading: boolean;
-  readonly reduced: boolean | null;
-  readonly onCreate: (name: string) => Promise<unknown>;
-}
-
-function PlaylistsShelf({ playlists, songs, loading, reduced, onCreate }: PlaylistsShelfProps) {
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState('');
-  const scroll = useShelfScroll(playlists.length, reduced);
-
-  const submit = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
-    if (!name.trim()) return;
-    await onCreate(name);
-    setName('');
-    setCreating(false);
-  };
-
-  return (
-    <Section
-      id="home-playlists"
-      title="Your playlists"
-      hint="All playlists"
-      href={paths.library}
-      reduced={reduced}
-      actions={<ShelfArrows scroll={scroll} label="Your playlists" />}
-    >
-      <div className="shelf shelf--playlists" ref={scroll.ref}>
-        {creating ? (
-          <form className="playlist-tile playlist-tile--new is-editing" onSubmit={(event) => void submit(event)}>
-            <input autoFocus value={name} maxLength={100} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setCreating(false); }} placeholder="Name your playlist" aria-label="Playlist name" />
-            <div><button type="submit" className="btn-primary tactile-control" disabled={!name.trim()}>Create</button><button type="button" className="btn-glass tactile-control" onClick={() => setCreating(false)}>Cancel</button></div>
-          </form>
-        ) : (
-          <button type="button" className="playlist-tile playlist-tile--new" onClick={() => setCreating(true)}>
-            <span className="playlist-tile-plus"><Plus size={22} aria-hidden="true" /></span>
-            <strong>New playlist</strong>
-            <small>Start one with any song</small>
-          </button>
-        )}
-        {loading && playlists.length === 0 ? null : playlists.map((playlist) => {
-          const covers = playlist.songIds.map((id) => songs.get(id)).filter((song): song is UnifiedSong => song !== undefined && Boolean(song.artwork));
-          const unique = covers.filter((song, index, all) => all.findIndex((other) => other.artwork === song.artwork) === index).slice(0, 4);
-          return (
-            <Link key={playlist.id} className="playlist-tile" href={paths.playlist(playlist.id)}>
-              <span className={`playlist-tile-art ${playlist.coverUrl || unique.length < 4 ? 'is-sparse' : ''}`}>
-                {playlist.coverUrl
-                  ? <span className="playlist-tile-custom"><img src={playlist.coverUrl} alt="" /></span>
-                  : unique.length > 0
-                    ? unique.map((song) => <span key={song.id}><Artwork song={song} size="large" /></span>)
-                    : <ListMusic size={30} strokeWidth={1.4} aria-hidden="true" />}
-              </span>
-              <strong title={playlist.name}>{playlist.name}</strong>
-              <small>{playlist.songIds.length} {playlist.songIds.length === 1 ? 'song' : 'songs'}{playlist.isPublic ? ' · shared' : ''}</small>
-            </Link>
           );
         })}
       </div>

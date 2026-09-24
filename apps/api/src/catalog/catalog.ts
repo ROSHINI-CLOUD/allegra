@@ -7,6 +7,7 @@ import type { GaanaProvider } from '../providers/gaana.js';
 import type { CanonicalRelease, ReleaseAuthority } from '../providers/musicbrainz.js';
 import type { ProviderResult, SaavnAsset, SaavnProvider, SaavnSong } from '../providers/saavn.js';
 import { decodeHtml, repairMojibake } from '../lib/decodeHtml.js';
+import { inLanguages, languagesKey } from '../lib/languages.js';
 import type { ArtistProfile, ArtistSummary, HomePayload, UnifiedSong } from '../types.js';
 
 export interface CatalogSearch {
@@ -169,7 +170,43 @@ export class CatalogService {
     return songs.filter((song): song is UnifiedSong => song !== null);
   }
 
-  public async getSuggestions(id: string, limit: number): Promise<UnifiedSong[]> {
+  /**
+   * Songs like this one. With a language setting, only those languages; when that leaves the list
+   * short (a Tamil song's suggestions for a Hindi-only listener), it is topped up with popular songs
+   * in their languages so Up next never runs dry.
+   */
+  public async getSuggestions(id: string, limit: number, languages: readonly string[] = []): Promise<UnifiedSong[]> {
+    if (languages.length === 0) return this.getRawSuggestions(id, limit);
+    let pool: UnifiedSong[] = [];
+    try {
+      pool = await this.getRawSuggestions(id, Math.min(30, limit * 2));
+    } catch {
+      pool = [];
+    }
+    const picked = pool.filter((song) => inLanguages(song, languages));
+    if (picked.length < limit) {
+      const seen = new Set([id, ...picked.map((song) => songIdentity(song))]);
+      for (const language of languages) {
+        if (picked.length >= limit) break;
+        let results: UnifiedSong[] = [];
+        try {
+          results = (await this.search(`top ${language} songs`, 20, 0, { enrich: false })).results;
+        } catch {
+          continue;
+        }
+        for (const song of results) {
+          if (picked.length >= limit) break;
+          const identity = songIdentity(song);
+          if (song.id === id || seen.has(identity) || !inLanguages(song, languages)) continue;
+          seen.add(identity);
+          picked.push(song);
+        }
+      }
+    }
+    return picked.slice(0, limit);
+  }
+
+  private async getRawSuggestions(id: string, limit: number): Promise<UnifiedSong[]> {
     const key = cacheKey('suggestions', 'v3', id, String(limit));
     const cached = await this.cache.get<UnifiedSong[]>(key);
     if (cached) {
@@ -271,7 +308,8 @@ export class CatalogService {
     }
   }
 
-  public async getHome(): Promise<HomePayload> {
+  public async getHome(languages: readonly string[] = []): Promise<HomePayload> {
+    if (languages.length > 0) return this.getLanguageHome(languages);
     // v3: originals ranked ahead of edits (same as search v4).
     const cached = await this.cache.get<HomePayload>('home:default:v3');
     if (cached) {
@@ -313,6 +351,52 @@ export class CatalogService {
       recommended: shelf(upbeat.results, true)
     } satisfies HomePayload;
     await this.cache.set('home:default:v3', home, 3600);
+    return home;
+  }
+
+  /**
+   * The home shelves for a language setting: the same three shelves, searched per language and
+   * interleaved so two languages share each shelf instead of one crowding out the other.
+   */
+  private async getLanguageHome(languages: readonly string[]): Promise<HomePayload> {
+    const key = `home:languages:v1:${languagesKey(languages)}`;
+    const cached = await this.cache.get<HomePayload>(key);
+    if (cached) return cached;
+
+    const searchAll = async (template: (language: string) => string): Promise<UnifiedSong[][]> =>
+      Promise.all(languages.map(async (language) => {
+        try {
+          return (await this.search(template(language), 20, 0, { enrich: false })).results.filter((song) => inLanguages(song, languages));
+        } catch {
+          return [];
+        }
+      }));
+    const [trending, loved, upbeat] = await Promise.all([
+      searchAll((language) => `top ${language} songs`),
+      searchAll((language) => `romantic ${language} hits`),
+      searchAll((language) => `${language} party songs`)
+    ]);
+
+    const seen = new Set<string>();
+    const shelf = (lists: UnifiedSong[][], byPopularity = false): UnifiedSong[] => {
+      const ordered = lists.map((list) => (byPopularity ? [...list].sort((left, right) => (right.playCount ?? 0) - (left.playCount ?? 0)) : list));
+      const songs: UnifiedSong[] = [];
+      for (let round = 0; songs.length < 10 && ordered.some((list) => round < list.length); round++) {
+        for (const list of ordered) {
+          const song = list[round];
+          if (!song) continue;
+          const identity = songIdentity(song);
+          if (seen.has(identity)) continue;
+          seen.add(identity);
+          songs.push(song);
+          if (songs.length === 10) break;
+        }
+      }
+      return songs;
+    };
+    const home = { trending: shelf(trending), madeForYou: shelf(loved, true), recommended: shelf(upbeat, true) } satisfies HomePayload;
+    // An empty shelf means the provider was down: do not pin that for an hour.
+    if (home.trending.length > 0) await this.cache.set(key, home, 3600);
     return home;
   }
 

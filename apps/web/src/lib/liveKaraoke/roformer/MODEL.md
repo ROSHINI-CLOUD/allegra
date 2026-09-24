@@ -15,12 +15,24 @@
 
 ## Runtime
 
-- ONNX Runtime Web — WebGPU preferred, WASM fallback
-- Host STFT/iSTFT: `n_fft=2048`, `hop=441`, 44.1 kHz stereo
+- ONNX Runtime Web in a module worker (`separatorWorker.ts`) — WebGPU preferred, WASM fallback.
+  The session lives for the page, so the model loads once per page.
+- Host STFT/iSTFT: `n_fft=2048`, `hop=441`, 44.1 kHz stereo (songs are decoded at 44.1 kHz)
 - Window: **T=1100 frames ≈ 11.00 s** (model export; multiple of 4 for WebGPU)
-- Overlap: normal=2, clean=4, ultra=6
+- Streaming layout (`chunks.ts`): chunks one ~10 s hop apart, overlapping only by a 1 s
+  raised-cosine crossfade, so each second of audio passes through the model about once
+- Order: the worker starts where the playhead will be when the chunk finishes, works
+  forward, then fills in the start of the song; seeks re-aim it
 - Instrumental: `I = mix − vocals` (mask applied to STFT → iSTFT vocals)
-- CLEAN/ULTRA: second pass on `I` with soft residual subtract when residual ratio high
+- Residual pass (soft subtract when the residual ratio is high) only when the first chunk
+  shows the device has time for two passes
+- Playback (`streamPlayer.ts`): the `<audio>` element stays the clock and keeps its source;
+  ready segments play through Web Audio while its own output is muted, and anywhere not yet
+  separated the original plays
+- Mid-side fallback when the model cannot load, or a chunk takes longer than it plays
+
+Measured (desktop, WebGPU): session build ~18 s cold, ~6.5 s per 10 s chunk (0.5 s of it
+STFT), instrumental at the playhead ~27 s after the first press, ~12 s after a seek.
 
 ## Local vendor (optional, faster)
 
@@ -28,9 +40,9 @@ Place both files under `apps/web/public/models/roformer/` (gitignored).
 
 ## Phases
 
-1. Single-pass + overlap-add (this tree)
-2. Rolling ahead-of-playhead buffer
+1. ~~Single-pass + overlap-add~~ (replaced by streaming)
+2. Rolling ahead-of-playhead buffer — implemented (worker + stream player)
 3. Residual pass (CLEAN) — implemented gated soft subtract
 4. Spectral confidence mask
-5. Device benchmark auto mode
+5. Device benchmark auto mode — partly: pace check falls back to mid-side on slow devices
 6. OPFS → same-origin model serve + WebGPU graph polish

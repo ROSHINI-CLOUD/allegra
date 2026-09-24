@@ -1,13 +1,14 @@
 import { Router } from 'express';
 
 import type { CatalogService } from '../catalog/catalog.js';
-import { sendFailure, sendSuccess, nonNegativeInt, positiveInt, queryString } from './common.js';
+import { sendFailure, sendSuccess, boundedString, nonNegativeInt, positiveInt, queryString } from './common.js';
+import { parseLanguages } from '../lib/languages.js';
 
 export function catalogRouter(catalog: CatalogService): Router {
   const router = Router();
 
   router.get('/search', async (request, response) => {
-    const query = queryString(request.query.q);
+    const query = boundedString(request.query.q);
     if (!query) {
       response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
       return;
@@ -35,7 +36,7 @@ export function catalogRouter(catalog: CatalogService): Router {
   });
 
   router.get('/artists/:name', async (request, response) => {
-    const name = queryString(request.params.name);
+    const name = boundedString(request.params.name);
     if (!name) {
       response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
       return;
@@ -67,7 +68,7 @@ export function catalogRouter(catalog: CatalogService): Router {
       return;
     }
     try {
-      sendSuccess(response, await catalog.getSuggestions(id, positiveInt(request.query.limit, 15, 30)));
+      sendSuccess(response, await catalog.getSuggestions(id, positiveInt(request.query.limit, 15, 30), parseLanguages(request.query.languages)));
     } catch (error) {
       sendFailure(response, error);
     }

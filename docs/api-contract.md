@@ -112,39 +112,6 @@ Also sets `Cross-Origin-Resource-Policy: cross-origin` (needed for Web Audio).
 **A `206` must never be collapsed to `200` — seeking dies silently.**
 Frontend usage: `<audio src={`${API}/api/stream/${song.id}`} crossOrigin="anonymous" />`
 
-### Karaoke / Sing (stem separation) — additive, updated 2026-09-21
-
-Decisions & migration notes: [`docs/karaoke-aws-decisions.md`](./karaoke-aws-decisions.md).
-
-On-demand dual-stem generation via **AWS Batch GPU** (vocals + instrumental). **Never** call AWS or the separator from the browser.
-Unset Batch/karaoke env (`AWS_BATCH_JOB_QUEUE` + `AWS_BATCH_JOB_DEFINITION` + `KARAOKE_S3_BUCKET`) → JSON routes answer `503`; the rest of the API is unaffected.
-Processing is **lazy**: only when the user presses Sing. Same song + source fingerprint + separation version is generated once and reused.
-
-Shared DTO (`packages/shared/types.ts`):
-
-```ts
-export type KaraokeStatus = 'none' | 'queued' | 'processing' | 'ready' | 'failed';
-
-export interface KaraokePayload {
-  status: KaraokeStatus;
-  /** Our proxy when ready — NEVER a raw S3 URL. */
-  instrumentalUrl?: string;   // `/api/stream/karaoke/:songId/instrumental`
-  vocalsUrl?: string;         // `/api/stream/karaoke/:songId/vocals` (Sing mode)
-  retryable?: boolean;
-  separationVersion?: string; // e.g. 'aws-batch-htdemucs-v1'
-}
-```
-
-| Method | Path | Behaviour |
-|---|---|---|
-| `GET` | `/api/songs/:songId/karaoke` | Current cache state. `none` if never requested. |
-| `POST` | `/api/songs/:songId/karaoke` | Claim generation or join in-flight job. Returns `200` when `ready`/`failed`; **`202`** while `queued`/`processing`. Server resolves the source audio — the body must **not** include an audio URL. |
-| `GET` | `/api/stream/karaoke/:songId` | Instrumental bytes alias when `ready`. Same Range → **`206`** rule. |
-| `GET` | `/api/stream/karaoke/:songId/instrumental` | Instrumental stem. Range → **`206`**. |
-| `GET` | `/api/stream/karaoke/:songId/vocals` | Vocals stem. Range → **`206`**. |
-
-Frontend: poll `GET` every ~2–3 s while processing; when ready, load **both** stems into Web Audio GainNodes at the same `currentTime`; lyrics stay keyed to the song id. Stem volume sliders are local-only.
-
 ### `POST /api/auth/anon`
 `→ ApiResponse<{ token: string; userId: string }>`
 Called once on first load, token stored client-side and sent as `Authorization: Bearer`. Listening never needs an account.
@@ -166,24 +133,29 @@ POST   /api/me/recently-played         { songId, playDuration }
 GET/PATCH /api/me/settings
 ```
 
-`Library` is additive: optional `coverKey` (S3 object key) and derived `coverUrl` (CloudFront / public base + key). `coverUrl` is never persisted — the API adds it on read when uploads are configured. `PATCH` accepts `coverKey` from a prior `/api/uploads/sign` (must be under `covers/<userId>/<libraryId>/`) or `coverKey: null` to clear.
+`Library` is additive: optional `coverKey` (a Convex storage id) and derived `coverUrl`. `coverUrl` is
+never persisted; the API resolves it from Convex on read. `PATCH` accepts the `coverKey` returned by
+the authenticated cover-upload flow or `coverKey: null` to clear it.
 
 ### `POST /api/ai/mood` ★ stretch
 `{ prompt: string }` → `ApiResponse<{ queue: UnifiedSong[]; explanation: string }>`
 **Not shipped.** The mood pills in the UI run a plain `/api/search` instead.
 
-### `POST /api/ai/translate-lyrics` — shipped 2026-09-20
-`{ title, artist, lines: LyricLine[], targetLanguage? = "English" }` (no auth required, same as `/api/lyrics`)
+### `POST /api/lyrics/translate`
+`{ title, artist, lines: LyricLine[], targetLanguage? = "English", language? }` (no auth required)
 `→ ApiResponse<{ lines: LyricLine[]; provider: string }>`
-Same `lines` length/order/timestamps as the request — only `text` changes, translated for **meaning**, not word-for-word. `[INSTRUMENTAL]` markers pass through unchanged. `provider` names whichever of the cascade actually answered (`gemini` | `openrouter` | `nvidia` | `groq` | `bedrock`) — surface it in the UI, it's a nice "how this works" detail.
-`503` if no AI provider is configured at all. `502` if every configured provider failed or replied with something unparseable.
+Same `lines` length/order/timestamps as the request; `[INSTRUMENTAL]` markers pass through unchanged.
+MyMemory is the free keyless primary. A configured, self-hosted LibreTranslate instance is the
+fallback; unmanaged public mirrors are never assumed. The legacy `/api/ai/translate-lyrics` path is
+an alias for compatibility. `502` means both available providers failed.
 
-### `GET /api/ai/recommendations` — shipped 2026-09-20
+### `GET /api/recommendations`
 `songId`? (current song, added to taste context if present) · requires `Authorization: Bearer <token>`
 `→ ApiResponse<{ songs: UnifiedSong[]; provider: string; reasoning: string }>`
-Infers taste from the caller's liked + recently-played songs, asks the AI cascade for search queries reflecting that taste, then runs those through the existing catalog search — every returned song is a real, playable catalog result, never AI-invented. Excludes songs already liked or recently played. `404` if the listener has no liked/recent/current song yet (nothing to infer from). `503` if no AI provider is configured.
-
-Cascade for both: **Gemini → OpenRouter → NVIDIA → Groq → Bedrock**, first success wins. All optional — with none configured, both routes degrade to `503` and nothing else in the app is affected.
+Ranks the catalog's suggestions with the listener's liked/recent songs, artists, and languages. Every
+result is a real playable catalog row, never an invented model result. Excludes already-liked or
+recently played recordings. `404` means there is no listening context yet. The legacy
+`/api/ai/recommendations` path is an alias for compatibility.
 
 ## Accounts, taste and sharing — additive, shipped 2026-09-21
 
@@ -222,7 +194,7 @@ fresh guest session.
 | `POST /api/me/taste/seed` | Bearer | `{ artists: string[] (<=30), languages: string[] (<=8) }` → same as `GET`. Onboarding: strong weight, sets `onboarded: true`. |
 | `POST /api/me/taste/signal` | Bearer | `{ songId, seconds }` → `204`. How long a song was really listened to: `<10 s` counts against the artist, most of a song counts for them. |
 
-Taste is also updated **automatically** by existing routes (it never fails them; a lookup error leaves taste unchanged): `POST /api/me/recently-played` (+0.3 when `playDuration` is 0, else by listened time), `POST /api/me/liked` (+3), `DELETE /api/me/liked/:songId` (−2), `POST /api/libraries/:id/songs` (+2). Scores decay ×0.985 on every signal, so recent listening outweighs old. Artist credits: headline artist full weight, featured artists half. `GET /api/ai/recommendations` now also sends the top artists/languages to the model.
+Taste is also updated **automatically** by existing routes (it never fails them; a lookup error leaves taste unchanged): `POST /api/me/recently-played` (+0.3 when `playDuration` is 0, else by listened time), `POST /api/me/liked` (+3), `DELETE /api/me/liked/:songId` (−2), `POST /api/libraries/:id/songs` (+2). Scores decay ×0.985 on every signal, so recent listening outweighs old. Artist credits: headline artist full weight, featured artists half. Recommendations consume this local taste context directly.
 
 ### Sharing a playlist
 
@@ -239,7 +211,7 @@ Codes are 8 characters from `abcdefghjkmnpqrstuvwxyz23456789`.
 
 | Endpoint | Auth | Body → response |
 |---|---|---|
-| `POST /api/uploads/sign` | Bearer (owner) | `{ libraryId, contentType: "image/jpeg"\|"image/png"\|"image/webp", contentLength }` → `{ uploadUrl, coverKey, coverUrl, headers: { "Content-Type", "Content-Length" }, expiresInSeconds }`. Browser `PUT`s the bytes straight to `uploadUrl` with those exact headers, then `PATCH /api/libraries/:id` with `{ coverKey }`. `400` if type/size invalid (`contentLength` 1..2 MB). `503` if S3 is not configured. No AWS keys ever reach the browser. |
+| `POST /api/uploads/sign` | Bearer (owner) | `{ libraryId }` → `{ uploadUrl, coverKey }`. The browser uploads the image to the short-lived Convex upload URL, then `PATCH`es the library with its `coverKey`. `503` if Convex is not configured. |
 
 ## Errors
 

@@ -4,19 +4,22 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 
-import type { AiConfig, KaraokeAwsConfig, MusicBrainzConfig, UploadsConfig } from './config.js';
+import type { MusicBrainzConfig, TranslationConfig } from './config.js';
 import { createServices, type AppServices } from './services.js';
 import type { CacheStore } from './lib/cache.js';
 import { createLogger, REDACTED_PATHS } from './lib/logger.js';
-import { aiRouter } from './routes/ai.js';
 import { artworkRouter } from './routes/artwork.js';
 import { authRouter } from './routes/auth.js';
 import { catalogRouter } from './routes/catalog.js';
+import { discoveryRouter } from './routes/discovery.js';
 import { sendFailure } from './routes/common.js';
 import { lyricsRouter } from './routes/lyrics.js';
 import { mcpRouter } from './mcp/server.js';
+import { OAuthClients } from './oauth/clients.js';
+import { oauthRouter } from './oauth/router.js';
+import { OAuthSigner } from './oauth/tokens.js';
+import { MemoryCacheStore } from './lib/cache.js';
 import { sharedRouter } from './routes/shared.js';
-import { karaokeRouter } from './routes/karaoke.js';
 import { streamRouter } from './routes/stream.js';
 import { uploadsRouter } from './routes/uploads.js';
 import { userRouter } from './routes/user.js';
@@ -40,18 +43,18 @@ export interface AppOptions {
   readonly lyricaApiUrl?: string;
   readonly betterLyricsApiUrl?: string;
   readonly betterLyricsApiKey?: string;
-  readonly karaoke?: KaraokeAwsConfig;
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
-  readonly ai?: AiConfig;
-  readonly uploads?: UploadsConfig;
+  readonly translation?: TranslationConfig;
   readonly cacheStore?: CacheStore;
   readonly fetchImpl?: typeof fetch;
   readonly rateLimit?: false | {
     readonly api?: RateLimitConfig;
     readonly stream?: RateLimitConfig;
     readonly auth?: RateLimitConfig;
-    readonly ai?: RateLimitConfig;
+    readonly discovery?: RateLimitConfig;
+    readonly mcp?: RateLimitConfig;
+    readonly oauth?: RateLimitConfig;
   };
   readonly enableRequestLogging?: boolean;
 }
@@ -61,18 +64,25 @@ export function createApp(options: AppOptions): Express {
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
   app.use(helmet());
-  app.use(
-    cors({
-      /*
-       * A string origin makes cors echo the header unconditionally; an array makes
-       * it echo only on a match. Keep the string form whenever there is exactly one
-       * origin so production behaviour is byte-identical, and only widen to an
-       * array when development actually added a sibling host.
-       */
-      origin: resolveCorsOrigin(options),
-      credentials: false
-    })
-  );
+  // MCP clients (some run in a browser) call discovery, registration, token and the MCP endpoint
+  // from their own origin. Those carry no cookies and are bearer- or PKCE-protected, so any origin
+  // may call them; everything else stays locked to the app's origin.
+  const openCors = cors({ origin: '*', credentials: false, exposedHeaders: ['WWW-Authenticate', 'Mcp-Session-Id'] });
+  const appCors = cors({
+    /*
+     * A string origin makes cors echo the header unconditionally; an array makes
+     * it echo only on a match. Keep the string form whenever there is exactly one
+     * origin so production behaviour is byte-identical, and only widen to an
+     * array when development actually added a sibling host.
+     */
+    origin: resolveCorsOrigin(options),
+    credentials: false
+  });
+  app.use((request, response, next) => {
+    const path = request.path;
+    const open = path.startsWith('/.well-known/') || path === '/api/mcp' || path === '/api/oauth/token' || path === '/api/oauth/register';
+    (open ? openCors : appCors)(request, response, next);
+  });
 
   if (options.enableRequestLogging) {
     app.use(
@@ -94,11 +104,9 @@ export function createApp(options: AppOptions): Express {
     ...(options.lyricaApiUrl ? { lyricaApiUrl: options.lyricaApiUrl } : {}),
     ...(options.betterLyricsApiUrl ? { betterLyricsApiUrl: options.betterLyricsApiUrl } : {}),
     ...(options.betterLyricsApiKey ? { betterLyricsApiKey: options.betterLyricsApiKey } : {}),
-    ...(options.karaoke ? { karaoke: options.karaoke } : {}),
-    ...(options.uploads ? { uploads: options.uploads } : {}),
     ...(options.convexUrl ? { convexUrl: options.convexUrl } : {}),
     ...(options.convexServerSecret ? { convexServerSecret: options.convexServerSecret } : {}),
-    ...(options.ai ? { ai: options.ai } : {}),
+    ...(options.translation ? { translation: options.translation } : {}),
     ...(options.cacheStore ? { cacheStore: options.cacheStore } : {}),
     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
   });
@@ -117,13 +125,20 @@ export function createApp(options: AppOptions): Express {
   app.use('/api', artworkRouter(services.artwork));
   app.use('/api', lyricsRouter(services.lyrics));
   app.use('/api', streamRouter(services.stream));
-  app.use('/api', karaokeRouter(services.karaoke));
   app.use('/api', authRouter(services.auth));
-  app.use('/api', userRouter(services.auth, services.catalog, options.uploads?.publicBaseUrl));
-  app.use('/api', sharedRouter(services.auth, services.catalog, options.uploads?.publicBaseUrl));
-  app.use('/api', uploadsRouter(services.auth, options.uploads));
-  app.use('/api', aiRouter(services.translation, services.recommendations, services.auth, services.catalog));
-  app.use(mcpRouter(services));
+  app.use('/api', userRouter(services.auth, services.catalog, services.covers));
+  app.use('/api', sharedRouter(services.auth, services.catalog));
+  app.use('/api', uploadsRouter(services.auth, services.covers));
+  app.use('/api', discoveryRouter(services.translation, services.recommendations, services.auth, services.catalog));
+  const signer = new OAuthSigner(options.jwtSecret ?? process.env.JWT_SECRET ?? 'local-development-only');
+  app.use(oauthRouter({
+    auth: services.auth,
+    signer,
+    clients: new OAuthClients(signer, options.cacheStore ?? new MemoryCacheStore(), options.fetchImpl ?? fetch),
+    ledger: services.grants,
+    requireAccount: services.accountsEnabled
+  }));
+  app.use('/api', mcpRouter(services, signer));
 
   app.use((_request, response) => {
     response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
@@ -138,24 +153,37 @@ function createRateLimiter(config: AppOptions['rateLimit']): (request: Request, 
   const api = limiter(limits.api ?? { windowMs: 60_000, limit: 300 });
   const stream = limiter(limits.stream ?? { windowMs: 60_000, limit: 300 });
   const auth = limiter(limits.auth ?? { windowMs: 60_000, limit: 30 });
-  // Bedrock/translate are the spendy paths — keep them well under the general API budget.
-  const ai = limiter(limits.ai ?? { windowMs: 60_000, limit: 20 });
+  // Translation spends a shared daily provider quota and recommendations fan out to the catalog.
+  const discovery = limiter(limits.discovery ?? { windowMs: 60_000, limit: 20 });
+  // A connected assistant can call tools in quick bursts, but not unboundedly.
+  const mcp = limiter(limits.mcp ?? { windowMs: 60_000, limit: 120 });
+  // Sign-in, code exchange and client registration: a handful per connect.
+  const oauth = limiter(limits.oauth ?? { windowMs: 60_000, limit: 30 });
 
   return (request, response, next) => {
-    if (request.path === '/api/health') {
+    const path = request.path;
+    if (path === '/api/health' || path.startsWith('/.well-known/')) {
       next();
       return;
     }
-    if (request.path.startsWith('/api/stream')) {
+    if (path.startsWith('/api/stream')) {
       stream(request, response, next);
       return;
     }
-    if (request.path.startsWith('/api/auth')) {
+    if (path.startsWith('/api/auth')) {
       auth(request, response, next);
       return;
     }
-    if (request.path.startsWith('/api/ai')) {
-      ai(request, response, next);
+    if (path.startsWith('/api/oauth')) {
+      oauth(request, response, next);
+      return;
+    }
+    if (path === '/api/mcp') {
+      mcp(request, response, next);
+      return;
+    }
+    if (path.startsWith('/api/ai') || path === '/api/lyrics/translate' || path === '/api/recommendations') {
+      discovery(request, response, next);
       return;
     }
     api(request, response, next);

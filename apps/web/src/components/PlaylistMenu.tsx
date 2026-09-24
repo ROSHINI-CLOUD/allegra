@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 
 import type { UnifiedSong } from '@shared/types';
 
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { usePlaylistsContext } from '../hooks/usePlaylists';
 import { IconButton, TactileButton } from './ui';
 
@@ -18,6 +19,7 @@ export function PlaylistMenu({ song }: { readonly song: UnifiedSong }) {
   const { playlists, actionError, create, toggleSong } = usePlaylistsContext();
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -31,6 +33,10 @@ export function PlaylistMenu({ song }: { readonly song: UnifiedSong }) {
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [open]);
+
+  // Runs after the effect above, so the close-button autofocus already happened by
+  // the time this checks for it; it only adds the Tab cycle and focus-restore-on-close.
+  useFocusTrap(open, sheetRef);
 
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
@@ -49,7 +55,7 @@ export function PlaylistMenu({ song }: { readonly song: UnifiedSong }) {
       <IconButton icon={ListPlus} label={`Save ${song.title} to a playlist`} onClick={() => setOpen(true)} />
       {open ? (
         <div className="sheet-backdrop" onClick={() => setOpen(false)}>
-          <div className="playlist-sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(event) => event.stopPropagation()}>
+          <div ref={sheetRef} className="playlist-sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(event) => event.stopPropagation()}>
             <div className="playlist-sheet-head">
               <div>
                 <h2 id={titleId}>Save to playlist</h2>

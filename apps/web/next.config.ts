@@ -16,7 +16,31 @@ const config: NextConfig = {
   // Express app is a function at /api (see vercel.json), so nothing is proxied.
   async rewrites() {
     if (process.env.NODE_ENV !== 'development') return [];
-    return [{ source: '/api/:path*', destination: 'http://127.0.0.1:8080/api/:path*' }];
+    return [
+      { source: '/api/:path*', destination: 'http://127.0.0.1:8080/api/:path*' },
+      // MCP OAuth discovery lives at the site root (see vercel.json for production).
+      { source: '/.well-known/oauth-protected-resource/:path*', destination: 'http://127.0.0.1:8080/.well-known/oauth-protected-resource/:path*' },
+      { source: '/.well-known/oauth-protected-resource', destination: 'http://127.0.0.1:8080/.well-known/oauth-protected-resource' },
+      { source: '/.well-known/oauth-authorization-server', destination: 'http://127.0.0.1:8080/.well-known/oauth-authorization-server' }
+    ];
+  },
+  // No Content-Security-Policy here on purpose: this app leans on WebGL shaders, Convex,
+  // Google OAuth redirects, external artwork/CDN images and Next's own inline hydration
+  // scripts, and getting a CSP right for all of that needs live browser verification. A
+  // broken CSP (blank page, broken auth, broken audio) is worse than no CSP — tracked
+  // separately rather than shipped unverified.
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' }
+        ]
+      }
+    ];
   }
 };
 

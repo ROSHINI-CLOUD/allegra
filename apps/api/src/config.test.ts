@@ -53,56 +53,33 @@ test('production accepts a complete trusted configuration', () => {
   assert.equal(config.allowedOrigin, 'https://app.example');
   assert.equal(config.saavnApiUrl, 'https://saavn.example/api');
   assert.equal(config.enableRequestLogging, true);
-  assert.equal(config.uploads, undefined);
+  assert.equal(config.translation, undefined);
 });
 
-test('DDB_TABLE_CACHE loads a cache config and requires a region', () => {
-  assert.throws(
-    () => loadConfig({
-      NODE_ENV: 'development',
-      DDB_TABLE_CACHE: 'allegra-cache-dev'
-    }),
-    /DDB_TABLE_CACHE requires AWS_REGION/
-  );
+test('translation settings are optional and a malformed contact is ignored', () => {
+  const config = loadConfig({ NODE_ENV: 'development', TRANSLATION_CONTACT_EMAIL: 'ops@example.com' });
+  assert.deepEqual(config.translation, { contactEmail: 'ops@example.com' });
+  const bad = loadConfig({ NODE_ENV: 'development', TRANSLATION_CONTACT_EMAIL: 'not an email' });
+  assert.deepEqual(bad.translation, {});
+});
 
+test('a LibreTranslate fallback is optional, URL-validated, and never requires a key', () => {
+  const config = loadConfig({ NODE_ENV: 'development', LIBRETRANSLATE_API_URL: 'https://translate.example' });
+  assert.deepEqual(config.translation, { fallbackBaseUrl: 'https://translate.example' });
+  assert.throws(
+    () => loadConfig({ NODE_ENV: 'production', ALLEGRA_ORIGIN: 'https://app.example', JWT_SECRET: 'test-only-secret', SAAVN_API_URL: 'https://saavn.example/api', LIBRETRANSLATE_API_URL: 'http://127.0.0.1:5000' }),
+    /LIBRETRANSLATE_API_URL/
+  );
+});
+
+test('no AWS settings are read any more', () => {
   const config = loadConfig({
     NODE_ENV: 'development',
     AWS_REGION: 'ap-south-1',
     AWS_ACCESS_KEY_ID: 'AKIAEXAMPLE',
     AWS_SECRET_ACCESS_KEY: 'secret',
-    DDB_TABLE_CACHE: 'allegra-cache-dev'
-  });
-  assert.deepEqual(config.cache, {
-    tableName: 'allegra-cache-dev',
-    region: 'ap-south-1',
-    accessKeyId: 'AKIAEXAMPLE',
-    secretAccessKey: 'secret'
-  });
-});
-
-test('S3 cover uploads load only when every required piece is present', () => {
-  assert.throws(
-    () => loadConfig({
-      NODE_ENV: 'development',
-      S3_COVERS_BUCKET: 'allegra-covers'
-    }),
-    /S3 cover uploads need/
-  );
-
-  const config = loadConfig({
-    NODE_ENV: 'development',
-    AWS_ACCESS_KEY_ID: 'AKIAEXAMPLE',
-    AWS_SECRET_ACCESS_KEY: 'secret',
-    AWS_REGION: 'us-east-1',
-    S3_COVERS_BUCKET: 'allegra-covers',
-    S3_COVERS_PUBLIC_BASE_URL: 'https://cdn.example/'
-  });
-  assert.deepEqual(config.uploads, {
-    bucket: 'allegra-covers',
-    region: 'us-east-1',
-    publicBaseUrl: 'https://cdn.example',
-    accessKeyId: 'AKIAEXAMPLE',
-    secretAccessKey: 'secret',
-    expiresInSeconds: 120
-  });
+    DDB_TABLE_CACHE: 'allegra-cache-dev',
+    S3_COVERS_BUCKET: 'allegra-covers'
+  }) as unknown as Record<string, unknown>;
+  for (const key of ['cache', 'uploads', 'karaoke', 'ai']) assert.equal(config[key], undefined, key);
 });

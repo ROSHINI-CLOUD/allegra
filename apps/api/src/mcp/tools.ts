@@ -131,7 +131,7 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
       if (!song) return fail("Couldn't find that song.");
       const payload = await lyrics.find(song.title, song.artist, song.duration, false);
       if (!payload || payload.lines.length === 0) return fail('No lyrics to translate for this song.');
-      const result = await translation.translate(payload.lines, song.title, song.artist, args.targetLanguage ?? 'English');
+      const result = await translation.translate(payload.lines, song.title, song.artist, args.targetLanguage ?? 'English', song.language);
       if (!result) return fail('Could not translate this song right now.');
       return ok(result);
     })
@@ -179,7 +179,7 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
     'add_song_to_playlist',
     {
       description: 'Add a song to one of the listener’s existing playlists.',
-      inputSchema: { playlistId: z.string().min(1), songId: SONG_ID }
+      inputSchema: { playlistId: z.string().min(1).max(80), songId: SONG_ID }
     },
     bound(async (args, caller) => {
       const index = caller.user.libraries.findIndex((library) => library.id === args.playlistId);
@@ -197,7 +197,7 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
 
   server.registerTool(
     'share_playlist',
-    { description: 'Create (or fetch the existing) share link for one of the listener’s playlists. This makes the playlist public.', inputSchema: { playlistId: z.string().min(1) } },
+    { description: 'Create (or fetch the existing) share link for one of the listener’s playlists. This makes the playlist public.', inputSchema: { playlistId: z.string().min(1).max(80) } },
     bound(async (args, caller) => {
       const library = caller.user.libraries.find((item) => item.id === args.playlistId);
       if (!library) return fail("Couldn't find that playlist.");

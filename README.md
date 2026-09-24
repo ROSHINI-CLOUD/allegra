@@ -20,7 +20,7 @@ Browser  (Next.js App Router · React 19 · Motion)
                |-- iTunes Search       artwork
                |-- LRCLIB (+ Lyrica)   time-synced lyrics
                |-- Convex              Google sign-in, likes, recents, playlists
-               `-- AWS Batch           GPU stem separation for Sing (S3-cached)
+               `-- Browser worker      on-device karaoke separation
 ```
 
 **Why the API is still Express and not route handlers:** `GET /api/stream/:id` proxies audio and must
@@ -47,9 +47,9 @@ cp apps/api/.env.example apps/api/.env      # works as-is; no keys needed
 npm run dev                                  # web :5173 · api :8080
 ```
 
-Open http://localhost:5173. No keys are needed to search and play. Guest data stays in memory until
-you set up Convex, and Sing stays hidden until the AWS karaoke stack is configured — see
-[`docs/workflows.md`](docs/workflows.md).
+Open http://localhost:5173. No keys are needed to search, play, translate lyrics, get
+recommendations, or use Karaoke. Guest data stays in memory until you set up Convex; Karaoke runs
+on the listener's device — see [`docs/workflows.md`](docs/workflows.md).
 
 ```bash
 npm run typecheck && npm run lint && npm test
@@ -74,7 +74,7 @@ Keyboard: `Space` play/pause, `←` `→` seek 5 s, `⌘/Ctrl K` search, `Esc` c
 | Catalog, audio, seek, artwork, lyrics | **Real** |
 | Guest sessions, likes, recently played, playlists | **Real**, persisted in Convex when configured |
 | **Google sign-in** | **Real when Convex Auth is configured** — guest data merges into the account on first sign-in. Guest-only otherwise. Setup: [`docs/auth-convex-google.md`](docs/auth-convex-google.md) |
-| **Sing / Karaoke** (dual stems) | **Real when AWS Batch + karaoke bucket env are set** — Spot GPU separates vocals + instrumental once, cached on S3, mixed in the browser with GainNodes. Hidden (API 503) when unset. Decisions: [`docs/karaoke-aws-decisions.md`](docs/karaoke-aws-decisions.md) |
+| **Karaoke** | **On-device** — a browser worker uses Mel-Band RoFormer when supported and falls back to mid-side vocal reduction. No track audio, model request, or cloud GPU is sent through the API. |
 | Premium page | **UI demo only** — no payments |
 | AI "set the mood" | **Not built.** The mood pills run a plain search |
 
@@ -93,5 +93,5 @@ commercial music service and is not pitched as one. The `UnifiedSong` normalisat
 ## AI coding tools
 
 - **Claude Code (Anthropic)**: planning, implementation and review across the API, the web app, the
-  Convex setup and the AWS karaoke pipeline. Every change was run through typecheck, lint and tests,
+  Convex setup and the on-device karaoke pipeline. Every change was run through typecheck, lint and tests,
   and behaviour that is visible in a browser was checked in a browser.

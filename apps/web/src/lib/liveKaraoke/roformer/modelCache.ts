@@ -71,40 +71,70 @@ async function downloadFile(
   return out.buffer;
 }
 
+/** Graph + weights exactly as ORT wants them: bytes in memory, or same-origin URLs. */
+export interface RoformerModelFiles {
+  readonly graph: Uint8Array | string;
+  readonly data: Uint8Array | string;
+  readonly fromCache: boolean;
+}
+
 /**
- * Ensure RoFormer weights are verified in OPFS, then return a model URL ORT can load.
- * Session uses HuggingFace resolve URL so the sibling `.onnx.data` resolves correctly.
- * Prefer `/models/roformer/...` when the operator has vendored files locally.
+ * A vendored copy counts only if it is really the model. Next's catch-all answers any
+ * unknown path with the app's HTML and a 200, which would otherwise pass for the graph.
+ */
+async function hasLocalModel(path: string, bytes: number, signal?: AbortSignal): Promise<boolean> {
+  try {
+    const head = await fetch(path, { method: 'HEAD', signal });
+    const type = head.headers.get('content-type') ?? '';
+    return (
+      head.ok &&
+      !type.includes('text/html') &&
+      Number(head.headers.get('content-length') || 0) === bytes
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve the RoFormer graph and its external weights. Order: vendored files under
+ * `/models/roformer/`, then the OPFS cache, then a verified download from the pinned
+ * Hugging Face commit (cached to OPFS for next time).
  */
 export async function ensureRoformerModel(
   onProgress?: (p: ModelProgress) => void,
   signal?: AbortSignal
-): Promise<{ modelUrl: string; fromCache: boolean }> {
+): Promise<RoformerModelFiles> {
   onProgress?.({ phase: 'checking', ratio: 0.02 });
 
-  const localGraph = `/models/roformer/${ROFORMER_MODEL.graphFile}`;
-  try {
-    const head = await fetch(localGraph, { method: 'HEAD', signal });
-    if (head.ok) {
-      onProgress?.({ phase: 'ready', ratio: 1, message: 'Using local model' });
-      return { modelUrl: localGraph, fromCache: true };
-    }
-  } catch {
-    /* continue */
+  // Absolute: inside a worker a relative path resolves against the worker script, not the site.
+  const localDir = `${globalThis.location.origin}/models/roformer`;
+  const localGraph = `${localDir}/${ROFORMER_MODEL.graphFile}`;
+  const localData = `${localDir}/${ROFORMER_MODEL.dataFile}`;
+  if (
+    (await hasLocalModel(localGraph, ROFORMER_MODEL.graphBytes, signal)) &&
+    (await hasLocalModel(localData, ROFORMER_MODEL.dataBytes, signal))
+  ) {
+    onProgress?.({ phase: 'ready', ratio: 1, message: 'Using local model' });
+    return { graph: localGraph, data: localData, fromCache: true };
   }
 
   const cachedGraph = await readOpfsFile(ROFORMER_MODEL.graphFile);
   const cachedData = await readOpfsFile(ROFORMER_MODEL.dataFile);
-  if (cachedGraph && cachedData) {
-    const gOk = (await sha256Hex(cachedGraph)) === ROFORMER_MODEL.graphSha256;
-    const dOk = (await sha256Hex(cachedData)) === ROFORMER_MODEL.dataSha256;
-    if (gOk && dOk) {
-      onProgress?.({ phase: 'ready', ratio: 1, message: 'OPFS cache verified' });
-      return {
-        modelUrl: `${ROFORMER_MODEL.baseUrl}/${ROFORMER_MODEL.graphFile}`,
-        fromCache: true
-      };
-    }
+  if (
+    cachedGraph &&
+    cachedData &&
+    cachedData.byteLength === ROFORMER_MODEL.dataBytes &&
+    (await sha256Hex(cachedGraph)) === ROFORMER_MODEL.graphSha256
+  ) {
+    // Weights were hashed when written; a size check catches a truncated write
+    // without re-hashing 740 MB on every play.
+    onProgress?.({ phase: 'ready', ratio: 1, message: 'OPFS cache verified' });
+    return {
+      graph: new Uint8Array(cachedGraph),
+      data: new Uint8Array(cachedData),
+      fromCache: true
+    };
   }
 
   onProgress?.({
@@ -159,7 +189,8 @@ export async function ensureRoformerModel(
 
   onProgress?.({ phase: 'ready', ratio: 1 });
   return {
-    modelUrl: `${ROFORMER_MODEL.baseUrl}/${ROFORMER_MODEL.graphFile}`,
+    graph: new Uint8Array(graphBuf),
+    data: new Uint8Array(dataBuf),
     fromCache: false
   };
 }

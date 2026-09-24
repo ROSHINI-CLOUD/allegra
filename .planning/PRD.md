@@ -33,7 +33,7 @@ where the existing players are weakest at search.
 | Library | Likes, playlists, recently played, shareable playlist links |
 | Taste | Learned from real listening time, not just taps; drives Home |
 | Radio / suggestions | Continues past the end of a queue without repeating remasters |
-| **Sing (karaoke)** | Two AI-separated stems mixed locally; vocals slider from 0–100% |
+| **Karaoke** | Real-time, on-device vocal reduction with a worker-first path and local fallback |
 | **Google sign-in** | Via Convex Auth; guest data merges into the account on first sign-in |
 | Real URLs | Every view is shareable: `/discover`, `/artist/[name]`, `/playlist/[id]`, `/shared/[code]` |
 
@@ -45,35 +45,26 @@ where the existing players are weakest at search.
 
 - Native apps, offline downloads, social features, collaborative playlists.
 
-## Sing — the one genuinely hard feature
+## Karaoke — the one genuinely hard feature
 
-**Requirement.** A listener can turn the voice down on any song and sing over it, without waiting on
-anything after the first time, and without the app ever restarting the track.
+**Requirement.** A listener can reduce the voice in real time without uploading track audio, waiting
+for a cloud job, or restarting the track.
 
 **What that demands**
 
-1. Two stems (`vocals`, `instrumental`) that are **sample-aligned**. A drift of even a second makes
-   the feature unusable, so misaligned output fails the job rather than shipping quietly.
-2. Moving a slider must **never** contact the network or run a model. It changes a gain value.
-3. Entering Sing mode preserves position, play state, lyrics position, volume and queue. No restart.
-4. A song is separated **once, ever**. Same song + same source + same model version reuses the stems,
-   for every listener, forever.
-5. Under load, 100 people pressing Sing on the same uncached song must produce **one** GPU job.
-
-**Cost.** Target under ₹20 per ~4-minute song, ideally ₹1–5. Unverified until measured on real runs;
-`docs/karaoke-aws-cost-benchmark.md` is deliberately empty until then. No cost number is ever
-hardcoded into product behaviour.
-
-**Quality.** The metric that matters is how the instrumental sounds with vocals at 0% — leakage,
-metallic artefacts, damaged instruments. Secondary is how clean the isolated vocal is. To be judged by
-listening across Tamil, Hindi and English material, male and female vocals, duets, heavy reverb,
-backing vocals, dense film mixes and older recordings.
+1. The browser worker starts near the playhead and keeps the existing audio element as the transport
+   clock, so play/pause, seek, queue, and lyrics remain stable.
+2. The model runs only on the listener's device. If WebGPU, WASM, memory, track size, or throughput
+   is insufficient, a local mid-side reduction is the fallback; the app never silently sends audio
+   to a third party.
+3. The quality bar is an instrumental with tolerable vocal leakage and no severe damage to drums or
+   bass. Validate across Hindi, Tamil, and English tracks, including duets and dense film mixes.
 
 ## Constraints
 
 - **Vercel only.** One deployment serves the Next.js app and the Express API. No Render, no App Runner.
-- **AWS is for karaoke only** (Batch, Spot GPU, S3, ECR, IAM, CloudWatch), plus optional Bedrock and
-  a cache table. No always-on GPU. Capacity scales to zero.
+- **No AWS runtime or paid LLMs.** Karaoke stays on-device; recommendations use the catalog and
+  listener taste; translation uses free machine-translation providers.
 - **Convex owns identity and listener data.**
 - **No secret may reach the browser.** `NEXT_PUBLIC_*` is public by definition.
 - Accessible: keyboard reachable, visible focus, honest `aria` state, colour never the only signal.

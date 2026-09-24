@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, ChevronRight, House, Heart as HeartIcon, Moon, Sun, Disc3, Pause, Play, SkipBack, SkipForward, Sparkles, Waves, Clock, Compass, Library as LibraryIcon, ListMusic, PanelLeftClose, PanelLeftOpen, Repeat, Repeat1, Shuffle, Volume2, VolumeX, X } from 'lucide-react';
+import { ArrowLeft, ChevronRight, House, Heart as HeartIcon, Moon, Sun, Disc3, Pause, Play, SkipBack, SkipForward, Sparkles, Waves, Clock, Compass, Library as LibraryIcon, ListMusic, PanelLeftClose, PanelLeftOpen, Repeat, Repeat1, Search as SearchIcon, Shuffle, Volume2, VolumeX, X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -30,7 +30,6 @@ import { SongCard } from './components/SongCard';
 import { Artwork, EmptyState, IconButton, OfflineToast, SkeletonCard, TactileButton } from './components/ui';
 import { useAccount, useListenTracker } from './hooks/useAccount';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
-import { useKaraoke } from './hooks/useKaraoke';
 import { useLiveKaraoke } from './hooks/useLiveKaraoke';
 import { useMediaSession } from './hooks/useMediaSession';
 import { useNarrowViewport } from './hooks/useNarrowViewport';
@@ -181,20 +180,9 @@ export default function App() {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const lyricsGeneration = useRef(0);
   const audio = useAudioPlayer();
-  // Stable identity across renders: useKaraoke depends on this object by reference, and
-  // audio.currentTime updates (every audio timeupdate tick) re-render App constantly —
-  // a fresh object literal here re-fires useKaraoke's status-fetch effect on every one of
-  // those renders, which was hammering GET /api/songs/:id/karaoke in a tight loop.
-  const karaokePlayback = useMemo(() => ({
-    enterSingMode: audio.enterSingMode,
-    exitSingMode: audio.exitSingMode,
-    setSingGains: audio.setSingGains,
-    swapAudioSource: audio.swapAudioSource
-  }), [audio.enterSingMode, audio.exitSingMode, audio.setSingGains, audio.swapAudioSource]);
-  const karaoke = useKaraoke(audio.currentSong, karaokePlayback);
   const liveKaraoke = useLiveKaraoke(audio.currentSong, {
-    swapAudioSource: audio.swapAudioSource,
-    singActive: audio.singActive
+    audioRef: audio.audioRef,
+    swapAudioSource: audio.swapAudioSource
   });
   const hasSongLoaded = audio.currentSong !== null;
   const playlists = usePlaylists();
@@ -1083,7 +1071,7 @@ export default function App() {
         ) : view === 'library' ? <LibraryPage likedSongs={likedSongs} recentlyPlayed={recentlyPlayed} likedIds={likedIds} loading={personalLoading} error={personalError} actionError={personalActionError} currentSongId={audio.currentSong?.id} isPlaying={audio.isPlaying} onPlay={playSong} onLike={toggleLike} onRetry={() => void loadPersonalSpace()} onDiscover={() => { router.push(paths.discover); window.setTimeout(() => setPaletteOpen(true), 0); }} /> : view === 'liked' ? <CollectionPage kind="liked" title="Liked Songs" songs={likedSongs} loading={personalLoading} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onToggle={audio.togglePlayback} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={(shuffle) => playAlbumTracks(likedSongs, shuffle)} onLike={toggleLike} onOpenAlbum={openAlbum} onDiscover={() => { router.push(paths.discover); window.setTimeout(() => setPaletteOpen(true), 0); }} /> : view === 'playlist' ? <CollectionPage kind="playlist" title={activePlaylist?.name ?? (playlists.loading ? 'Playlist' : 'Playlist not found')} songs={activePlaylistSongs} loading={playlists.loading || (activePlaylist !== null && activePlaylistSongs.length < activePlaylist.songIds.length)} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onToggle={audio.togglePlayback} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={(shuffle) => playAlbumTracks(activePlaylistSongs, shuffle)} onLike={toggleLike} onOpenAlbum={openAlbum} onDiscover={() => { router.push(paths.discover); window.setTimeout(() => setPaletteOpen(true), 0); }} {...(activePlaylist ? { onDelete: () => { void playlists.remove(activePlaylist.id); router.push(paths.library); }, share: { libraryId: activePlaylist.id, isPublic: activePlaylist.isPublic, onChanged: () => { void playlists.reload(); } }, cover: { libraryId: activePlaylist.id, ...(activePlaylist.coverUrl ? { coverUrl: activePlaylist.coverUrl } : {}), onUpload: playlists.setCover } } : {})} /> : view === 'artist' && artistName ? <ArtistPage name={artistName} profile={artistProfile} photoFallback={faces[artistName.toLocaleLowerCase()] || null} songs={artistTracks} related={relatedArtists} loading={artistLoading && artistTracks.length === 0} error={artistTracks.length === 0 ? artistError : null} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onBack={() => goBack(paths.discover)} onRetry={() => setArtistReload((count) => count + 1)} onToggle={audio.togglePlayback} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={(shuffle) => playAlbumTracks(artistTracks, shuffle)} onLike={toggleLike} onOpenAlbum={openAlbumByName} onOpenArtist={openArtist} /> : view === 'album' && albumSeed ? <AlbumPage seed={albumSeed} tracks={albumTracks} palette={palette} currentSongId={audio.currentSong?.id ?? null} isPlaying={audio.isPlaying} likedIds={likedIds} onPlayTrack={(song, queue) => playSong(song, queue)} onPlayAll={() => playAlbumTracks(albumTracks, false)} onShuffle={() => playAlbumTracks(albumTracks, true)} onLike={toggleLike} onLikeAlbum={() => toggleLike(albumSeed)} albumLiked={likedIds.has(albumSeed.id)} /> : <>
         <div className="browse-grid">
           <div className="browse-main">
-            <motion.section className="hero-banner" variants={pageVariants} initial="hidden" animate="visible" transition={pageTransition} aria-label="Featured track" data-live={audio.isPlaying ? 'true' : undefined}>
+            <motion.section className="hero-banner" variants={pageVariants} initial="hidden" animate="visible" transition={pageTransition} aria-label="Featured track" data-live={audio.isPlaying ? 'true' : undefined} data-searching={isSearching ? 'true' : undefined}>
                  <div className="hero-banner-shader" aria-hidden="true"><MusicFlowShader energy={0.55} palette={bannerPalette} light={theme === 'light'} /></div>
               <motion.div className="hero-banner-copy" variants={itemVariants}>
                 <span className="hero-banner-eyebrow">{isCurrent ? 'Now playing' : 'Curated playlist'}</span>
@@ -1166,11 +1154,33 @@ export default function App() {
         ) : null}
       </AnimatePresence>
 
+      {/* Phone tab bar (Apple HIG / Material navigation-bar pattern): four labelled destinations,
+          navigation only. CSS shows it under 900px, where the mini player docks on top of it as a
+          shelf and the desktop rail's links give way to it. */}
+      <nav className="bottom-nav" aria-label="Primary">
+        <Link className={`bottom-nav__item${view === 'home' || view === 'shared' ? ' is-active' : ''}`} href={paths.home} aria-current={view === 'home' ? 'page' : undefined}>
+          <House size={22} strokeWidth={1.7} aria-hidden="true" /><span>Home</span>
+        </Link>
+        <Link className={`bottom-nav__item${view === 'discover' || view === 'album' || view === 'artist' ? ' is-active' : ''}`} href={paths.discover} aria-current={view === 'discover' ? 'page' : undefined}>
+          <Compass size={22} strokeWidth={1.7} aria-hidden="true" /><span>Browse</span>
+        </Link>
+        <Link className={`bottom-nav__item${view === 'library' || view === 'playlist' || view === 'liked' ? ' is-active' : ''}`} href={paths.library} aria-current={view === 'library' ? 'page' : undefined}>
+          <LibraryIcon size={22} strokeWidth={1.7} aria-hidden="true" /><span>Library</span>
+        </Link>
+        <button type="button" className={`bottom-nav__item${paletteOpen ? ' is-active' : ''}`} aria-haspopup="dialog" onClick={() => setPaletteOpen(true)}>
+          <SearchIcon size={22} strokeWidth={1.7} aria-hidden="true" /><span>Search</span>
+        </button>
+      </nav>
+
       {audio.currentSong && !immersiveOpen ? (
         <motion.div
           className={`mini-player${queueOpen ? ' is-queue-open' : ''}`}
           role="region"
           aria-label="Player bar"
+          // Centred with translateX(-50%). Motion writes its own inline transform once a drag
+          // starts (any tap on play/pause), which would drop the CSS one and shove the bar right;
+          // handing it the offset keeps both in the one transform it writes.
+          style={{ x: '-50%' }}
           drag={isNarrowViewport && !reduced ? 'y' : false}
           dragConstraints={{ top: 0, bottom: 0 }}
           dragElastic={{ top: 0.3, bottom: 0 }}
@@ -1357,7 +1367,6 @@ export default function App() {
         suggestions={suggestions.length > 0 ? suggestions : aiPicks}
         muted={audio.isMuted}
         onMute={audio.toggleMute}
-        karaoke={karaoke}
         liveKaraoke={liveKaraoke}
         onCollapse={collapsePlayer}
         onOpenWorkspace={() => setPlayerMode('workspace')}

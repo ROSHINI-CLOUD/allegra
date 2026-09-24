@@ -1,14 +1,14 @@
 # Deployment
 
 One Vercel project serves everything: the Next.js app and the Express API, from a single build.
-AWS is used only for karaoke stem separation. Convex owns identity and listener data.
+Convex owns identity and listener data; Karaoke separation stays in the browser.
 
 ```
 Vercel  ──┬── apps/web            Next.js App Router (the app shell)
           └── /api/*  →  api/index.ts  →  apps/api (Express, one Function)
                             ├── JioSaavn / Gaana / iTunes / LRCLIB   catalog, artwork, lyrics
                             ├── Convex                               sign-in + listener data
-                            └── AWS Batch → S3                       Sing stems (optional)
+                            └── browser worker                       Karaoke separation (on-device)
 ```
 
 Full walkthrough: [`docs/workflows.md`](../docs/workflows.md).
@@ -83,14 +83,5 @@ curl -s https://allegravibe.vercel.app/api/health
 curl -sI -H "Range: bytes=0-1023" https://allegravibe.vercel.app/api/stream/<songId>   # expect 206
 ```
 
-## AWS
-
-The only AWS stack is karaoke: [`infra/aws/karaoke-batch.yaml`](./aws/karaoke-batch.yaml) — a
-Spot GPU Batch compute environment that scales to zero, a job queue and definition, a private S3
-bucket, an ECR repository, scoped IAM, CloudWatch logs and a budget alert.
-
-It is deployed **deliberately, by hand**, because a GPU job costs money. Steps, quota checks and
-the cost formula: [`docs/karaoke-aws-deploy.md`](../docs/karaoke-aws-deploy.md).
-
-With none of the karaoke env vars set, the Sing routes answer `503` and the button stays hidden.
-Everything else works.
+There is no infrastructure deployment for Karaoke. Its worker and optional local model cache are
+created by the browser and never send track audio to the API.

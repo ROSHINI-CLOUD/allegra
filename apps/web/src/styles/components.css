@@ -1546,11 +1546,20 @@ body::before { display: none; }
 }
 
 .np-art {
+  position: relative;
   width: min(100%, 380px);
   aspect-ratio: 1;
+}
+
+/* The sleeve. Clipping and shadow live here, not on the frame, so a cover can travel past the
+ * frame's edge while it changes and still keep its rounded corners and its own shadow. */
+.np-art__slide {
+  position: absolute;
+  inset: 0;
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 32px 80px rgba(0,0,0,0.55);
+  will-change: transform, opacity;
 }
 
 .np-art .artwork,
@@ -1905,3 +1914,6 @@ body::before { display: none; }
 .lyrics-teaser .ytm-lyrics__scroll--soft {
   padding-block: 150px 170px;
 }
+/* A cover changing track travels sideways past the frame. Clip that at the column so it can
+ * never widen a scroll container and nudge the header or title. `clip` makes no scroll box. */
+.now-playing { overflow-x: clip; }

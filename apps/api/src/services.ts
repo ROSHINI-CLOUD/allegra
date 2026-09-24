@@ -1,21 +1,15 @@
-import type { AiConfig, KaraokeAwsConfig, MusicBrainzConfig, UploadsConfig } from './config.js';
-import { AiClient } from './ai/aiClient.js';
-import { GeminiProvider } from './ai/providers/gemini.js';
-import { OpenAiCompatibleProvider } from './ai/providers/openaiCompatible.js';
-import { BedrockProvider } from './ai/providers/bedrock.js';
+import type { MusicBrainzConfig, TranslationConfig } from './config.js';
 import { ArtworkService } from './services/artwork.js';
-import { CacheKaraokeAssetStore } from './services/karaoke/asset-store.js';
-import { KaraokeService } from './services/karaoke/karaoke.service.js';
-import { AwsBatchStemSeparationProvider } from './services/karaoke/providers/aws-batch.provider.js';
-import { DEFAULT_SEPARATION_VERSION } from './services/karaoke/types.js';
 import { LyricsService } from './services/lyrics.js';
 import { RecommendationService } from './services/recommendations.js';
 import { TranslationService } from './services/translation.js';
 import { CatalogService } from './catalog/catalog.js';
-import { ConvexUserStore } from './db/convex.js';
+import { ConvexCoverStorage, ConvexGrantLedger, ConvexUserStore } from './db/convex.js';
+import { MemoryGrantLedger, type GrantLedger } from './oauth/ledger.js';
 import { AuthService } from './auth/auth.js';
 import { ConvexTokenVerifier, FirstMatchVerifier, GuestTokenVerifier, type TokenVerifier } from './auth/verifier.js';
 import { MemoryCacheStore, type CacheStore } from './lib/cache.js';
+import type { CoverStorage } from './lib/covers.js';
 import { StreamResolver } from './lib/streamResolver.js';
 import { GaanaProvider } from './providers/gaana.js';
 import { ItunesProvider } from './providers/itunes.js';
@@ -40,8 +34,6 @@ export interface ServiceOptions {
   readonly version?: string;
   /** Optional key: without it only already-cached songs resolve. */
   readonly betterLyricsApiKey?: string;
-  readonly karaoke?: KaraokeAwsConfig;
-  readonly uploads?: UploadsConfig;
   readonly cacheStore?: CacheStore;
   readonly userStore?: UserStore;
   /** With both set, user data lives in Convex; otherwise it stays in memory. */
@@ -53,7 +45,7 @@ export interface ServiceOptions {
   readonly accountVerifier?: TokenVerifier;
   readonly fetchImpl?: typeof fetch;
   readonly jwtSecret: string;
-  readonly ai?: AiConfig;
+  readonly translation?: TranslationConfig;
 }
 
 export interface AppServices {
@@ -64,67 +56,12 @@ export interface AppServices {
   readonly auth: AuthService;
   readonly translation: TranslationService;
   readonly recommendations: RecommendationService;
-  readonly karaoke: KaraokeService;
-}
-
-/**
- * Gemini -> OpenRouter -> NVIDIA -> Groq -> Bedrock. Only providers with a
- * configured key are included, and `AI_PRIMARY` (e.g. `bedrock`) moves one of
- * them to the front while the rest keep this relative order behind it.
- */
-export function buildAiClient(ai: AiConfig | undefined, fetchImpl?: typeof fetch): AiClient {
-  const providers = [];
-  if (ai?.geminiApiKey) {
-    providers.push(new GeminiProvider({ apiKey: ai.geminiApiKey, ...(ai.geminiModel ? { model: ai.geminiModel } : {}), ...(fetchImpl ? { fetchImpl } : {}) }));
-  }
-  if (ai?.openrouterApiKey) {
-    providers.push(new OpenAiCompatibleProvider({
-      name: 'openrouter',
-      apiKey: ai.openrouterApiKey,
-      model: ai.openrouterModel ?? 'meta-llama/llama-3.3-70b-instruct:free',
-      baseUrl: 'https://openrouter.ai/api/v1',
-      extraHeaders: { 'HTTP-Referer': 'https://allegra.app', 'X-Title': 'Allegra' },
-      ...(fetchImpl ? { fetchImpl } : {})
-    }));
-  }
-  if (ai?.nvidiaApiKey) {
-    providers.push(new OpenAiCompatibleProvider({
-      name: 'nvidia',
-      apiKey: ai.nvidiaApiKey,
-      model: ai.nvidiaModel ?? 'meta/llama-3.2-11b-vision-instruct',
-      baseUrl: 'https://integrate.api.nvidia.com/v1',
-      ...(fetchImpl ? { fetchImpl } : {})
-    }));
-  }
-  if (ai?.groqApiKey) {
-    providers.push(new OpenAiCompatibleProvider({
-      name: 'groq',
-      apiKey: ai.groqApiKey,
-      model: ai.groqModel ?? 'openai/gpt-oss-20b',
-      baseUrl: 'https://api.groq.com/openai/v1',
-      ...(fetchImpl ? { fetchImpl } : {})
-    }));
-  }
-  if (ai?.awsAccessKeyId && ai.awsSecretAccessKey) {
-    providers.push(new BedrockProvider({
-      accessKeyId: ai.awsAccessKeyId,
-      secretAccessKey: ai.awsSecretAccessKey,
-      ...(ai.awsSessionToken ? { sessionToken: ai.awsSessionToken } : {}),
-      region: ai.awsRegion ?? 'us-east-1',
-      ...(ai.bedrockModelId ? { modelId: ai.bedrockModelId } : {}),
-      ...(fetchImpl ? { fetchImpl } : {})
-    }));
-  }
-  // Array.prototype.sort is stable, so everything that is not the primary keeps
-  // the cascade order above. A primary whose key is missing matches nothing and
-  // leaves the list untouched rather than emptying it.
-  if (ai?.primary) {
-    const primary = ai.primary;
-    providers.sort((left, right) => Number(right.name === primary) - Number(left.name === primary));
-  }
-  // With an explicit primary, try that provider plus one fallback — not the whole
-  // paid cascade — so a slow Bedrock miss does not stack Gemini/NVIDIA/Groq bills.
-  return new AiClient(providers, ai?.primary ? { maxAttempts: 2 } : {});
+  /** Playlist cover storage (Convex). Undefined without Convex: uploads answer 503. */
+  readonly covers?: CoverStorage;
+  /** Single use for MCP OAuth codes and refresh tokens. */
+  readonly grants: GrantLedger;
+  /** True when real (Google) accounts exist, so MCP connects require one rather than a guest. */
+  readonly accountsEnabled: boolean;
 }
 
 export function createServices(options: ServiceOptions): AppServices {
@@ -162,22 +99,7 @@ export function createServices(options: ServiceOptions): AppServices {
   const convexVerifier = options.accountVerifier
     ?? (options.convexSiteUrl ? new ConvexTokenVerifier({ siteUrl: options.convexSiteUrl }) : undefined);
 
-  const ai = buildAiClient(options.ai, options.fetchImpl);
   const stream = new StreamResolver({ saavn, cache, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) });
-  const karaokeProvider = options.karaoke
-    ? new AwsBatchStemSeparationProvider({
-        region: options.karaoke.region,
-        jobQueue: options.karaoke.jobQueue,
-        jobDefinition: options.karaoke.jobDefinition,
-        bucket: options.karaoke.bucket,
-        separationVersion: options.karaoke.separationVersion,
-        stemModel: options.karaoke.stemModel,
-        ...(options.karaoke.accessKeyId ? { accessKeyId: options.karaoke.accessKeyId } : {}),
-        ...(options.karaoke.secretAccessKey ? { secretAccessKey: options.karaoke.secretAccessKey } : {}),
-        ...(options.karaoke.sessionToken ? { sessionToken: options.karaoke.sessionToken } : {}),
-        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
-      })
-    : undefined;
 
   return {
     catalog,
@@ -194,12 +116,19 @@ export function createServices(options: ServiceOptions): AppServices {
       verifier: new FirstMatchVerifier(guestVerifier, convexVerifier),
       ...(convexStore ? { directory: convexStore } : {})
     }),
-    translation: new TranslationService(ai, cache),
-    recommendations: new RecommendationService(ai, catalog, cache),
-    karaoke: new KaraokeService({
-      stream,
-      store: new CacheKaraokeAssetStore(cache, options.karaoke?.separationVersion ?? DEFAULT_SEPARATION_VERSION),
-      ...(karaokeProvider ? { provider: karaokeProvider } : {})
-    })
+    translation: new TranslationService(cache, {
+      ...(options.translation?.baseUrl ? { baseUrl: options.translation.baseUrl } : {}),
+      ...(options.translation?.contactEmail ? { contactEmail: options.translation.contactEmail } : {}),
+      ...(options.translation?.fallbackBaseUrl ? { fallbackBaseUrl: options.translation.fallbackBaseUrl } : {}),
+      ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
+    }),
+    recommendations: new RecommendationService(catalog, cache),
+    ...(options.convexUrl && options.convexServerSecret
+      ? { covers: new ConvexCoverStorage({ url: options.convexUrl, serverSecret: options.convexServerSecret }) }
+      : {}),
+    grants: options.convexUrl && options.convexServerSecret
+      ? new ConvexGrantLedger({ url: options.convexUrl, serverSecret: options.convexServerSecret })
+      : new MemoryGrantLedger(),
+    accountsEnabled: Boolean(convexVerifier)
   };
 }

@@ -214,9 +214,12 @@ export function ArtistPage({
       <div ref={sentinelRef} className="detail-sentinel" aria-hidden="true" />
 
       {profile?.bio ? (
-        <div className="artist-bio-block">
-          <p className="artist-bio is-clamped">{profile.bio}</p>
-          <button type="button" className="show-more" aria-haspopup="dialog" onClick={() => setAboutOpen(true)}>Read more</button>
+        <section className="artist-about-panel" aria-label="About the artist">
+          <span className="artist-about-panel__kicker">About</span>
+          <p className="artist-about-panel__bio is-clamped">{profile.bio}</p>
+          <button type="button" className="show-more" aria-haspopup="dialog" onClick={() => setAboutOpen(true)}>
+            Read the full story
+          </button>
           <ArtistAbout
             open={aboutOpen}
             name={displayName}
@@ -227,7 +230,7 @@ export function ArtistPage({
             tint={heroStyle}
             onClose={() => setAboutOpen(false)}
           />
-        </div>
+        </section>
       ) : null}
 
       {loading ? (

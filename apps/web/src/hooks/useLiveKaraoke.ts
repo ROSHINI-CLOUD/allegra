@@ -1,16 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 
 import type { UnifiedSong } from '@shared/types';
 
+import { ensureElementGraph } from '../lib/audioGraph';
 import {
-  prepareLiveKaraoke,
+  audioBufferToStereo44k,
+  fetchAndDecodeSong,
+  getSeparator,
+  isRoformerLikelySupported,
+  LiveKaraokeStream,
+  prepareMidSideKaraoke,
   type LiveKaraokeBackend,
   type LiveKaraokeStatus
 } from '../lib/liveKaraoke';
 
 export interface LiveKaraokePlayback {
+  /** The layout's single <audio> element; the AI path routes it through Web Audio. */
+  readonly audioRef: RefObject<HTMLAudioElement | null>;
   readonly swapAudioSource: (streamUrl: string) => Promise<boolean>;
-  readonly singActive?: boolean;
 }
 
 export interface LiveKaraokeController {
@@ -22,13 +29,36 @@ export interface LiveKaraokeController {
   readonly progress: number | null;
   readonly error: string | null;
   readonly monoWarning: boolean;
+  /** Set when the AI model was skipped and mid-side ran instead. */
+  readonly fallbackReason: string | null;
   readonly toggle: () => Promise<void>;
   readonly clearError: () => void;
 }
 
+type Mode = 'off' | 'stream' | 'midside';
+
+/* Progress split while preparing the AI path: download + decode, then the model load. */
+const DECODED_AT = 0.1;
+const MODEL_SPAN = 0.8;
+
+const TOO_SLOW = 'this device separates slower than the song plays';
 /**
- * Browser live karaoke: fetch + decode + bass-preserving vocal remove, then swap
- * the main player to an instrumental blob URL. Restores the original stream on off.
+ * Set once the model has been measured slower than playback. The device will not get
+ * faster this page session, so later presses go straight to mid-side instead of paying
+ * for the model load and two chunks each time only to fall back again.
+ */
+let modelTooSlow = false;
+
+/**
+ * Browser live karaoke.
+ *
+ * Primary path: Mel-Band RoFormer in a worker separates the song chunk by chunk, starting
+ * at the playhead, and the stream player plays the instrumental over the muted original.
+ * The <audio> element keeps its source, so transport, seeking and lyrics are untouched,
+ * and turning karaoke off and on again for the same song is instant.
+ *
+ * Fallback: when the model cannot load or cannot keep up with playback, a bass-preserving
+ * mid-side instrumental is rendered and swapped in as the element's source.
  */
 export function useLiveKaraoke(
   song: UnifiedSong | null,
@@ -41,13 +71,29 @@ export function useLiveKaraoke(
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [monoWarning, setMonoWarning] = useState(false);
+  const [fallbackReason, setFallbackReason] = useState<string | null>(null);
 
+  const playbackRef = useRef(playback);
+  playbackRef.current = playback;
   const songIdRef = useRef<string | null>(null);
   const blobUrlRef = useRef<string | null>(null);
+  const streamRef = useRef<{ readonly songId: string; readonly stream: LiveKaraokeStream } | null>(null);
+  /** Kept for the mid-side fallback until the stream proves it keeps up, then released. */
+  const decodedRef = useRef<AudioBuffer | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const generationRef = useRef(0);
-  const activeRef = useRef(false);
+  const modeRef = useRef<Mode>('off');
   const busyRef = useRef(false);
+
+  const setBusyBoth = useCallback((value: boolean): void => {
+    busyRef.current = value;
+    setBusy(value);
+  }, []);
+
+  const setMode = useCallback((mode: Mode): void => {
+    modeRef.current = mode;
+    setActive(mode !== 'off');
+  }, []);
 
   const revokeBlob = useCallback((): void => {
     if (blobUrlRef.current) {
@@ -56,13 +102,24 @@ export function useLiveKaraoke(
     }
   }, []);
 
-  useEffect(() => {
-    activeRef.current = active;
-  }, [active]);
+  const disposeStream = useCallback((): void => {
+    streamRef.current?.stream.dispose();
+    streamRef.current = null;
+  }, []);
 
-  useEffect(() => {
-    busyRef.current = busy;
-  }, [busy]);
+  const fail = useCallback(
+    (message: string): void => {
+      disposeStream();
+      decodedRef.current = null;
+      setError(message);
+      setStatus('error');
+      setProgress(null);
+      setMode('off');
+      setBackend(null);
+      setBusyBoth(false);
+    },
+    [disposeStream, setBusyBoth, setMode]
+  );
 
   useEffect(() => {
     const prevId = songIdRef.current;
@@ -70,58 +127,148 @@ export function useLiveKaraoke(
     generationRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
+    disposeStream();
+    decodedRef.current = null;
 
-    const hadBlob = Boolean(blobUrlRef.current);
     setStatus('idle');
     setBackend(null);
-    setActive(false);
-    activeRef.current = false;
-    setBusy(false);
-    busyRef.current = false;
+    setMode('off');
+    setBusyBoth(false);
     setProgress(null);
     setError(null);
     setMonoWarning(false);
-    if (hadBlob && prevId !== song?.id) {
+    setFallbackReason(null);
+    if (blobUrlRef.current && prevId !== song?.id) {
+      // The player may still be releasing it; revoke after this tick.
       const stale = blobUrlRef.current;
       blobUrlRef.current = null;
-      window.setTimeout(() => {
-        if (stale) URL.revokeObjectURL(stale);
-      }, 0);
+      window.setTimeout(() => URL.revokeObjectURL(stale), 0);
     }
-  }, [song?.id, song?.streamUrl]);
+  }, [song?.id, song?.streamUrl, disposeStream, setBusyBoth, setMode]);
 
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      streamRef.current?.stream.dispose();
+      streamRef.current = null;
       revokeBlob();
     };
   }, [revokeBlob]);
 
-  const toggle = useCallback(async (): Promise<void> => {
-    const current = song;
-    if (!current || busyRef.current) return;
+  /** Render the mid-side instrumental and swap it in as the element's source. */
+  const runMidSide = useCallback(
+    async (current: UnifiedSong, decoded: AudioBuffer, generation: number, reason?: string): Promise<void> => {
+      const signal = abortRef.current?.signal;
+      const stale = (): boolean => generation !== generationRef.current || songIdRef.current !== current.id;
+      disposeStream();
+      decodedRef.current = null;
+      setBusyBoth(true);
+      setStatus('processing');
+      setProgress(0.2);
+      try {
+        const result = await prepareMidSideKaraoke(decoded, {
+          signal,
+          fallbackReason: reason,
+          onProgress: (ratio) => {
+            if (!stale()) setProgress(0.2 + Math.max(0, Math.min(1, ratio)) * 0.75);
+          }
+        });
+        if (stale()) {
+          URL.revokeObjectURL(result.blobUrl);
+          return;
+        }
+        revokeBlob();
+        blobUrlRef.current = result.blobUrl;
+        const ok = await playbackRef.current.swapAudioSource(result.blobUrl);
+        if (stale()) return;
+        if (!ok) {
+          revokeBlob();
+          fail('Could not switch to the instrumental. Try playing the song again.');
+          return;
+        }
+        setBackend('midside');
+        setMonoWarning(result.monoSource);
+        setFallbackReason(result.fallbackReason ?? null);
+        setMode('midside');
+        setStatus('active');
+        setProgress(null);
+        setBusyBoth(false);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (stale()) return;
+        revokeBlob();
+        fail(err instanceof Error ? err.message : 'Live karaoke failed.');
+      }
+    },
+    [disposeStream, fail, revokeBlob, setBusyBoth, setMode]
+  );
 
-    if (playback.singActive) {
-      setError('Turn off Sing first, then try Karaoke.');
-      setStatus('error');
-      return;
-    }
+  /** Start the AI stream. Resolves at once; readiness arrives through the stream's events. */
+  const startStream = useCallback(
+    (current: UnifiedSong, audio: HTMLAudioElement, decoded: AudioBuffer, generation: number): boolean => {
+      const graph = ensureElementGraph(audio);
+      if (!graph) return false;
+      const stale = (): boolean => generation !== generationRef.current || songIdRef.current !== current.id;
+      const fallBack = (reason: string): void => {
+        const kept = decodedRef.current;
+        if (kept) void runMidSide(current, kept, generation, reason);
+        else fail(reason);
+      };
+      const stream = new LiveKaraokeStream(audio, graph, audioBufferToStereo44k(decoded), {
+        onModelProgress: (ratio) => {
+          if (stale() || !busyRef.current) return;
+          setProgress(DECODED_AT + Math.max(0, Math.min(1, ratio)) * MODEL_SPAN);
+          if (ratio >= 1) setStatus('processing');
+        },
+        onReadyAtPlayhead: () => {
+          // Turned off meanwhile: a chunk that was already in flight must not turn it back on.
+          if (stale() || (modeRef.current === 'off' && !busyRef.current)) return;
+          setMode('stream');
+          setBackend('roformer');
+          setFallbackReason(null);
+          setStatus('active');
+          setProgress(null);
+          setBusyBoth(false);
+        },
+        onKeepingUp: () => {
+          if (!stale()) decodedRef.current = null;
+        },
+        onTooSlow: () => {
+          modelTooSlow = true;
+          if (!stale()) fallBack(TOO_SLOW);
+        },
+        onError: (message) => {
+          if (!stale()) fallBack(message);
+        }
+      });
+      streamRef.current = { songId: current.id, stream };
+      stream.enable();
+      return true;
+    },
+    [fail, runMidSide, setBusyBoth, setMode]
+  );
 
-    if (activeRef.current) {
-      busyRef.current = true;
-      setBusy(true);
+  const turnOff = useCallback(
+    async (current: UnifiedSong): Promise<void> => {
+      if (modeRef.current === 'stream') {
+        streamRef.current?.stream.disable();
+        setMode('off');
+        setStatus('idle');
+        setError(null);
+        return;
+      }
+      setBusyBoth(true);
       setError(null);
       setProgress(null);
       try {
-        const ok = await playback.swapAudioSource(current.streamUrl);
+        const ok = await playbackRef.current.swapAudioSource(current.streamUrl);
         if (!ok) {
           setError('Could not restore the original track.');
           setStatus('error');
           return;
         }
         revokeBlob();
-        activeRef.current = false;
-        setActive(false);
+        setMode('off');
         setStatus('idle');
         setBackend(null);
         setMonoWarning(false);
@@ -129,9 +276,31 @@ export function useLiveKaraoke(
         setError('Could not restore the original track.');
         setStatus('error');
       } finally {
-        busyRef.current = false;
-        setBusy(false);
+        setBusyBoth(false);
       }
+    },
+    [revokeBlob, setBusyBoth, setMode]
+  );
+
+  const toggle = useCallback(async (): Promise<void> => {
+    const current = song;
+    if (!current || busyRef.current) return;
+
+    if (modeRef.current !== 'off') {
+      await turnOff(current);
+      return;
+    }
+
+    setError(null);
+
+    // Same song as before: the separator kept its work, so this is instant.
+    const kept = streamRef.current;
+    if (kept && kept.songId === current.id) {
+      // Mode first: enable() reports failures synchronously and those must win.
+      setMode('stream');
+      setBackend('roformer');
+      setStatus(kept.stream.readyAtPlayhead() ? 'active' : 'processing');
+      kept.stream.enable();
       return;
     }
 
@@ -139,79 +308,51 @@ export function useLiveKaraoke(
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
+    disposeStream();
 
-    busyRef.current = true;
-    setBusy(true);
-    setError(null);
+    setBusyBoth(true);
     setMonoWarning(false);
+    setFallbackReason(null);
     setProgress(0);
     setStatus('loading');
 
+    // Before the first await, so both happen inside the click gesture: the audio context
+    // may only start from one, and the model download overlaps the song download.
+    const audio = playback.audioRef.current;
+    let useModel = false;
+    if (audio && !modelTooSlow && isRoformerLikelySupported() && ensureElementGraph(audio)) {
+      try {
+        getSeparator().warm();
+        useModel = true;
+      } catch {
+        useModel = false;
+      }
+    }
+
     try {
-      const result = await prepareLiveKaraoke({
-        streamUrl: current.streamUrl,
-        songId: current.id,
-        signal: ac.signal,
-        onProgress: (ratio) => {
-          if (generation !== generationRef.current) return;
-          setProgress(Math.max(0, Math.min(1, ratio)));
-          if (ratio >= 0.35) setStatus('processing');
+      const decoded = await fetchAndDecodeSong(current.streamUrl, current.id, ac.signal);
+      if (generation !== generationRef.current || songIdRef.current !== current.id) return;
+      setMonoWarning(decoded.numberOfChannels < 2);
+      setProgress(DECODED_AT);
+
+      if (useModel && audio) {
+        decodedRef.current = decoded;
+        try {
+          if (startStream(current, audio, decoded, generation)) return;
+        } catch (err) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn('[karaoke] AI stream failed to start, using mid-side', err);
+          }
         }
-      });
-
-      if (generation !== generationRef.current || songIdRef.current !== current.id) {
-        URL.revokeObjectURL(result.blobUrl);
-        return;
       }
-
-      revokeBlob();
-      blobUrlRef.current = result.blobUrl;
-      setBackend(result.backend);
-      setMonoWarning(result.monoSource);
-      setProgress(0.97);
-
-      const ok = await playback.swapAudioSource(result.blobUrl);
-
-      if (generation !== generationRef.current || songIdRef.current !== current.id) {
-        return;
-      }
-
-      if (!ok) {
-        revokeBlob();
-        setError(
-          playback.singActive
-            ? 'Turn off Sing first, then try Karaoke.'
-            : 'Could not switch to the instrumental. Try playing the song again.'
-        );
-        setStatus('error');
-        setProgress(null);
-        activeRef.current = false;
-        setActive(false);
-        return;
-      }
-
-      activeRef.current = true;
-      setActive(true);
-      setStatus('active');
-      setProgress(null);
+      const reason = useModel ? 'AI model unavailable' : modelTooSlow ? TOO_SLOW : undefined;
+      await runMidSide(current, decoded, generation, reason);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       if (generation !== generationRef.current) return;
-      const message =
-        err instanceof Error ? err.message : 'Live karaoke failed.';
-      setError(message);
-      setStatus('error');
-      setProgress(null);
-      activeRef.current = false;
-      setActive(false);
-      revokeBlob();
-    } finally {
-      if (generation === generationRef.current) {
-        busyRef.current = false;
-        setBusy(false);
-      }
+      fail(err instanceof Error ? err.message : 'Live karaoke failed.');
     }
-  }, [playback, revokeBlob, song]);
+  }, [disposeStream, fail, playback, runMidSide, setBusyBoth, setMode, song, startStream, turnOff]);
 
   return {
     status,
@@ -221,6 +362,7 @@ export function useLiveKaraoke(
     progress,
     error,
     monoWarning,
+    fallbackReason,
     toggle,
     clearError: () => setError(null)
   };
