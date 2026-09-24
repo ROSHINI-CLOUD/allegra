@@ -1,3 +1,4 @@
+import { lockScroll } from '../lib/scrollLock';
 import { X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
@@ -61,24 +62,7 @@ export function AuthDialog({ open, account, onClose }: AuthDialogProps) {
 
   useEffect(() => {
     if (!open) return undefined;
-    const root = document.documentElement;
-    const body = document.body;
-    const previous = {
-      rootOverflow: root.style.overflow,
-      bodyOverflow: body.style.overflow,
-      rootOverscroll: root.style.overscrollBehavior,
-      bodyOverscroll: body.style.overscrollBehavior
-    };
-    root.style.overflow = 'hidden';
-    body.style.overflow = 'hidden';
-    root.style.overscrollBehavior = 'none';
-    body.style.overscrollBehavior = 'none';
-    return () => {
-      root.style.overflow = previous.rootOverflow;
-      body.style.overflow = previous.bodyOverflow;
-      root.style.overscrollBehavior = previous.rootOverscroll;
-      body.style.overscrollBehavior = previous.bodyOverscroll;
-    };
+    return lockScroll();
   }, [open]);
 
   const startGoogle = async (): Promise<void> => {

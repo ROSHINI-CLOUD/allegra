@@ -22,6 +22,32 @@ npm workspaces: **one `npm install` at the root, one lockfile.** Never add a per
 resolves function dependencies from the root, so a split lockfile lets a package exist locally and be
 missing in production.
 
+## Run it (don't go searching)
+
+```bash
+npm install                     # once, at the root only
+npm run dev                     # API on :8080 (tsx watch) + web on :5173 (next dev) — Ctrl+C stops both
+npm run dev --prefix apps/api   # API alone
+npm run dev --prefix apps/web   # web alone
+npm run mock                    # fake API on :9090 (MOCK_PORT), no upstream providers
+```
+
+- **Open the app at http://localhost:5173.** Next rewrites same-origin `/api/*` to `127.0.0.1:8080`
+  (`apps/web/next.config.ts`), so there is no CORS setup. Health check: http://localhost:8080/api/health.
+- **Port 8080 or 5173 already in use = it is probably already running.** Hit `/api/health` or open
+  :5173 before starting a second copy. Both dev servers hot-reload; you don't need to restart after edits.
+  An `.env` change does need a restart.
+- **Agents in Claude Code:** `.claude/launch.json` defines `api`, `web` and `web-next` (:5174) for
+  `preview_start`.
+- **Env files:** `apps/api/.env` (server secrets and provider URLs; template `apps/api/.env.example`)
+  and `apps/web/.env.local` (`NEXT_PUBLIC_*` only). Nothing is required: without Convex the app runs
+  guest-only with in-memory data.
+- **Test browser behaviour (media, video, audio) on :5173, never on an :8080 URL.** The API sends a
+  strict CSP (`default-src 'self'`), so a `<video>` from another origin fails there with `MEDIA_ERR 4`
+  even though it works in the real app.
+- **Single test file:** `cd apps/api && node --import tsx --test src/providers/animatedArtwork.test.ts`.
+- More: [`docs/workflows.md`](docs/workflows.md) covers proving the Range rule, `vercel build`, and shipping.
+
 ## Hard rules
 
 1. **`docs/api-contract.md` is the contract.** Changing a response shape breaks the other half

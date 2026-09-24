@@ -16,6 +16,7 @@ This page is the on-call summary.
 | — | **Lyrica / BetterLyrics** — lyrics fallback | Optional | ❌ server-side only |
 | — | **MyMemory** — lyrics translation | No | ❌ server-side only |
 | — | **LibreTranslate** — self-hosted translation fallback | No managed key | ❌ server-side only |
+| — | **YouTube Music** (unofficial web endpoint) — song radio as a recommendation signal only | No | ❌ server-side only |
 
 ## Non-negotiable details
 
@@ -54,6 +55,15 @@ images.find(i => i.quality === '500x500')   || images[images.length - 1]
 an explicitly configured self-hosted LibreTranslate instance is fallback only. Recommendations rank
 catalog suggestions with listener taste; neither feature calls an LLM or paid AI provider.
 
+**14. YouTube Music is a pointer, never a source.** `providers/youtubeMusic.ts` sends the plain
+`WEB_REMIX` web client (what music.youtube.com itself sends) to `search` and `next` only — no
+`player` call, no stream URLs, no client impersonation or PoToken. For each recommendation seed it
+finds the song, reads its radio (`RDAMVM<videoId>`), and `services/youtubeRelated.ts` matches every
+track back to a JioSaavn row by title, a shared artist credit and duration (±15 s). A track with no
+confident match is dropped, never guessed. The whole lookup is capped at 8 s per seed and a breaker
+(3 failures → 10 min) stops a blocked endpoint from slowing shelves. `YOUTUBE_MUSIC_API_URL=off`
+disables it; the shelf then ranks on catalog signals alone, exactly as before.
+
 **12. Reject HTML in a lyrics body.** If it contains `<div` / `<html` / `<!DOCTYPE`, the provider served an error page. Fall through to the next tier. This guard exists because it happened in production.
 
 **13. Permissive LRC regex.** `\d{1,2}` for **both** minutes and seconds, optional brackets and ms. Real-world LRC files are dirty — `[0:3.75]` happens.
@@ -69,6 +79,8 @@ One server IP serves the whole user base against rate-limited community provider
 | `search:{q}` | 1 h |
 | `song:{id}` | 6 h |
 | `suggestions:{id}` | 24 h |
+| `ytm-radio:{song identity}` | 24 h (miss 1 h) |
+| `ytm-match:{videoId}` | 7 d (miss 24 h) |
 | `artwork:{title}:{artist}` | 30 d |
 | `lyrics:{title}:{artist}:{duration}` | 30 d |
 | **`lyrics:miss:{…}`** | **24 h — negative cache** |

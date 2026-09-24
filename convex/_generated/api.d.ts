@@ -14,6 +14,7 @@ import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as oauth from "../oauth.js";
 import type * as profiles from "../profiles.js";
+import type * as relations from "../relations.js";
 import type * as shares from "../shares.js";
 
 import type {
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   oauth: typeof oauth;
   profiles: typeof profiles;
+  relations: typeof relations;
   shares: typeof shares;
 }>;
 

@@ -32,6 +32,29 @@ const taste = v.object({
   updatedAt: v.string()
 });
 
+/** How much one song has been listened to (apps/api/src/user/plays.ts). Capped at 200 per listener. */
+export const playStat = v.object({
+  songId: v.string(),
+  plays: v.number(),
+  seconds: v.number(),
+  recent: v.number(),
+  lastPlayedAt: v.string()
+});
+
+/** A catalog row as stored inside a song relation: enough to rank and show it without a lookup. */
+export const relatedSong = v.object({
+  id: v.string(),
+  title: v.string(),
+  artist: v.string(),
+  album: v.optional(v.string()),
+  artwork: v.string(),
+  duration: v.number(),
+  hasLyrics: v.boolean(),
+  language: v.optional(v.string()),
+  playCount: v.number(),
+  source: v.union(v.literal('Saavn'), v.literal('Gaana'))
+});
+
 export default defineSchema({
   // Convex Auth owns `users`, `authAccounts`, `authSessions` and friends. It is the
   // identity record (who signed in with Google); `profiles` below is what they listen to.
@@ -54,10 +77,23 @@ export default defineSchema({
     settings: v.any(),
     displayName: v.optional(v.string()),
     email: v.optional(v.string()),
-    taste: v.optional(taste)
+    taste: v.optional(taste),
+    playStats: v.optional(v.array(playStat))
   })
     .index('by_userId', ['userId'])
     .index('by_email', ['email']),
+
+  /**
+   * "Listeners of this song go on to play…" — YouTube Music's song radio and the catalog's own
+   * suggestions, merged and matched to catalog rows. Not per listener: a song's neighbours are
+   * the same for everyone, so each is worked out once and shared (Echo's related_song_map).
+   * Derived data: losing a row only costs a recompute.
+   */
+  songRelations: defineTable({
+    songId: v.string(),
+    songs: v.array(relatedSong),
+    updatedAt: v.string()
+  }).index('by_songId', ['songId']),
 
   /** A playlist someone chose to share. Live: it points at the owner's playlist, so edits show up for everyone with the link. */
   shares: defineTable({

@@ -1,3 +1,4 @@
+import { lockScroll } from '../lib/scrollLock';
 import { BadgeCheck, Pause, Play, X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
@@ -64,16 +65,7 @@ export function ArtistPreviewCard({ name, image = null, photoPending = false, cu
   // Escape closes, page scroll is locked while open, and focus returns to the card.
   useEffect(() => {
     if (!open) return undefined;
-    const root = document.documentElement;
-    const body = document.body;
-    const previousRootOverflow = root.style.overflow;
-    const previousBodyOverflow = body.style.overflow;
-    const previousRootOverscroll = root.style.overscrollBehavior;
-    const previousBodyOverscroll = body.style.overscrollBehavior;
-    root.style.overflow = 'hidden';
-    body.style.overflow = 'hidden';
-    root.style.overscrollBehavior = 'none';
-    body.style.overscrollBehavior = 'none';
+    const unlock = lockScroll();
     closeRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') setOpen(false);
@@ -81,10 +73,7 @@ export function ArtistPreviewCard({ name, image = null, photoPending = false, cu
     window.addEventListener('keydown', onKeyDown);
     const card = cardRef.current;
     return () => {
-      root.style.overflow = previousRootOverflow;
-      body.style.overflow = previousBodyOverflow;
-      root.style.overscrollBehavior = previousRootOverscroll;
-      body.style.overscrollBehavior = previousBodyOverscroll;
+      unlock();
       window.removeEventListener('keydown', onKeyDown);
       card?.focus({ preventScroll: true });
     };

@@ -1,6 +1,7 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
+import { playStat } from './schema';
 
 const library = v.object({
   id: v.string(),
@@ -39,7 +40,8 @@ const profileData = v.object({
       onboarded: v.boolean(),
       updatedAt: v.string()
     })
-  )
+  ),
+  playStats: v.optional(v.array(playStat))
 });
 
 /**

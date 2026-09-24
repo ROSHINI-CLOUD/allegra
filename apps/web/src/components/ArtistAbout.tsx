@@ -1,3 +1,4 @@
+import { lockScroll } from '../lib/scrollLock';
 import { BadgeCheck, X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useRef } from 'react';
@@ -27,8 +28,7 @@ export function ArtistAbout({ open, name, photo, verified, bio, facts, tint, onC
   useEffect(() => {
     if (!open) return undefined;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockScroll();
     closeRef.current?.focus();
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose();
@@ -36,7 +36,7 @@ export function ArtistAbout({ open, name, photo, verified, bio, facts, tint, onC
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = overflow;
+      unlock();
       previous?.focus();
     };
   }, [open, onClose]);

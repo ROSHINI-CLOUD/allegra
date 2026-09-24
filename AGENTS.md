@@ -11,6 +11,27 @@ too; everything in it applies here.**
 4. [`docs/workflows.md`](docs/workflows.md) — how to run, verify and ship
 5. [`CLAUDE.md`](CLAUDE.md) — the rules
 
+## Run it (don't go searching)
+
+```bash
+npm install                     # once, at the root only
+npm run dev                     # API on :8080 (tsx watch) + web on :5173 (next dev) — Ctrl+C stops both
+npm run dev --prefix apps/api   # API alone
+npm run dev --prefix apps/web   # web alone
+npm run mock                    # fake API on :9090 (MOCK_PORT), no upstream providers
+npm run typecheck && npm run lint && npm test   # the gate, from the root
+```
+
+- Open the app at **http://localhost:5173**. `/api/*` is rewritten to `127.0.0.1:8080`. The health
+  check is http://localhost:8080/api/health.
+- **If a port is already in use, the server is probably already running.** Check `/api/health` first.
+  Both servers hot-reload on code changes; restart only after editing `.env`.
+- Env files: `apps/api/.env` (template `apps/api/.env.example`) and `apps/web/.env.local`
+  (`NEXT_PUBLIC_*` only). None are required to run.
+- Test media or other browser behaviour on :5173. The API's strict CSP makes cross-origin
+  `<video>`/`<audio>` fail on any :8080 page.
+- Single test file: `cd apps/api && node --import tsx --test src/path/to/file.test.ts`.
+
 ## How to work here
 
 **One thing at a time.** Take the next item, finish it, show the diff, stop. Do not scaffold a whole

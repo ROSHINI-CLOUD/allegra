@@ -94,11 +94,30 @@ Up to 12 comma-separated names; returns `{ id, name, image }` for each one that 
 `title`, `artist`, `limit`=5 → `ApiResponse<{ urls: string[] }>` · cache 30 d
 Index 0 is the best guess; the array exists for a future "fix artwork" picker.
 
+### `GET /api/canvas` — additive
+`title` (req), `artist` (req), `album`?, `duration`? (seconds)
+`→ ApiResponse<MotionArtwork | null>` · cache 24 h on hit, 6 h on miss
+
+Finds Apple Music album motion artwork **server-side** and returns its URL only when a
+matched release has one. Providers, in order: the official Apple Music catalog (only when
+`APPLE_MUSIC_DEVELOPER_TOKEN` is set), `artwork.boidu.dev`, `artwork.m8tec.top` (needs
+`album`). `videoUrl` is always an `https://*.apple.com` URL — a direct MP4 when available,
+otherwise an HLS `.m3u8` that the client shows only where the browser plays HLS natively.
+It is mobile-player-only UI, never blocks ordinary cover art, and returns `null` (with a
+successful envelope) when no release qualifies or every provider is down. Provider URLs and
+tokens stay server-side. `MotionArtwork` is `{ source: 'Apple Music', videoUrl: string }`.
+
 ### `GET /api/lyrics` ⭐
 `songId`?, `title` (req), `artist` (req), `duration`?, `syncedOnly`=false
 `→ ApiResponse<LyricsPayload>`
 No lyrics anywhere → `{ success: false, error: "No lyrics found for this song." }`
 Cache 30 d on hit, **24 h on miss**.
+
+### `GET /api/lyrics/alternatives` — additive
+`title` (req), `artist` (req), `duration`?, `syncedOnly`=false
+`→ ApiResponse<LyricsPayload[]>`
+
+Runs only when the listener opens **Other lyrics**. Returns up to six usable, de-duplicated renderings from the configured LRCLIB, Lyrica, Better Lyrics, YouLyPlus, and Unison providers; every item is a complete `LyricsPayload`, so selecting it requires no follow-up provider request. The normal `/api/lyrics` cascade stays the fast default. An empty array is a successful response: no alternative match was found.
 
 ### `GET /api/stream/:songId` ⭐⭐ — not JSON
 Returns **audio bytes**.
@@ -152,8 +171,12 @@ an alias for compatibility. `502` means both available providers failed.
 ### `GET /api/recommendations`
 `songId`? (current song, added to taste context if present) · requires `Authorization: Bearer <token>`
 `→ ApiResponse<{ songs: UnifiedSong[]; provider: string; reasoning: string }>`
-Ranks the catalog's suggestions with the listener's liked/recent songs, artists, and languages. Every
-result is a real playable catalog row, never an invented model result. Excludes already-liked or
+Ranks the catalog's suggestions with the listener's liked/recent songs, artists, and languages. When
+the server has the YouTube Music signal enabled, each seed's song radio is blended in too, after being
+matched back to catalog rows (shape unchanged). Seeds also include the listener's most-played songs
+this week and of all time, from the play tally that `POST /api/me/recently-played` (a play) and
+`POST /api/me/taste/signal` (seconds listened) now maintain — no request or response shape changed. Every result is a real playable catalog row, never an
+invented model result. Excludes already-liked or
 recently played recordings. `404` means there is no listening context yet. The legacy
 `/api/ai/recommendations` path is an alias for compatibility.
 
