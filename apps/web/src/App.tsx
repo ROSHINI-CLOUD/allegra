@@ -838,7 +838,8 @@ export default function App() {
     audio.selectSong(song, radio ? [song] : uniqueByIdentity(queue));
     // Stay on the current surface — the persistent mini player appears in-place.
     setPlayerMode('mini');
-    setRecentlyPlayed((current) => [song, ...current.filter((item) => item.id !== song.id)].slice(0, 50));
+    // Same cap as the server keeps (RECENTLY_PLAYED_LIMIT): 25 recent listens.
+    setRecentlyPlayed((current) => [song, ...current.filter((item) => item.id !== song.id)].slice(0, 25));
     void recordRecentlyPlayed(song.id, 0).catch(() => undefined);
     tapHaptic();
     if (radio) void fillRadioQueue(song.id);

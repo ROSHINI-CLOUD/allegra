@@ -185,7 +185,7 @@ export function HomePage({
                 </button>
               </div>
               <div className="home-stage__meta">
-                <span>{featureIsResume ? 'Pick up where you left off' : 'Start here'}</span>
+                <span>{featureIsResume ? 'Continue listening' : 'Start here'}</span>
                 <strong title={feature.title}>{feature.title}</strong>
                 <small title={feature.artist}>{feature.artist}</small>
                 <div className="home-feature-actions">
@@ -267,7 +267,7 @@ export function HomePage({
       ) : null}
 
       {recentlyPlayed.length > 1 ? (
-        <Shelf id="home-recent" title="Jump back in" songs={recentlyPlayed.slice(0, 14)} {...{ reduced, currentSongId, isPlaying, likedIds, onPlay, onLike }} />
+        <Shelf id="home-recent" title="Recently played" songs={recentlyPlayed.slice(0, 25)} {...{ reduced, currentSongId, isPlaying, likedIds, onPlay, onLike }} />
       ) : null}
 
       {picks.length > 0 ? (

@@ -1,6 +1,7 @@
 import { v } from 'convex/values';
 
-import { mutation, query } from './_generated/server';
+import { internal } from './_generated/api';
+import { internalMutation, mutation, query } from './_generated/server';
 import { playStat } from './schema';
 
 const library = v.object({
@@ -19,6 +20,9 @@ const recent = v.object({
   playDuration: v.number(),
   playedAt: v.string()
 });
+
+/** Recent listens kept per profile; must match RECENTLY_PLAYED_LIMIT in apps/api/src/user/store.ts. */
+const RECENTLY_PLAYED_LIMIT = 25;
 
 const tasteEntry = v.object({ name: v.string(), score: v.number() });
 
@@ -99,15 +103,17 @@ export const save = mutation({
   args: { secret: v.string(), user: profileData },
   handler: async (ctx, args) => {
     requireSecret(args.secret);
+    // The cap is enforced here too, so no caller can grow the array past it.
+    const user = { ...args.user, recentlyPlayed: args.user.recentlyPlayed.slice(0, RECENTLY_PLAYED_LIMIT) };
     const existing = await ctx.db
       .query('profiles')
-      .withIndex('by_userId', (q) => q.eq('userId', args.user.userId))
+      .withIndex('by_userId', (q) => q.eq('userId', user.userId))
       .unique();
     if (existing) {
       // replace, not patch: a field the API dropped (a cleared display name) must actually go.
-      await ctx.db.replace(existing._id, args.user);
+      await ctx.db.replace(existing._id, user);
     } else {
-      await ctx.db.insert('profiles', args.user);
+      await ctx.db.insert('profiles', user);
     }
     return null;
   }
@@ -130,5 +136,28 @@ export const identity = query({
       email: typeof row.email === 'string' ? row.email : undefined,
       displayName: typeof row.name === 'string' ? row.name : undefined
     };
+  }
+});
+
+/**
+ * One-off cleanup: trims every profile's recent listens to the cap. Profiles written before the
+ * cap dropped to 25 hold up to 50 until their next save; this clears them now. Walks the table in
+ * pages, each page its own transaction, and schedules the next page until done.
+ *
+ *   npx convex run profiles:trimRecentlyPlayed
+ */
+export const trimRecentlyPlayed = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query('profiles').paginate({ numItems: 100, cursor: args.cursor ?? null });
+    for (const row of page.page) {
+      if (row.recentlyPlayed.length > RECENTLY_PLAYED_LIMIT) {
+        await ctx.db.patch(row._id, { recentlyPlayed: row.recentlyPlayed.slice(0, RECENTLY_PLAYED_LIMIT) });
+      }
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.profiles.trimRecentlyPlayed, { cursor: page.continueCursor });
+    }
+    return null;
   }
 });

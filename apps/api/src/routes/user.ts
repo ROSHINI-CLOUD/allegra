@@ -5,7 +5,7 @@ import type { AuthService } from '../auth/auth.js';
 import type { CatalogService } from '../catalog/catalog.js';
 import { parseLanguages } from '../lib/languages.js';
 import { MAX_COVER_BYTES, isCoverContentType, looksLikeStorageId, type CoverStorage } from '../lib/covers.js';
-import type { LibraryRecord, TasteProfile, UserData } from '../user/store.js';
+import { RECENTLY_PLAYED_LIMIT, type LibraryRecord, type TasteProfile, type UserData } from '../user/store.js';
 import { deriveMoodPrompts } from '../user/moodPrompts.js';
 import { SIGNAL_WEIGHT, applySeeds, applySignal, emptyTaste, playWeight } from '../user/taste.js';
 import { getUserId, sendUnauthorized } from './auth.js';
@@ -229,7 +229,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
     try {
-      sendSuccess(response, await catalog.getSongs(user.recentlyPlayed.map((item) => item.songId)));
+      sendSuccess(response, await catalog.getSongs(user.recentlyPlayed.slice(0, RECENTLY_PLAYED_LIMIT).map((item) => item.songId)));
     } catch (error) {
       sendFailure(response, error);
     }
@@ -245,7 +245,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
       response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
       return;
     }
-    const next = [{ songId: id, playDuration, playedAt: new Date().toISOString() }, ...user.recentlyPlayed.filter((item) => item.songId !== id)].slice(0, 50);
+    const next = [{ songId: id, playDuration, playedAt: new Date().toISOString() }, ...user.recentlyPlayed.filter((item) => item.songId !== id)].slice(0, RECENTLY_PLAYED_LIMIT);
     try {
       // Pressing play is a mild vote. How long they stayed arrives separately, as a listen signal.
       const taught = await learn(catalog, user, id, (song) => (playDuration > 0 ? playWeight(playDuration, song.duration) : 0.3));

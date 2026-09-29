@@ -147,7 +147,7 @@ DELETE /api/libraries/:id/songs/:songId
 GET    /api/me/liked                   → ApiResponse<UnifiedSong[]>
 POST   /api/me/liked                   { songId }
 DELETE /api/me/liked/:songId
-GET    /api/me/recently-played
+GET    /api/me/recently-played     → newest first, at most 25 (older listens are dropped on write)
 POST   /api/me/recently-played         { songId, playDuration }
 GET/PATCH /api/me/settings
 ```

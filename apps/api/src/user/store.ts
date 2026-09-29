@@ -11,6 +11,9 @@ export interface LibraryRecord {
   readonly coverUrl?: string;
 }
 
+/** Recent listens kept per listener. Older ones are dropped on every write, not archived. */
+export const RECENTLY_PLAYED_LIMIT = 25;
+
 export interface RecentRecord {
   readonly songId: string;
   readonly playDuration: number;
