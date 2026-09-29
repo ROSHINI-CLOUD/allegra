@@ -40,9 +40,11 @@ interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly icon: LucideIcon;
   readonly label: string;
   readonly active?: boolean;
+  /** Fades to a solid, filled glyph on hover. Only for closed shapes (skips), where a fill reads cleanly. */
+  readonly solidOnHover?: boolean;
 }
 
-export function IconButton({ icon: Icon, label, active = false, className = '', ...props }: IconButtonProps) {
+export function IconButton({ icon: Icon, label, active = false, solidOnHover = false, className = '', ...props }: IconButtonProps) {
   const press = usePress();
   return (
     <button
@@ -52,7 +54,18 @@ export function IconButton({ icon: Icon, label, active = false, className = '', 
       title={label}
       {...props}
     >
+      {/* A pre-blurred twin of the glyph for the player's hover halo. Hidden unless a surface opts in
+          (app.css): only its opacity animates, so the glow is shaped like the icon, not a disc. */}
+      <span className="icon-glow" aria-hidden="true">
+        <Icon size={18} strokeWidth={3} fill={(Icon === Heart && active) || solidOnHover ? 'currentColor' : 'none'} />
+      </span>
       {Icon === Heart ? <HeartGlyph active={active} /> : <Icon size={18} strokeWidth={1.8} aria-hidden="true" />}
+      {/* The filled glyph crossfades over the outline: an opacity fade, never an animated fill. */}
+      {solidOnHover ? (
+        <span className="icon-solid" aria-hidden="true">
+          <Icon size={18} strokeWidth={1.8} fill="currentColor" />
+        </span>
+      ) : null}
     </button>
   );
 }

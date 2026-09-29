@@ -1,4 +1,4 @@
-import { Ellipsis, Info, Languages, LoaderCircle, Mic, Minus, Moon, Plus, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
+import { Check, Ellipsis, Info, Languages, LoaderCircle, Mic, Minus, Moon, Plus, RefreshCw, SlidersHorizontal, WifiOff, X } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
 import {
   memo,
@@ -10,13 +10,14 @@ import {
   useState,
   type CSSProperties,
   type MouseEvent,
-  type MutableRefObject
+  type MutableRefObject,
+  type ReactNode
 } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { LyricLine, LyricsPayload } from '@shared/types';
 
-import { EmptyState, IconButton, TactileButton } from './ui';
+import { IconButton, TactileButton } from './ui';
 import { useNarrowViewport } from '../hooks/useNarrowViewport';
 import { useSettings } from '../hooks/useSettings';
 import { clampLyricsOffset, withLyricsOffset, type LyricsSize } from '../lib/settings';
@@ -24,6 +25,8 @@ import { clamp } from '../lib/utils';
 
 interface LyricsPanelProps {
   readonly lines: LyricLine[];
+  /** English under each line, by index (translation keeps line order). Null shows the original alone. */
+  readonly translations?: readonly string[] | null;
   readonly currentTime: number;
   readonly loading: boolean;
   readonly error: string | null;
@@ -82,6 +85,7 @@ function easeOutCubic(t: number): number {
  */
 export function LyricsPanel({
   lines,
+  translations = null,
   currentTime,
   loading,
   error,
@@ -162,6 +166,7 @@ export function LyricsPanel({
     () => (lines.length > 0 ? `${lines[0]?.timestamp ?? 0}:${lines.length}:${lines[lines.length - 1]?.timestamp ?? 0}` : ''),
     [lines]
   );
+  const hasTranslations = translations !== null;
 
   const pauseFollow = useCallback(() => {
     if (scrollAnimationRef.current) {
@@ -230,7 +235,13 @@ export function LyricsPanel({
       // and parks the active line above centre.
       const offsetInScroll =
         container.scrollTop + (active.getBoundingClientRect().top - container.getBoundingClientRect().top);
-      const target = offsetInScroll - container.clientHeight * ACTIVE_LINE_ANCHOR + active.offsetHeight / 2;
+      // A line that wraps to several rows would push its top up into the stage's top fog, which
+      // blurs the words being sung; past that height the line rests just clear of the fog instead.
+      const restingTop = Math.max(
+        container.clientHeight * ACTIVE_LINE_ANCHOR - active.offsetHeight / 2,
+        container.clientHeight * FOG_CLEARANCE
+      );
+      const target = offsetInScroll - restingTop;
       const nextTop = Math.max(0, target);
       const start = container.scrollTop;
       const distance = nextTop - start;
@@ -276,7 +287,8 @@ export function LyricsPanel({
     const firstPlacement = !positionedRef.current;
     positionedRef.current = true;
     scrollActiveIntoView(Boolean(reduced) || firstPlacement);
-  }, [activeIndex, loading, lines.length, reduced, scrollActiveIntoView, followPaused, songKey]);
+    // Showing or hiding translations changes every line's height, so the active line is placed again.
+  }, [activeIndex, loading, lines.length, reduced, scrollActiveIntoView, followPaused, songKey, hasTranslations]);
 
   const handleScroll = useCallback(() => {
     // Our own animation drives scrollTop every frame too, so ignore scroll events while it runs.
@@ -493,19 +505,45 @@ export function LyricsPanel({
       </div>
       {alternativesOpen ? (
         <div id="lyrics-alternatives" className="lyrics-alternatives" aria-live="polite">
-          <div className="lyrics-alternatives__intro">
-            <strong>Choose a lyric version</strong>
-            <span>These are real matches from the lyric providers currently available for this song.</span>
+          <div className="lyrics-alternatives__head">
+            <div className="lyrics-alternatives__intro">
+              <strong>
+                Lyric versions
+                {alternatives && alternatives.length > 0 ? <span className="lyrics-alternatives__count">{alternatives.length}</span> : null}
+              </strong>
+              <span>Wrong words or timing? Pick another match for this song.</span>
+            </div>
+            <button type="button" className="lyrics-alternatives__close" onClick={() => setAlternativesOpen(false)} aria-label="Close lyric versions">
+              <X size={16} aria-hidden="true" />
+            </button>
           </div>
-          {alternativesLoading ? <p className="lyrics-alternatives__status">Looking for other versions…</p> : null}
-          {alternativesError ? <p className="ytm-lyrics__alert">{alternativesError}</p> : null}
-          {!alternativesLoading && !alternativesError && alternatives?.length === 0 ? (
-            <p className="lyrics-alternatives__status">No other lyric version was found for this recording.</p>
-          ) : null}
-          {!alternativesLoading && alternatives && alternatives.length > 0 ? (
+          {alternativesLoading ? (
+            <div className="lyrics-alternatives__list" role="status" aria-label="Looking for other versions">
+              {[0, 1, 2].map((item) => (
+                <div key={item} className="lyrics-alternative lyrics-alternative--skeleton" aria-hidden="true">
+                  <i />
+                  <i />
+                </div>
+              ))}
+            </div>
+          ) : alternativesError ? (
+            <div className="lyrics-alternatives__empty" role="alert">
+              <p>{alternativesError}</p>
+              {onLoadAlternatives ? (
+                <button type="button" className="lyrics-alternatives__retry" onClick={onLoadAlternatives}>
+                  <RefreshCw size={14} aria-hidden="true" /> Try again
+                </button>
+              ) : null}
+            </div>
+          ) : alternatives?.length === 0 ? (
+            <div className="lyrics-alternatives__empty">
+              <p>No other version found. These lyrics are the only match for this recording.</p>
+            </div>
+          ) : alternatives ? (
             <div className="lyrics-alternatives__list" role="list" aria-label="Other lyric versions">
               {alternatives.map((alternative, index) => {
                 const selected = alternative.source === source && alternative.lines.length === lines.length && alternative.lines[0]?.text === lines[0]?.text;
+                const preview = alternativePreview(alternative);
                 return (
                   <button
                     key={`${alternative.source}-${alternative.lines[0]?.timestamp ?? index}-${index}`}
@@ -518,8 +556,17 @@ export function LyricsPanel({
                     }}
                     role="listitem"
                   >
-                    <span><strong>{formatSource(alternative.source)}</strong><small>{alternative.matchReason}</small></span>
-                    <span className="lyrics-alternative__type">{alternative.type === 'synced' ? 'Synced' : 'Plain'}</span>
+                    <span className="lyrics-alternative__top">
+                      <strong>{formatSource(alternative.source)}</strong>
+                      <span className={`lyrics-alternative__type is-${alternative.type}`}>{alternative.type === 'synced' ? 'Synced' : 'Plain'}</span>
+                      {selected ? (
+                        <span className="lyrics-alternative__current">
+                          <Check size={12} aria-hidden="true" /> Showing
+                        </span>
+                      ) : null}
+                    </span>
+                    {preview ? <span className="lyrics-alternative__preview">{preview}</span> : null}
+                    <small>{alternativeMeta(alternative)}</small>
                   </button>
                 );
               })}
@@ -558,13 +605,34 @@ export function LyricsPanel({
           </div>
         </div>
       ) : error ? (
-        <div className="ytm-lyrics__state ytm-lyrics__state--error" role="alert">
-          <p>{error}</p>
-          <TactileButton icon={RefreshCw} onClick={onRetry}>Try again</TactileButton>
+        <div className="ytm-lyrics__state ytm-lyrics__state--error">
+          <LyricsMessage tone="error" title="Lyrics didn't load" copy={error}>
+            <TactileButton icon={RefreshCw} onClick={onRetry}>Try again</TactileButton>
+          </LyricsMessage>
         </div>
       ) : lines.length === 0 ? (
-        <div className="ytm-lyrics__state">
-          <EmptyState title="No lyrics found" copy="We could not locate synchronized lyrics for this track." />
+        <div className="ytm-lyrics__state ytm-lyrics__state--empty">
+          <LyricsMessage
+            tone="empty"
+            title="No lyrics for this one"
+            copy={compact ? 'Just the music this time.' : 'Just the music this time. Sit back and enjoy it, or check whether another version has the words.'}
+          >
+            {!compact && onLoadAlternatives ? (
+              <TactileButton
+                icon={RefreshCw}
+                onClick={() => {
+                  if (!alternativesOpen) toggleAlternatives();
+                }}
+              >
+                Find another version
+              </TactileButton>
+            ) : null}
+            {!compact ? (
+              <TactileButton variant="ghost" onClick={onRetry}>
+                Search again
+              </TactileButton>
+            ) : null}
+          </LyricsMessage>
         </div>
       ) : (
         <div
@@ -580,6 +648,7 @@ export function LyricsPanel({
             <LyricLineButton
               key={`${line.lineOrder}-${line.timestamp}`}
               line={line}
+              translation={translationFor(line, translations?.[index])}
               index={index}
               activeIndex={activeIndex}
               progress={index === activeIndex ? lineProgress : 0}
@@ -714,8 +783,45 @@ function formatSource(source: string): string {
   return source.replace(/\(([^)]+)\)/, ' · $1');
 }
 
+/** The panel's no-lyrics and couldn't-load states: a small mark, a title, one line, and what to do next. */
+function LyricsMessage({ tone, title, copy, children }: { readonly tone: 'empty' | 'error'; readonly title: string; readonly copy: string; readonly children?: ReactNode }) {
+  return (
+    <div className={`lyrics-message lyrics-message--${tone}`} role={tone === 'error' ? 'alert' : 'status'}>
+      <span className="lyrics-message__mark" aria-hidden="true">
+        {tone === 'empty' ? (
+          <span className="lyric-wave lyric-wave--idle"><i /><i /><i /><i /><i /></span>
+        ) : (
+          <WifiOff size={24} strokeWidth={1.8} />
+        )}
+      </span>
+      <strong className="lyrics-message__title">{title}</strong>
+      <p className="lyrics-message__copy">{copy}</p>
+      {children ? <div className="lyrics-message__actions">{children}</div> : null}
+    </div>
+  );
+}
+
+/** The first sung line of a version, so two versions can be told apart by their words. */
+function alternativePreview(alternative: LyricsPayload): string {
+  const line = alternative.lines.find((item) => {
+    const text = item.text.trim();
+    return text && text !== '[INSTRUMENTAL]' && text !== '🎵';
+  });
+  return line?.text.trim() ?? '';
+}
+
+/** Line count plus what the match was filed under; "Synced" and "Title match" are already implied. */
+function alternativeMeta(alternative: LyricsPayload): string {
+  const reasons = alternative.matchReason
+    .split(' • ')
+    .map((part) => part.trim())
+    .filter((part) => part && !['Synced', 'Plain text', 'Title match', 'Best available match'].includes(part));
+  return [`${alternative.lines.length} lines`, ...reasons].join(' · ');
+}
+
 const LyricLineButton = memo(function LyricLineButton({
   line,
+  translation,
   index,
   activeIndex,
   progress,
@@ -724,6 +830,7 @@ const LyricLineButton = memo(function LyricLineButton({
   lineRefs
 }: {
   readonly line: LyricLine;
+  readonly translation: string | null;
   readonly index: number;
   readonly activeIndex: number;
   readonly progress: number;
@@ -766,12 +873,26 @@ const LyricLineButton = memo(function LyricLineButton({
       ) : (
         line.text
       )}
+      {translation ? (
+        <span className="ytm-lyrics__translation" lang="en">
+          {translation}
+        </span>
+      ) : null}
     </button>
   );
 });
 
+/** The translation worth showing under a line: none for breaks, blanks, or a line already in English. */
+function translationFor(line: LyricLine, translated: string | undefined): string | null {
+  const text = translated?.trim();
+  if (!text || text === '[INSTRUMENTAL]' || text === '🎵') return null;
+  return text.toLowerCase() === line.text.trim().toLowerCase() ? null : text;
+}
+
 /** Where the sung line rests in the lyrics viewport: 0 is the top edge, 0.5 dead centre. */
 const ACTIVE_LINE_ANCHOR = 0.4;
+/** The active line's top never rests above this: the top fog (`.ytm-lyrics__edge`, 18% tall) sits there. */
+const FOG_CLEARANCE = 0.2;
 
 function lineOpacity(distance: number, active: boolean): number {
   if (active) return 1;

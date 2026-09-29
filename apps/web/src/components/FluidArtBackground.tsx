@@ -1,8 +1,16 @@
-import { memo, useEffect, useState } from 'react';
-import type { CSSProperties } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
+import type { AnimationEvent, CSSProperties } from 'react';
 
 import { DEFAULT_PALETTE, extractPalette } from '../lib/palette';
 import type { Palette } from '../lib/palette';
+
+/** Scenes alive at once: the base plus fades still landing during quick skips. Bounds the DOM. */
+const MAX_SCENES = 3;
+
+interface Scene {
+  readonly id: number;
+  readonly palette: Palette;
+}
 
 interface FluidArtBackgroundProps {
   readonly artworkUrl: string;
@@ -32,40 +40,44 @@ function paletteVars(palette: Palette): CSSProperties {
  * WebGL or animation library.
  */
 export const FluidArtBackground = memo(function FluidArtBackground({ artworkUrl }: FluidArtBackgroundProps) {
-  const [current, setCurrent] = useState<Palette>(DEFAULT_PALETTE);
-  const [incoming, setIncoming] = useState<Palette | null>(null);
+  // Oldest first. The newest dissolves in over the rest (CSS, --d-atmosphere); when it lands, the
+  // scenes under it are dropped and it stays on as the base. The element that faded in is the one
+  // that keeps playing, so its orbs never jump to another scene's point in their orbit, and every
+  // scene is opaque, so removing the ones underneath changes nothing on screen.
+  const [scenes, setScenes] = useState<readonly Scene[]>([{ id: 0, palette: DEFAULT_PALETTE }]);
+  const nextId = useRef(1);
 
   useEffect(() => {
     const controller = new AbortController();
     void extractPalette(artworkUrl, controller.signal).then((next) => {
       if (controller.signal.aborted) return;
-      setIncoming(next);
-      const timer = window.setTimeout(() => {
-        if (controller.signal.aborted) return;
-        setCurrent(next);
-        setIncoming(null);
-      }, 1300);
-      return () => window.clearTimeout(timer);
+      const id = nextId.current++;
+      setScenes((current) => [...current, { id, palette: next }].slice(-MAX_SCENES));
     });
     return () => controller.abort();
   }, [artworkUrl]);
 
+  const settle = (id: number) => (event: AnimationEvent<HTMLDivElement>): void => {
+    // The orbs' own endless spin animations bubble here too; only the scene's dissolve counts.
+    if (event.target !== event.currentTarget) return;
+    setScenes((current) => current.slice(Math.max(0, current.findIndex((scene) => scene.id === id))));
+  };
+
   return (
     <div className="fluid" aria-hidden="true">
-      <div className="fluid__scene" style={paletteVars(current)}>
-        <div className="fluid__spin fluid__spin--1"><div className="fluid__orb fluid__orb--a" /></div>
-        <div className="fluid__spin fluid__spin--2"><div className="fluid__orb fluid__orb--b" /></div>
-        <div className="fluid__spin fluid__spin--3"><div className="fluid__orb fluid__orb--a" /></div>
-        <div className="fluid__spin fluid__spin--4"><div className="fluid__orb fluid__orb--dark" /></div>
-      </div>
-      {incoming ? (
-        <div className="fluid__scene is-incoming" style={paletteVars(incoming)}>
+      {scenes.map((scene) => (
+        <div
+          key={scene.id}
+          className={`fluid__scene${scene.id === 0 ? '' : ' is-incoming'}`}
+          style={paletteVars(scene.palette)}
+          onAnimationEnd={scene.id === 0 ? undefined : settle(scene.id)}
+        >
           <div className="fluid__spin fluid__spin--1"><div className="fluid__orb fluid__orb--a" /></div>
           <div className="fluid__spin fluid__spin--2"><div className="fluid__orb fluid__orb--b" /></div>
           <div className="fluid__spin fluid__spin--3"><div className="fluid__orb fluid__orb--a" /></div>
           <div className="fluid__spin fluid__spin--4"><div className="fluid__orb fluid__orb--dark" /></div>
         </div>
-      ) : null}
+      ))}
       <div className="fluid__shade" />
     </div>
   );

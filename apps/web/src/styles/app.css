@@ -172,6 +172,12 @@ body::after,
 
 .icon-button:hover,
 .tactile-icon-control:hover { background: var(--active-wash); color: var(--ink); }
+/* IconButton's blurred glyph twin; only surfaces that want a hover halo show it. */
+.icon-glow { display: none; }
+/* Its filled twin (solidOnHover), laid exactly over the outline and faded in on hover. */
+.tactile-icon-control:has(> .icon-solid) { position: relative; }
+.icon-solid { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity var(--d-base) var(--ease-standard), transform var(--d-base) var(--ease-press); pointer-events: none; }
+.tactile-icon-control:is(:hover, :focus-visible) > .icon-solid { opacity: 1; }
 
 .tactile-icon-control[aria-label^='Remove from likes'] { color: var(--accent); }
 .tactile-icon-control[aria-label^='Remove from likes'] svg { fill: currentColor; }
@@ -2056,6 +2062,54 @@ button.top-song-album:hover { color: var(--ink); text-decoration: underline; tex
 .player-tabs { backdrop-filter: blur(24px) saturate(160%); }
 .listening-collapse { background: rgba(255, 255, 255, 0.1); }
 .player-tabs { background: rgba(14, 14, 18, 0.34); border: 1px solid rgba(255, 255, 255, 0.12); }
+
+/* Wide player's Back: a round chevron at rest; hovering draws the pill out to the right and the
+ * label slides in. The pill is a full-width layer slid left under the button's rounded clip, so at
+ * rest only its round end shows, which with the clip's own round end makes a circle. Transform and
+ * opacity only, never width. A press dips and springs back. (Phones already show the icon alone.) */
+@media (min-width: 901px) {
+  .listening-collapse {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    gap: 10px;
+    padding: 0 18px 0 13px;
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    transform-origin: 22px 50%;
+    transition: transform var(--d-base) var(--ease-spring);
+  }
+  .listening-collapse::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    border-radius: inherit;
+    background: rgba(255, 255, 255, 0.1);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    backdrop-filter: blur(24px) saturate(160%);
+    transform: translateX(calc(44px - 100%));
+    transition: transform var(--d-slow) var(--ease-press);
+  }
+  .listening-collapse > svg { flex: none; }
+  .listening-collapse__label {
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition: opacity var(--d-base) var(--ease-standard), transform var(--d-slow) var(--ease-press);
+  }
+  .listening-collapse:is(:hover, :focus-visible) { background: transparent; }
+  .listening-collapse:is(:hover, :focus-visible)::before { transform: none; }
+  .listening-collapse:is(:hover, :focus-visible) .listening-collapse__label { opacity: 1; transform: none; }
+  .listening-collapse:active { transform: scale(0.9); transition-duration: var(--d-instant); transition-timing-function: var(--ease-press); }
+}
+@media (min-width: 901px) and (prefers-reduced-motion: reduce) {
+  .listening-collapse,
+  .listening-collapse::before { transition: none; }
+  .listening-collapse:active { transform: none; }
+  .listening-collapse__label { transform: none; transition: opacity var(--d-base) var(--ease-standard); }
+}
 
 /* ---------- Lyrics: no box, no chrome — only the words, fading at the edges ---------- */
 .player-sidepanel.is-lyrics {
@@ -4881,6 +4935,35 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
 .listening-world .np-actions .tactile-icon-control,
 .listening-world .np-actions button { width: 44px; height: 44px; }
 
+/* Player icons (the skips and the actions beside them) hover as light, not as a disc: the glyph
+ * brightens and lifts, and a halo in its own shape and colour rises around it. The halo is the
+ * IconButton's pre-blurred twin, so the blur is painted once and only opacity and transform
+ * animate; there is no fill behind the icon for the eye to read as a circle. */
+.listening-world :is(.np-btns, .np-actions) .tactile-icon-control { position: relative; isolation: isolate; }
+.listening-world :is(.np-btns, .np-actions) .tactile-icon-control:is(:hover, :focus-visible, :active) { background: transparent; }
+.listening-world :is(.np-btns, .np-actions) .icon-glow {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: inherit;
+  filter: blur(6px);
+  opacity: 0;
+  transition: opacity var(--d-slow) var(--ease-standard), transform var(--d-base) var(--ease-press);
+  pointer-events: none;
+}
+.listening-world :is(.np-btns, .np-actions) .icon-glow svg { filter: none; }
+.listening-world :is(.np-btns, .np-actions) .tactile-icon-control:is(:hover, :focus-visible) .icon-glow { opacity: 1; }
+.listening-world :is(.np-btns, .np-actions) .tactile-icon-control > svg { opacity: 0.82; transition: opacity var(--d-base) var(--ease-standard), transform var(--d-base) var(--ease-press); }
+.listening-world :is(.np-btns, .np-actions) .tactile-icon-control:is(:hover, :focus-visible) > svg { opacity: 1; }
+/* The skips lean the way they go; glyph and halo move together. */
+.listening-world .np-btns .tactile-icon-control[aria-label='Previous track']:hover > :is(svg, .icon-glow, .icon-solid) { transform: translateX(-2px); }
+.listening-world .np-btns .tactile-icon-control[aria-label='Next track']:hover > :is(svg, .icon-glow, .icon-solid) { transform: translateX(2px); }
+@media (prefers-reduced-motion: reduce) {
+  .listening-world .np-btns .tactile-icon-control:hover > :is(svg, .icon-glow, .icon-solid) { transform: none; }
+}
+
 /* ---------- Lyrics stage: the cover's colour over black, and a background that visibly moves ---------- */
 .listening-world .music-bg-base {
   background: linear-gradient(
@@ -4917,6 +5000,42 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
 .lyric-wave--live i:nth-child(4) { animation-delay: -0.3s; }
 .lyric-wave--live i:nth-child(5) { animation-delay: -0.7s; }
 @media (prefers-reduced-motion: reduce) { .lyric-wave--live i { animation: none; transform: scaleY(0.6); } }
+
+/* No lyrics / couldn't load: centred in the lyric column, a small mark over a title, one line of
+ * copy and the next step. It rises in once; nothing loops except the idle wave's slow breath. */
+.ytm-lyrics__state--empty,
+.ytm-lyrics__state--error { display: grid; flex: 1 1 auto; min-height: 0; place-items: center; padding: 24px var(--lyrics-gutter, 16px); }
+.lyrics-message {
+  display: grid;
+  max-width: 24rem;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  animation: lyrics-message-in var(--d-slow) var(--ease-decelerate) both;
+}
+@keyframes lyrics-message-in { from { opacity: 0; transform: translateY(10px); } }
+.lyrics-message__mark { display: grid; height: 48px; place-items: center; margin-bottom: 4px; color: rgba(255, 255, 255, 0.7); }
+.lyrics-message__mark .lyric-wave { height: 32px; gap: 5px; }
+.lyrics-message__mark .lyric-wave i { width: 4px; background: rgba(255, 255, 255, 0.55); }
+/* Resting bars at uneven heights, breathing slowly: music without words. */
+.lyric-wave--idle i { transform: scaleY(0.35); animation: lyric-idle calc(var(--d-shimmer) * 2) var(--ease-standard) infinite alternate; }
+.lyric-wave--idle i:nth-child(2) { transform: scaleY(0.7); animation-delay: calc(var(--d-shimmer) * -0.6); }
+.lyric-wave--idle i:nth-child(3) { transform: scaleY(0.5); animation-delay: calc(var(--d-shimmer) * -1.2); }
+.lyric-wave--idle i:nth-child(4) { transform: scaleY(0.85); animation-delay: calc(var(--d-shimmer) * -0.3); }
+.lyric-wave--idle i:nth-child(5) { transform: scaleY(0.4); animation-delay: calc(var(--d-shimmer) * -0.9); }
+@keyframes lyric-idle { from { opacity: 0.55; } to { opacity: 1; } }
+.lyrics-message__title { color: #fff; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.25; }
+.lyrics-message__copy { margin: 0; color: rgba(255, 255, 255, 0.66); font-size: 14px; line-height: 1.5; }
+.lyrics-message__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 10px; }
+.lyrics-message--error .lyrics-message__mark { color: rgba(255, 255, 255, 0.6); }
+.lyrics-teaser .lyrics-message__title { color: var(--ink); font-size: 16px; }
+.lyrics-teaser .lyrics-message__copy { color: var(--ink-muted); }
+.lyrics-teaser .lyrics-message__mark .lyric-wave i { background: var(--ink-muted); }
+@media (prefers-reduced-motion: reduce) {
+  .lyrics-message { animation-name: lyrics-message-fade; }
+  .lyric-wave--idle i { animation: none; }
+}
+@keyframes lyrics-message-fade { from { opacity: 0; } }
 
 /* ---------- Lyrics stage colour fields, rebuilt to survive zoom and resize ----------
  * The old fields were 30vmax elements whose blurred child was scaled 3.4x and screen-blended.
@@ -4963,8 +5082,12 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
  * brighter hue instead of just overlapping — the same trick a real mesh gradient uses. The
  * black orb blends normally and gives the field somewhere to recede to. */
 .fluid { position: absolute; inset: 0; overflow: hidden; background: #050608; contain: paint; }
-.fluid__scene { position: absolute; inset: 0; opacity: 1; }
-.fluid__scene.is-incoming { opacity: 0; animation: fluid-in 1.3s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+/* Each scene is a whole picture on its own dark base, blended in isolation. Without that, the
+ * incoming scene's screen-blended orbs lit up the outgoing ones beneath them: the change brightened
+ * as it faded in, then dropped dark the moment the old scene was removed. Now it is a true dissolve
+ * and the hand-over at the end changes nothing on screen. */
+.fluid__scene { position: absolute; inset: 0; opacity: 1; isolation: isolate; background: #050608; }
+.fluid__scene.is-incoming { opacity: 0; animation: fluid-in var(--d-atmosphere) var(--ease-standard) forwards; }
 @keyframes fluid-in { to { opacity: 1; } }
 
 .fluid__spin { position: absolute; left: var(--ax); top: var(--ay); width: 0; height: 0; will-change: transform; animation: fluid-turn var(--turn) linear infinite; animation-direction: var(--dir, normal); }
@@ -5380,20 +5503,52 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   backdrop-filter: blur(24px) saturate(150%);
 }
 
-.lyrics-alternatives__intro { display: grid; gap: 3px; margin: 0 4px 10px; }
-.lyrics-alternatives__intro strong { color: var(--ink); font-size: 14px; }
+.lyrics-alternatives__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin: 0 2px 12px 4px; }
+.lyrics-alternatives__intro { display: grid; gap: 3px; min-width: 0; }
+.lyrics-alternatives__intro strong { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; }
 .lyrics-alternatives__intro span,
-.lyrics-alternatives__status { margin: 0; color: var(--ink-muted); font-size: 12px; line-height: 1.45; }
-.lyrics-alternatives__list { display: grid; gap: 6px; }
+.lyrics-alternatives__empty p { margin: 0; color: var(--ink-muted); font-size: 12px; line-height: 1.45; }
+.lyrics-alternatives__count { display: inline-grid; min-width: 20px; height: 20px; place-items: center; padding: 0 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); color: var(--ink) !important; font-size: 11px !important; font-weight: 700; }
+.lyrics-alternatives__close {
+  display: grid;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color var(--d-fast) var(--ease-standard);
+}
+.lyrics-alternatives__close:hover { background: rgba(255, 255, 255, 0.16); }
+.lyrics-alternatives__list { display: grid; gap: 8px; }
+.lyrics-alternatives__empty { display: grid; justify-items: start; gap: 10px; padding: 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); }
+.lyrics-alternatives__retry {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--d-fast) var(--ease-standard), transform var(--d-fast) var(--ease-press);
+}
+.lyrics-alternatives__retry:hover { background: rgba(255, 255, 255, 0.14); }
+.lyrics-alternatives__retry:active { transform: scale(0.97); }
 
 .lyrics-alternative {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  gap: 4px;
   width: 100%;
-  min-height: 52px;
-  padding: 9px 10px;
+  padding: 11px 12px;
   border: 1px solid transparent;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.055);
@@ -5404,14 +5559,26 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   transition: transform var(--d-fast) var(--ease-press), background-color var(--d-fast) var(--ease-standard), border-color var(--d-fast) var(--ease-standard);
 }
 
-.lyrics-alternative > span:first-child { display: grid; min-width: 0; gap: 2px; }
+.lyrics-alternative__top { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .lyrics-alternative strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.lyrics-alternative__type { flex: none; padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--wave) 18%, transparent); color: var(--wave); font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }
+.lyrics-alternative__type.is-plain { background: rgba(255, 255, 255, 0.1); color: var(--ink-muted); }
+.lyrics-alternative__current { display: inline-flex; flex: none; align-items: center; gap: 3px; margin-left: auto; color: var(--ink); font-size: 11px; font-weight: 600; }
+/* The version's own opening words: the quickest way to tell a Tamil-script copy from a romanised one. */
+.lyrics-alternative__preview { overflow: hidden; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .lyrics-alternative small { overflow: hidden; color: var(--ink-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.lyrics-alternative__type { flex: 0 0 auto; color: var(--wave); font-size: 11px; font-weight: 700; }
 .lyrics-alternative:hover,
 .lyrics-alternative:focus-visible,
 .lyrics-alternative.is-selected { border-color: color-mix(in srgb, var(--wave) 44%, transparent); background: color-mix(in srgb, var(--wave) 14%, rgba(255, 255, 255, 0.05)); }
 .lyrics-alternative:active { transform: scale(0.985); }
+
+.lyrics-alternative--skeleton { gap: 8px; cursor: default; animation: artist-face-pulse var(--d-shimmer) var(--ease-standard) infinite; }
+.lyrics-alternative--skeleton i { display: block; height: 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); }
+.lyrics-alternative--skeleton i:first-child { width: 38%; }
+.lyrics-alternative--skeleton i:last-child { width: 72%; height: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .lyrics-alternative--skeleton { animation: none; }
+}
 
 /* Apple Music Canvas is real editorial motion artwork, not a colour animation. The video stays
  * inside its release cover and only exists on phones after the server verifies an Apple match. */
@@ -6218,6 +6385,19 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
 }
 .ytm-lyrics--nobackdrop.ytm-lyrics--softfocus .ytm-lyrics__line { padding-block: 0.3em; text-wrap: balance; }
 
+/* Translation: the original stays the line; the English sits under it, small and quieter. Sized in
+   em so it follows the line's own size (and the lyrics-size setting) wherever the line renders. */
+.ytm-lyrics__translation {
+  display: block;
+  margin-top: 0.3em;
+  font-size: 0.46em;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.35;
+  opacity: 0.72;
+  text-shadow: none;
+}
+
 /* On a short desktop window the now-playing column can be taller than the viewport, which
  * stretches the shared grid row and pushes the lyric panel's bottom (and the sync pill) offscreen. */
 @media (min-width: 961px) {
@@ -6352,7 +6532,10 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   position: relative;
   z-index: 4;
 }
-.ytm-lyrics--nobackdrop.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__edge--top { top: 40px; }
+/* Only while the action row is in the panel. When the wide player lifts it into its top bar, the
+   fog starts at the edge, where the scroller's own fade hides its hard top — pushed down with
+   nothing above it, that top edge cut straight across the lines as a blurred band. */
+.ytm-lyrics--nobackdrop.ytm-lyrics--softfocus:not(.ytm-lyrics--compact):has(.ytm-lyrics__chrome .ytm-lyrics__actions) .ytm-lyrics__edge--top { top: 40px; }
 .player-sidepanel.is-lyrics .ytm-lyrics__chrome .tactile-control { opacity: 0.9; }
 .player-sidepanel.is-lyrics .ytm-lyrics__chrome .tactile-control { color: rgba(255, 255, 255, 0.9); }
 
@@ -6580,9 +6763,13 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
    * from the right half toward the centre — one transform on the panel, same duration and curve as
    * the cover, so the two read as a single move. Width and text alignment never change mid-move. */
   .listening-world .player-sidepanel { transition: transform var(--d-slow) var(--ease-press); }
-  /* The move lands the first letter on the tabs' left edge: the panel starts at the screen's centre
-   * and its text one gutter in, the tabs start ~145px left of centre, so the distance is constant. */
-  .listening-world.is-lyrics-full .player-sidepanel { transform: translateX(calc(-145px - clamp(28px, 4vw, 48px))); }
+  /* The move centres the column on the stage: the panel is the right half, so half its own width
+   * back lands it dead centre at any window size. The lines centre inside it, so a long line spreads
+   * evenly both ways instead of running off to the right of a left edge. */
+  .listening-world.is-lyrics-full .player-sidepanel { transform: translateX(-50%); }
+  .listening-world.is-lyrics-full .ytm-lyrics__line { text-align: center; }
+  .listening-world.is-lyrics-full .player-sidepanel.is-lyrics .ytm-lyrics__note,
+  .listening-world.is-lyrics-full .player-sidepanel.is-lyrics .ytm-lyrics__alert { align-self: center; text-align: center; }
   .listening-world.is-lyrics-full .np-art { pointer-events: none; }
   .listening-world.is-solo .np-art { justify-self: center; margin-left: 0; --stage-art: min(580px, calc(100dvh - 330px), 60vw); width: var(--stage-art); }
 

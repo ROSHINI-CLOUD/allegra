@@ -41,7 +41,7 @@ import { tapHaptic } from './lib/haptics';
 import { lockScroll } from './lib/scrollLock';
 import { DEFAULT_PALETTE, extractPalette, shadePalette } from './lib/palette';
 import type { Palette } from './lib/palette';
-import { ApiError, ensureSession, fetchArtist, fetchArtistFaces, fallbackLyrics, fetchAiRecommendations, fetchHome, fetchLikedSongs, fetchLyrics, fetchLyricsAlternatives, fetchRecentlyPlayed, fetchSharedPlaylist, fetchSuggestions, recordRecentlyPlayed, saveSharedPlaylist, searchSongs, setLikedSong, translateLyrics } from './lib/api';
+import { ApiError, ensureSession, fetchArtist, fetchArtistFaces, fetchAiRecommendations, fetchHome, fetchLikedSongs, fetchLyrics, fetchLyricsAlternatives, fetchRecentlyPlayed, fetchSharedPlaylist, fetchSuggestions, recordRecentlyPlayed, saveSharedPlaylist, searchSongs, setLikedSong, translateLyrics } from './lib/api';
 import { shouldStartRadio, uniqueByIdentity } from './lib/songIdentity';
 import { legacyHashToPath, parseRoute, paths } from './lib/routes';
 import { pickTopResult } from './lib/topResult';
@@ -524,7 +524,8 @@ export default function App() {
       .catch((error: unknown) => {
         if (generation !== lyricsGeneration.current || (error instanceof DOMException && error.name === 'AbortError')) return;
         if (error instanceof ApiError && error.status === 404) {
-          setLyrics(fallbackLyrics(song.duration));
+          // No lyrics is an answer, not an error: the panel shows its empty state.
+          setLyrics([]);
           setLyricsPayload(null);
           setLyricsError(null);
         } else {
@@ -598,7 +599,8 @@ export default function App() {
   // the elected release rather than whatever the provider listed first, which was
   // regularly a compilation the song merely appears on.
   const activeSong = audio.currentSong ?? pickTopResult(displaySongs, query) ?? null;
-  const displayLyrics = showTranslated && translatedLyrics ? translatedLyrics : lyrics;
+  // A translation sits under each original line (same order and timestamps), never in place of it.
+  const lyricTranslations = showTranslated && translatedLyrics ? translatedLyrics.map((line) => line.text) : null;
   const queueSongs = audio.queue.length > 0 ? audio.queue : displaySongs;
   const nextSongs = queueSongs.filter((song) => song.id !== activeSong?.id).slice(0, 3);
   const lightSong = nextSongs[0] ?? activeSong ?? home?.madeForYou[0] ?? home?.recommended[0] ?? null;
@@ -901,7 +903,8 @@ export default function App() {
       })
       .catch((error: unknown) => {
         if (error instanceof ApiError && error.status === 404) {
-          setLyrics(fallbackLyrics(song.duration));
+          // No lyrics is an answer, not an error: the panel shows its empty state.
+          setLyrics([]);
           setLyricsPayload(null);
         }
         else setLyricsError(error instanceof Error ? error.message : 'Lyrics could not be loaded.');
@@ -1166,7 +1169,7 @@ export default function App() {
           {lightSong ? <div className="light-scene-grid"><div className="light-scene-art"><button onClick={() => playSong(lightSong)} aria-label={`Play ${lightSong.title}`}><Artwork song={lightSong} size="large" /></button><div className="light-scene-track"><strong>{lightSong.title}</strong><span>{lightSong.artist}</span></div></div><div className="light-scene-copy"><h2 id="light-scene-heading">Keep listening</h2><p>One more track from your queue, ready when you are.</p><TactileButton variant="primary" icon={Play} aria-label={`Play ${lightSong.title}`} onClick={() => playSong(lightSong)}>Play next</TactileButton></div></div> : <div className="light-scene-empty"><Disc3 size={22} aria-hidden="true" /><p>Play something and your next pick shows up here.</p></div>}
         </section>
 
-            <section id="words" className="lyrics-teaser"><div className="teaser-intro"><div><h2>Lyrics <em>in time</em></h2><p>Follow along with the song you are playing.</p></div><TactileButton variant="secondary" icon={Waves} onClick={() => { if (audio.currentSong) setPlayerMode('workspace'); }}>Open lyrics</TactileButton></div><LyricsPanel lines={displayLyrics} currentTime={audio.currentTime} loading={lyricsLoading} error={lyricsError} onRetry={retryLyrics} onSeek={(time) => void audio.seek(time)} onActivateLine={activateLyricLine} artworkUrl={activeSong?.artwork} translating={translating} translated={showTranslated} translateError={translateError} translateProvider={translateProvider} onToggleTranslate={toggleTranslate} source={lyricsPayload?.source} matchReason={lyricsPayload?.matchReason} alternatives={lyricsAlternatives} alternativesLoading={lyricsAlternativesLoading} alternativesError={lyricsAlternativesError} onLoadAlternatives={loadLyricsAlternatives} onSelectAlternative={selectLyricsAlternative} songId={activeSong?.id ?? null} softFocus /></section>
+            <section id="words" className="lyrics-teaser"><div className="teaser-intro"><div><h2>Lyrics <em>in time</em></h2><p>Follow along with the song you are playing.</p></div><TactileButton variant="secondary" icon={Waves} onClick={() => { if (audio.currentSong) setPlayerMode('workspace'); }}>Open lyrics</TactileButton></div><LyricsPanel lines={lyrics} translations={lyricTranslations} currentTime={audio.currentTime} loading={lyricsLoading} error={lyricsError} onRetry={retryLyrics} onSeek={(time) => void audio.seek(time)} onActivateLine={activateLyricLine} artworkUrl={activeSong?.artwork} translating={translating} translated={showTranslated} translateError={translateError} translateProvider={translateProvider} onToggleTranslate={toggleTranslate} source={lyricsPayload?.source} matchReason={lyricsPayload?.matchReason} alternatives={lyricsAlternatives} alternativesLoading={lyricsAlternativesLoading} alternativesError={lyricsAlternativesError} onLoadAlternatives={loadLyricsAlternatives} onSelectAlternative={selectLyricsAlternative} songId={activeSong?.id ?? null} softFocus /></section>
           </div>
 
           <aside id="queue" ref={nowPlayingRef} className="now-panel" aria-label="Now playing">
@@ -1398,7 +1401,8 @@ export default function App() {
         playbackError={audio.error}
         liked={audio.currentSong ? likedIds.has(audio.currentSong.id) : false}
         lyrics={{
-          lines: displayLyrics,
+          lines: lyrics,
+          translations: lyricTranslations,
           currentTime: audio.currentTime,
           loading: lyricsLoading,
           error: lyricsError,

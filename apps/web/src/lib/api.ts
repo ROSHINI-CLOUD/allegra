@@ -234,10 +234,6 @@ export async function fetchHealth(signal?: AbortSignal): Promise<{ readonly ok: 
 }
 
 /** Placeholder synced lines when the lyrics API returns 404. */
-export function fallbackLyrics(duration: number): LyricLine[] {
-  return [{ timestamp: 0, text: duration > 0 ? 'Lyrics are taking a quiet moment.' : '[INSTRUMENTAL]', lineOrder: 0 }];
-}
-
 export async function createAnonymousSession(): Promise<{ token: string; userId: string }> {
   return request('/api/auth/anon', { method: 'POST' });
 }

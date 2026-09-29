@@ -506,7 +506,7 @@ export function PlayerPanel({
                   <Scrubber currentTime={currentTime} duration={duration} progress={audioProgress} onSeek={onSeek} />
                   {playbackError ? <p className="playback-error" role="alert">{playbackError}</p> : null}
                   <div className="np-btns">
-                    <IconButton icon={SkipBack} label="Previous track" onClick={goPrevious} />
+                    <IconButton icon={SkipBack} label="Previous track" onClick={goPrevious} solidOnHover />
                     <button
                       className={`ctrl-play tactile-control${isBuffering ? ' is-buffering' : ''}`}
                       onClick={onToggle}
@@ -519,7 +519,7 @@ export function PlayerPanel({
                           its shape and stays pressable while the track loads. */}
                       {isBuffering ? <span className="ctrl-play-wait" aria-hidden="true" /> : null}
                     </button>
-                    <IconButton icon={SkipForward} label="Next track" onClick={goNext} />
+                    <IconButton icon={SkipForward} label="Next track" onClick={goNext} solidOnHover />
                   </div>
                   <div className="np-actions">
                     <IconButton
