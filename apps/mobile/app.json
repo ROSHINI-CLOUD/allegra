@@ -1,0 +1,106 @@
+{
+  "expo": {
+    "name": "LyricFlow",
+    "slug": "lyricflow",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "jsEngine": "hermes",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lyricflow.app",
+      "infoPlist": {
+        "NSBonjourServices": [
+          "_luvlyrics._tcp."
+        ],
+        "NSLocalNetworkUsageDescription": "LuvLyrics uses your local network to connect to the desktop app.",
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+"backgroundColor": "#020A16"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.lyricflow.app",
+      "scheme": "lyricflow",
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.WAKE_LOCK",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.CHANGE_WIFI_MULTICAST_STATE",
+        "android.permission.NEARBY_WIFI_DEVICES",
+        "android.permission.WRITE_SETTINGS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "@sentry/react-native/expo",
+      "expo-sqlite",
+      "expo-audio",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow LuvLyrics to access your photos so you can set custom playlist covers."
+        }
+      ],
+      "./plugins/withLuvLyricsLanDiscovery",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "NowPlaying",
+              "label": "Now playing",
+              "description": "The song that's playing, with play, skip and like",
+              "minWidth": "180dp",
+              "minHeight": "180dp",
+              "targetCellWidth": 3,
+              "targetCellHeight": 3,
+              "maxResizeWidth": "360dp",
+              "maxResizeHeight": "360dp",
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 0
+            },
+            {
+              "name": "Playlist",
+              "label": "Playlist",
+              "description": "A playlist you can scroll and play from",
+              "minWidth": "250dp",
+              "minHeight": "180dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 3,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 0
+            }
+          ]
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c1057836-feb4-4f08-b177-7efc8bc2b4b3"
+      }
+    }
+  }
+}

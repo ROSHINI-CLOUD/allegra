@@ -1,0 +1,84 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# local-only workspace (not for repo)
+lakebed/
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+coverage/
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+.env
+credentials.json
+google-services.json
+google-services*.json
+GoogleService-Info.plist
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# Un-ignore every parent so git can reach our custom source files
+!/android/
+!/android/app/
+!/android/app/build.gradle
+!/android/app/src/
+!/android/app/src/main/
+!/android/app/src/main/AndroidManifest.xml
+!/android/app/src/main/java/
+!/android/app/src/main/java/com/
+!/android/app/src/main/java/com/lyricflow/
+!/android/app/src/main/java/com/lyricflow/app/
+!/android/app/src/main/java/com/lyricflow/app/**
+!/android/app/src/main/java/expo/
+!/android/app/src/main/java/expo/modules/
+!/android/app/src/main/java/expo/modules/ExpoModulesPackageList.kt
+
+# Keep sensitive/generated android files out even after un-ignoring parents
+android/app/debug.keystore
+android/app/release.keystore
+
+# Built release artifacts — too large for git, rebuild with gradle instead
+*.apk
+*.aab
+.gstack/
+
+# Ad-hoc ADB screenshots from device verification sessions
+/c*.png
+/coverflow*.png
+
+# Agent session notes / handoffs — local working material, not project docs
+.planning/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

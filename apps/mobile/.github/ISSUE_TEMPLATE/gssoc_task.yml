@@ -1,0 +1,57 @@
+name: GSSoC Task
+description: Pre-scoped task for GSSoC 2026 contributors (maintainer use only)
+title: "[GSSoC]: "
+labels:
+  - gssoc
+  - help wanted
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Maintainer use only.** Fill every field before publishing so contributors can start without back-and-forth. Contributors: comment to request assignment before writing any code.
+  - type: dropdown
+    id: level
+    attributes:
+      label: GSSoC level
+      description: Sets the point value for this task
+      options:
+        - "L1 — 10 pts (docs, tests, small fixes)"
+        - "L2 — 25 pts (features, providers, moderate refactors)"
+        - "L3 — 45 pts (native modules, player engine, migrations)"
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should be done and why
+      placeholder: Add a unit test suite for the LRC timestamp parser in src/utils/lrcParser.ts
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Relevant files
+      description: Files contributors should read or modify
+      placeholder: |
+        - src/utils/lrcParser.ts
+        - src/utils/__tests__/lrcParser.test.ts (create)
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Definition of done — what must be true for the PR to be merged
+      placeholder: |
+        - All exported functions have at least one test
+        - npm run test:ci passes with no new failures
+        - No new TypeScript errors
+    validations:
+      required: true
+  - type: textarea
+    id: hints
+    attributes:
+      label: Hints / approach notes
+      description: Optional — pointers to help contributors get started faster
+      placeholder: See src/utils/__tests__/formatters.test.ts for the test style used in this project

@@ -1,0 +1,5 @@
+{
+  "compilerOptions": {},
+  "exclude": ["lakebed"],
+  "extends": "expo/tsconfig.base"
+}

@@ -11,6 +11,8 @@ things stand, and the doc for your area from [`docs/README.md`](docs/README.md).
 ```
 apps/web          Next.js 16 App Router · React 19 · Tailwind v4 · Motion
 apps/api          Node 22 · Express · TypeScript — ships as one Vercel Function
+apps/mobile       LuvLyrics — Expo · React Native (Android). NOT a root workspace: own
+                  lockfile, `npm install` inside it. Rules in apps/mobile/CLAUDE.md
 packages/shared   types imported by BOTH — the integration seam
 convex/           auth (Google) + listener data: profiles, shares
 docs/             architecture, contract, workflows, setup guides

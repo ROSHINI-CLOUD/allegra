@@ -1,0 +1,120 @@
+package com.lyricflow.app.modules
+
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.util.LruCache
+import androidx.palette.graphics.Palette
+import expo.modules.kotlin.modules.Module
+import expo.modules.kotlin.modules.ModuleDefinition
+import org.json.JSONObject
+
+class PaletteModule : Module() {
+
+    // Cache up to 50 URI→JSON results so repeat plays don't re-decode the bitmap
+    private val cache = LruCache<String, String>(50)
+
+    override fun definition() = ModuleDefinition {
+        Name("Palette")
+
+        // Returns JSON: { dominant, vibrant, darkVibrant, muted, darkMuted, lightVibrant, lightMuted }
+        // Each present swatch: { color: "#RRGGBB", titleTextColor: "#RRGGBB", bodyTextColor: "#RRGGBB" }
+        // Absent swatches are omitted. Returns null string on any failure.
+        AsyncFunction("extractColors") { imageUri: String ->
+            if (imageUri.isBlank()) return@AsyncFunction null
+
+            cache.get(imageUri)?.let { return@AsyncFunction it }
+
+            try {
+                val bitmap = decodeBitmap(imageUri) ?: return@AsyncFunction null
+                val palette = Palette.from(bitmap).generate()
+                val json = buildJson(palette)
+                cache.put(imageUri, json)
+                json
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        // Echo Music's glow colours, exactly: Palette with maximumColorCount(8)
+        // over a 100x100 area, then vibrant, light vibrant, dark vibrant, muted,
+        // light muted, dark muted (each falling back to `fallback`), distinct.
+        AsyncFunction("extractGlowColors") { imageUri: String, fallback: String ->
+            if (imageUri.isBlank()) return@AsyncFunction emptyList<String>()
+            glowCache.get(imageUri)?.let { return@AsyncFunction it }
+            try {
+                val bitmap = decodeBitmap(imageUri) ?: return@AsyncFunction emptyList<String>()
+                val palette = Palette.from(bitmap).maximumColorCount(8).resizeBitmapArea(100 * 100).generate()
+                val fb = android.graphics.Color.parseColor(fallback)
+                val colors = listOf(
+                    palette.getVibrantColor(fb),
+                    palette.getLightVibrantColor(fb),
+                    palette.getDarkVibrantColor(fb),
+                    palette.getMutedColor(fb),
+                    palette.getLightMutedColor(fb),
+                    palette.getDarkMutedColor(fb),
+                ).distinct().map { colorHex(it) }
+                glowCache.put(imageUri, colors)
+                colors
+            } catch (_: Exception) {
+                emptyList<String>()
+            }
+        }
+    }
+
+    private val glowCache = LruCache<String, List<String>>(50)
+
+    private fun decodeBitmap(uriStr: String): Bitmap? {
+        val context = appContext.reactContext ?: return null
+        val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
+        return try {
+            val uri = Uri.parse(uriStr)
+            val scheme = uri.scheme
+            if (scheme == "file" || scheme == null) {
+                BitmapFactory.decodeFile(uri.path, opts)
+            } else if (scheme == "http" || scheme == "https") {
+                // Streamed songs have web covers. ContentResolver can't open
+                // those, so extraction used to fail and the player fell back to
+                // the default colours instead of the song's. AsyncFunction runs
+                // off the main thread, so a short blocking fetch is fine here.
+                val conn = (java.net.URL(uriStr).openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    instanceFollowRedirects = true
+                }
+                try {
+                    conn.inputStream.use { stream -> BitmapFactory.decodeStream(stream, null, opts) }
+                } finally {
+                    conn.disconnect()
+                }
+            } else {
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    BitmapFactory.decodeStream(stream, null, opts)
+                }
+            }
+        } catch (_: Exception) { null }
+    }
+
+    private fun buildJson(palette: Palette): String {
+        val root = JSONObject()
+        palette.dominantSwatch?.let      { root.put("dominant",     swatchJson(it)) }
+        palette.vibrantSwatch?.let       { root.put("vibrant",      swatchJson(it)) }
+        palette.darkVibrantSwatch?.let   { root.put("darkVibrant",  swatchJson(it)) }
+        palette.mutedSwatch?.let         { root.put("muted",        swatchJson(it)) }
+        palette.darkMutedSwatch?.let     { root.put("darkMuted",    swatchJson(it)) }
+        palette.lightVibrantSwatch?.let  { root.put("lightVibrant", swatchJson(it)) }
+        palette.lightMutedSwatch?.let    { root.put("lightMuted",   swatchJson(it)) }
+        return root.toString()
+    }
+
+    private fun swatchJson(swatch: Palette.Swatch): JSONObject {
+        val o = JSONObject()
+        o.put("color",          colorHex(swatch.rgb))
+        o.put("titleTextColor", colorHex(swatch.titleTextColor))
+        o.put("bodyTextColor",  colorHex(swatch.bodyTextColor))
+        return o
+    }
+
+    private fun colorHex(color: Int): String =
+        String.format("#%06X", 0xFFFFFF and color)
+}

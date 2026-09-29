@@ -33,10 +33,18 @@ test('one lockfile: every workspace installs from the root', async () => {
   // Vercel resolves function dependencies from the repo root. Per-app lockfiles let
   // a package exist locally but be missing in production (ERR_MODULE_NOT_FOUND).
   const pkg = await json('package.json');
-  assert.deepEqual(pkg.workspaces, ['apps/*', 'packages/*']);
+  assert.deepEqual(pkg.workspaces, ['apps/api', 'apps/web', 'packages/*']);
   for (const stale of ['apps/api/package-lock.json', 'apps/web/package-lock.json']) {
     await assert.rejects(text(stale), 'per-workspace lockfiles must not come back');
   }
+});
+
+test('the mobile app stays out of the web deployment install', async () => {
+  // apps/mobile is Expo/React Native with its own lockfile and an exact React pin.
+  // As a workspace, Vercel's root install would pull native packages into every web
+  // build and hoist a second React next to the web's.
+  const pkg = await json('package.json');
+  assert.ok(!pkg.workspaces.some((glob) => glob === 'apps/*' || glob === 'apps/mobile'));
 });
 
 test('Convex schema and functions exist for the UserStore seam', async () => {

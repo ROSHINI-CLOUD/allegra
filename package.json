@@ -25,7 +25,8 @@
     "convex": "^1.46.0"
   },
   "workspaces": [
-    "apps/*",
+    "apps/api",
+    "apps/web",
     "packages/*"
   ],
   "devDependencies": {

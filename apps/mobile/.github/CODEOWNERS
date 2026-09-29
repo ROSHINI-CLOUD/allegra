@@ -1,0 +1,11 @@
+# Global owners — all PRs require review from at least one of these
+* @LuvLyricsApp
+
+# Protect governance files — only peterish8 can approve changes to these
+.github/CODEOWNERS @LuvLyricsApp
+.github/PULL_REQUEST_TEMPLATE.md @LuvLyricsApp
+.github/ISSUE_TEMPLATE/ @LuvLyricsApp
+.github/workflows/ @LuvLyricsApp
+CONTRIBUTING.md @LuvLyricsApp
+CODE_OF_CONDUCT.md @LuvLyricsApp
+SECURITY.md @LuvLyricsApp
