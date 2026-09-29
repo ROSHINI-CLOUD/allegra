@@ -1862,10 +1862,12 @@ body::before { display: none; }
  * changes scrollHeight and drags the centred line off-centre mid-song — emphasis is
  * opacity and scale only, neither of which touches layout. */
 .ytm-lyrics--softfocus .ytm-lyrics__line {
-  font-size: calc(clamp(22px, 2.6vw, 36px) * var(--lyrics-scale, 1)) !important;
+  /* --lyric-line-size / --lyric-line-height let an unlayered stage (app.css) resize the lines: an
+     !important here in @layer legacy would beat any unlayered !important. */
+  font-size: var(--lyric-line-size, calc(clamp(22px, 2.6vw, 36px) * var(--lyrics-scale, 1))) !important;
   font-weight: 700 !important;
   letter-spacing: -0.02em !important;
-  line-height: 1.35 !important;
+  line-height: var(--lyric-line-height, 1.35) !important;
   color: #fff !important;
   text-shadow: none !important;
   opacity: var(--lyric-fade, 0.26);

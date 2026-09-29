@@ -1,4 +1,4 @@
-import { Languages, LoaderCircle, Mic, Minus, Plus, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { Ellipsis, Info, Languages, LoaderCircle, Mic, Minus, Moon, Plus, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
 import {
   memo,
@@ -12,10 +12,12 @@ import {
   type MouseEvent,
   type MutableRefObject
 } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { LyricLine, LyricsPayload } from '@shared/types';
 
 import { EmptyState, IconButton, TactileButton } from './ui';
+import { useNarrowViewport } from '../hooks/useNarrowViewport';
 import { useSettings } from '../hooks/useSettings';
 import { clampLyricsOffset, withLyricsOffset, type LyricsSize } from '../lib/settings';
 import { clamp } from '../lib/utils';
@@ -60,6 +62,8 @@ interface LyricsPanelProps {
   readonly alternativesError?: string | null;
   readonly onLoadAlternatives?: () => void;
   readonly onSelectAlternative?: (alternative: LyricsPayload) => void;
+  /** Where the wide player wants the ⋯ lyric actions: its top bar's right-hand slot. */
+  readonly actionsSlot?: HTMLElement | null;
 }
 
 const FOLLOW_RESUME_MS = 2200;
@@ -108,7 +112,8 @@ export function LyricsPanel({
   alternativesLoading = false,
   alternativesError = null,
   onLoadAlternatives,
-  onSelectAlternative
+  onSelectAlternative,
+  actionsSlot = null
 }: LyricsPanelProps) {
   const reduced = useReducedMotion();
   const lineRefs = useRef<Record<number, HTMLButtonElement | null>>({});
@@ -124,6 +129,9 @@ export function LyricsPanel({
   const positionedRef = useRef(false);
   const [followPaused, setFollowPaused] = useState(false);
   const [alternativesOpen, setAlternativesOpen] = useState(false);
+  const [sourceInfoOpen, setSourceInfoOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
 
   const [settings, updateSettings] = useSettings();
   const rememberOffset = settings.rememberLyricsOffset && songId !== null;
@@ -194,6 +202,21 @@ export function LyricsPanel({
     if (container) container.scrollTop = 0;
     // Only a new lyric set re-reads the saved offset (so it is not a dependency); the nudge keeps it current.
   }, [songKey, resumeFollowNow]);
+
+  // Lead space above the first line equals the anchor height, so line one can rise to the same focus
+  // point as every other line instead of sitting in the top fade. Tracks the real box, not viewport units.
+  const hasScroll = !loading && !error && lines.length > 0;
+  useLayoutEffect(() => {
+    const container = scrollRef.current;
+    if (!hasScroll || !container) return;
+    const setLead = (): void => {
+      container.style.setProperty('--lyrics-lead', `${Math.round(container.clientHeight * ACTIVE_LINE_ANCHOR)}px`);
+    };
+    setLead();
+    const observer = new ResizeObserver(setLead);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [hasScroll]);
 
   const scrollActiveIntoView = useCallback(
     (instant: boolean) => {
@@ -276,12 +299,169 @@ export function LyricsPanel({
     [onActivateLine, onSeek, reduced, resumeFollowNow, scrollActiveIntoView, syncOffset]
   );
 
+  // Source and match reason live behind an info button by the timing pill, not above the words.
+  const showSourceInfo = settings.showLyricsSource && Boolean(source || matchReason);
+
   const toggleAlternatives = (): void => {
-    setAlternativesOpen((open) => {
-      if (!open && alternatives === null && !alternativesLoading) onLoadAlternatives?.();
-      return !open;
-    });
+    // Load outside the updater: updaters run during render, and the loader sets parent state.
+    if (!alternativesOpen && alternatives === null && !alternativesLoading) onLoadAlternatives?.();
+    setAlternativesOpen(!alternativesOpen);
   };
+
+  const karaokeLabel = karaokeBusy
+    ? karaokeProgressRatio != null
+      ? `Preparing ${Math.round(karaokeProgressRatio * 100)}%`
+      : 'Preparing…'
+    : karaokeActive
+      ? 'Karaoke on'
+      : 'Karaoke';
+  const showMix = Boolean(onOpenKaraokeMix) && (karaokeActive || karaokeBusy);
+  const showTranslate = Boolean(onToggleTranslate) && lines.length > 0;
+
+  // One dock popover at a time; a tap anywhere outside the dock closes it.
+  const dockRef = useRef<HTMLDivElement | null>(null);
+  const dockPopoverOpen = sourceInfoOpen || moreOpen;
+  useEffect(() => {
+    if (!dockPopoverOpen) return;
+    const close = (event: PointerEvent): void => {
+      if (dockRef.current?.contains(event.target as Node)) return;
+      setSourceInfoOpen(false);
+      setMoreOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [dockPopoverOpen]);
+
+  // Wide player: the header's actions fold into a ⋯ that opens into a pill, so nothing sits
+  // above the words until asked for. The phone uses the dock menu instead; teasers keep the row.
+  const isNarrow = useNarrowViewport();
+  const collapsibleActions = hideBackdrop && !compact && !isNarrow;
+  const actionsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const closeOutside = (event: PointerEvent): void => {
+      if (!actionsRef.current?.contains(event.target as Node)) setActionsOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setActionsOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [actionsOpen]);
+
+  const toggleBlackBackground = (): void => {
+    updateSettings({ playerBlackBackground: !settings.playerBlackBackground });
+  };
+
+  const runFromMenu = (event: MouseEvent<HTMLElement>, action?: (event: MouseEvent<HTMLElement>) => void): void => {
+    setMoreOpen(false);
+    action?.(event);
+  };
+
+  // Rendered in the player's top bar (top-right corner) when it hands us a slot, else in place.
+  const actionsNode = (
+    <div
+      ref={actionsRef}
+      className={`ytm-lyrics__actions${collapsibleActions ? ' is-collapsible' : ''}${actionsOpen ? ' is-open' : ''}`}
+    >
+      <div id="lyrics-actions" className="ytm-lyrics__chrome-actions" inert={collapsibleActions && !actionsOpen}>
+        {onToggleKaraoke ? (
+          <TactileButton
+            variant={karaokeActive ? 'primary' : 'ghost'}
+            icon={Mic}
+            onClick={onToggleKaraoke}
+            // Not `disabled` while preparing: a double tap must still reach the mix.
+            disabled={karaokeDisabled}
+            aria-disabled={karaokeBusy || undefined}
+            aria-pressed={karaokeActive}
+            aria-busy={karaokeBusy || undefined}
+            aria-label={
+              karaokeBusy
+                ? 'Preparing karaoke'
+                : karaokeActive
+                  ? 'Turn karaoke off'
+                  : 'Turn karaoke on'
+            }
+            className={`ytm-lyrics__karaoke-btn${karaokeActive ? ' is-on' : ''}${karaokeBusy ? ' is-busy' : ''}`}
+          >
+            {karaokeLabel}
+          </TactileButton>
+        ) : null}
+        {showMix ? (
+          <IconButton
+            icon={SlidersHorizontal}
+            label="Karaoke mix: vocals and instruments"
+            aria-haspopup="dialog"
+            className="ytm-lyrics__mix-btn"
+            onClick={onOpenKaraokeMix}
+          />
+        ) : null}
+        {showTranslate ? (
+          <TactileButton
+            variant="ghost"
+            icon={translating ? LoaderCircle : Languages}
+            onClick={onToggleTranslate}
+            aria-label={translated ? 'Show original lyrics' : 'Translate lyrics to English'}
+            className="ytm-lyrics__translate-button"
+          >
+            {translating ? 'Translating…' : translated ? 'Original' : 'Translate'}
+          </TactileButton>
+        ) : null}
+        {onLoadAlternatives ? (
+          <TactileButton
+            variant={alternativesOpen ? 'secondary' : 'ghost'}
+            icon={RefreshCw}
+            onClick={toggleAlternatives}
+            aria-expanded={alternativesOpen}
+            aria-controls="lyrics-alternatives"
+            className="ytm-lyrics__alternatives-button"
+          >
+            Other lyrics
+          </TactileButton>
+        ) : null}
+        {hideBackdrop && !compact ? (
+          <TactileButton
+            variant={settings.playerBlackBackground ? 'secondary' : 'ghost'}
+            icon={Moon}
+            onClick={toggleBlackBackground}
+            aria-pressed={settings.playerBlackBackground}
+            aria-label="Black background"
+            className="ytm-lyrics__black-button"
+          >
+            Black
+          </TactileButton>
+        ) : null}
+        {collapsibleActions ? (
+          <button
+            type="button"
+            className="ytm-lyrics__actions-close"
+            onClick={() => setActionsOpen(false)}
+            aria-label="Close lyrics options"
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+      {collapsibleActions ? (
+        <button
+          type="button"
+          className="ytm-lyrics__actions-toggle"
+          onClick={() => setActionsOpen(true)}
+          aria-expanded={actionsOpen}
+          aria-controls="lyrics-actions"
+          aria-label="Lyrics options"
+          title="Lyrics options"
+          inert={actionsOpen}
+        >
+          <Ellipsis size={18} aria-hidden="true" />
+        </button>
+      ) : null}
+    </div>
+  );
 
   return (
     <section
@@ -309,75 +489,8 @@ export function LyricsPanel({
           <h2 id="lyrics-heading">Lyrics</h2>
           <span className="ytm-lyrics__hint">{lines.length > 0 ? 'Tap any line to jump audio' : 'Waiting for track'}</span>
         </div>
-        <div className="ytm-lyrics__chrome-actions">
-          {onToggleKaraoke ? (
-            <TactileButton
-              variant={karaokeActive ? 'primary' : 'ghost'}
-              icon={Mic}
-              onClick={onToggleKaraoke}
-              // Not `disabled` while preparing: a double tap must still reach the mix.
-              disabled={karaokeDisabled}
-              aria-disabled={karaokeBusy || undefined}
-              aria-pressed={karaokeActive}
-              aria-busy={karaokeBusy || undefined}
-              aria-label={
-                karaokeBusy
-                  ? 'Preparing karaoke'
-                  : karaokeActive
-                    ? 'Turn karaoke off'
-                    : 'Turn karaoke on'
-              }
-              className={`ytm-lyrics__karaoke-btn${karaokeActive ? ' is-on' : ''}${karaokeBusy ? ' is-busy' : ''}`}
-            >
-              {karaokeBusy
-                ? karaokeProgressRatio != null
-                  ? `Preparing ${Math.round(karaokeProgressRatio * 100)}%`
-                  : 'Preparing…'
-                : karaokeActive
-                  ? 'Karaoke on'
-                  : 'Karaoke'}
-            </TactileButton>
-          ) : null}
-          {onOpenKaraokeMix && (karaokeActive || karaokeBusy) ? (
-            <IconButton
-              icon={SlidersHorizontal}
-              label="Karaoke mix: vocals and instruments"
-              aria-haspopup="dialog"
-              className="ytm-lyrics__mix-btn"
-              onClick={onOpenKaraokeMix}
-            />
-          ) : null}
-          {onToggleTranslate && lines.length > 0 ? (
-            <TactileButton
-              variant="ghost"
-              icon={translating ? LoaderCircle : Languages}
-              onClick={onToggleTranslate}
-              aria-label={translated ? 'Show original lyrics' : 'Translate lyrics to English'}
-              className="ytm-lyrics__translate-button"
-            >
-              {translating ? 'Translating…' : translated ? 'Original' : 'Translate'}
-            </TactileButton>
-          ) : null}
-          {onLoadAlternatives ? (
-            <TactileButton
-              variant={alternativesOpen ? 'secondary' : 'ghost'}
-              icon={RefreshCw}
-              onClick={toggleAlternatives}
-              aria-expanded={alternativesOpen}
-              aria-controls="lyrics-alternatives"
-              className="ytm-lyrics__alternatives-button"
-            >
-              Other lyrics
-            </TactileButton>
-          ) : null}
-        </div>
+        {collapsibleActions && actionsSlot ? createPortal(actionsNode, actionsSlot) : actionsNode}
       </div>
-      {(settings.showLyricsSource && (source || matchReason)) || alternativesOpen ? (
-        <div className="ytm-lyrics__provenance">
-          {source ? <span className="ytm-lyrics__source">{formatSource(source)}</span> : null}
-          {matchReason ? <span>{matchReason}</span> : null}
-        </div>
-      ) : null}
       {alternativesOpen ? (
         <div id="lyrics-alternatives" className="lyrics-alternatives" aria-live="polite">
           <div className="lyrics-alternatives__intro">
@@ -479,23 +592,116 @@ export function LyricsPanel({
       )}
 
       {lines.length > 0 && !loading && !error && !compact ? (
-        <div className="lyrics-sync" role="group" aria-label="Adjust lyrics timing">
-          <button type="button" className="lyrics-sync__btn" onClick={() => nudgeSync(-0.1)} aria-label="Show lyrics 0.1 seconds earlier">
-            <Minus size={14} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="lyrics-sync__value"
-            onClick={() => setSyncOffset(0)}
-            disabled={syncOffset === 0}
-            aria-label="Reset lyrics timing"
-            title="Reset timing"
-          >
-            {syncOffset > 0 ? '+' : ''}{syncOffset.toFixed(1)}s
-          </button>
-          <button type="button" className="lyrics-sync__btn" onClick={() => nudgeSync(0.1)} aria-label="Show lyrics 0.1 seconds later">
-            <Plus size={14} aria-hidden="true" />
-          </button>
+        <div className="lyrics-dock" ref={dockRef}>
+          {/* Phone only (CSS): the header's lyric actions collapse into this menu. */}
+          {moreOpen ? (
+            <div id="lyrics-more-menu" className="lyrics-dock__menu" role="group" aria-label="Lyrics options">
+              {onToggleKaraoke ? (
+                <button
+                  type="button"
+                  className={`lyrics-dock__item${karaokeActive ? ' is-on' : ''}`}
+                  onClick={(event) => runFromMenu(event, onToggleKaraoke)}
+                  disabled={karaokeDisabled}
+                  aria-pressed={karaokeActive}
+                  aria-busy={karaokeBusy || undefined}
+                >
+                  <Mic size={16} aria-hidden="true" />
+                  {karaokeLabel}
+                </button>
+              ) : null}
+              {showMix ? (
+                <button type="button" className="lyrics-dock__item" onClick={(event) => runFromMenu(event, onOpenKaraokeMix)} aria-haspopup="dialog">
+                  <SlidersHorizontal size={16} aria-hidden="true" />
+                  Karaoke mix
+                </button>
+              ) : null}
+              {showTranslate ? (
+                <button type="button" className="lyrics-dock__item" onClick={(event) => runFromMenu(event, onToggleTranslate)}>
+                  {translating ? <LoaderCircle size={16} aria-hidden="true" /> : <Languages size={16} aria-hidden="true" />}
+                  {translating ? 'Translating…' : translated ? 'Show original' : 'Translate'}
+                </button>
+              ) : null}
+              {onLoadAlternatives ? (
+                <button
+                  type="button"
+                  className="lyrics-dock__item"
+                  onClick={(event) => runFromMenu(event, toggleAlternatives)}
+                  aria-expanded={alternativesOpen}
+                  aria-controls="lyrics-alternatives"
+                >
+                  <RefreshCw size={16} aria-hidden="true" />
+                  Other lyrics
+                </button>
+              ) : null}
+              {hideBackdrop ? (
+                <button
+                  type="button"
+                  className={`lyrics-dock__item${settings.playerBlackBackground ? ' is-on' : ''}`}
+                  onClick={(event) => runFromMenu(event, toggleBlackBackground)}
+                  aria-pressed={settings.playerBlackBackground}
+                >
+                  <Moon size={16} aria-hidden="true" />
+                  Black background
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {showSourceInfo && sourceInfoOpen ? (
+            <div id="lyrics-source-info" className="lyrics-dock__info">
+              {source ? <span className="ytm-lyrics__source">{formatSource(source)}</span> : null}
+              {matchReason ? <span>{matchReason}</span> : null}
+            </div>
+          ) : null}
+          <div className="lyrics-dock__row">
+            <button
+              type="button"
+              className={`lyrics-dock__info-btn lyrics-dock__more-btn${moreOpen ? ' is-open' : ''}`}
+              onClick={() => {
+                setSourceInfoOpen(false);
+                setMoreOpen(!moreOpen);
+              }}
+              aria-expanded={moreOpen}
+              aria-controls="lyrics-more-menu"
+              aria-label="More lyrics options"
+              title="More"
+            >
+              <Ellipsis size={16} aria-hidden="true" />
+            </button>
+            {showSourceInfo ? (
+              <button
+                type="button"
+                className={`lyrics-dock__info-btn${sourceInfoOpen ? ' is-open' : ''}`}
+                onClick={() => {
+                  setMoreOpen(false);
+                  setSourceInfoOpen(!sourceInfoOpen);
+                }}
+                aria-expanded={sourceInfoOpen}
+                aria-controls="lyrics-source-info"
+                aria-label="Lyrics source"
+                title="Lyrics source"
+              >
+                <Info size={15} aria-hidden="true" />
+              </button>
+            ) : null}
+            <div className="lyrics-sync" role="group" aria-label="Adjust lyrics timing">
+              <button type="button" className="lyrics-sync__btn" onClick={() => nudgeSync(-0.1)} aria-label="Show lyrics 0.1 seconds earlier">
+                <Minus size={14} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="lyrics-sync__value"
+                onClick={() => setSyncOffset(0)}
+                disabled={syncOffset === 0}
+                aria-label="Reset lyrics timing"
+                title="Reset timing"
+              >
+                {syncOffset > 0 ? '+' : ''}{syncOffset.toFixed(1)}s
+              </button>
+              <button type="button" className="lyrics-sync__btn" onClick={() => nudgeSync(0.1)} aria-label="Show lyrics 0.1 seconds later">
+                <Plus size={14} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </section>

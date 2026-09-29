@@ -5215,9 +5215,9 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
-    /* Top: clear of the fade so the first line starts fully lit. Bottom: room for the last
-       lines to rise to the reading position instead of stopping at the floor. */
-    padding-block: 56px 42dvh;
+    /* Top: as much room as the reading position (--lyrics-lead, set from the box height) so the
+       first line starts there, fully lit. Bottom: room for the last lines to rise to it too. */
+    padding-block: var(--lyrics-lead, 56px) 42dvh;
     padding-inline: 22px;
     scroll-padding-block: 0;
     -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 44px, #000 calc(100% - 60px), transparent 100%);
@@ -5355,18 +5355,7 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   .listening-world .np-action--tool .lucide-loader-circle { animation: none; }
 }
 
-/* ---------- Lyrics provenance and choice ---------- */
-.ytm-lyrics__provenance {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  max-width: min(100% - 32px, 44rem);
-  margin: 0 auto 8px;
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
+/* ---------- Lyrics source and version choice ---------- */
 .ytm-lyrics__source {
   padding: 3px 8px;
   border: 1px solid color-mix(in srgb, var(--wave) 30%, transparent);
@@ -5443,7 +5432,6 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
     pointer-events: none;
   }
   .listening-world.is-lyrics .ytm-lyrics__chrome { padding: 0 22px 8px; }
-  .listening-world.is-lyrics .ytm-lyrics__provenance { margin-inline: 22px; }
   .listening-world.is-lyrics .lyrics-alternatives { width: calc(100% - 44px); max-height: 30dvh; }
 }
 
@@ -6224,7 +6212,7 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
 
 /* Lyrics stage: keep lines in front of the fog, give them room, and float the sync nudge bottom-right. */
 .ytm-lyrics--nobackdrop.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__scroll {
-  padding-block: 72px 42dvh;
+  padding-block: var(--lyrics-lead, 72px) 42dvh;
   -webkit-mask-image: linear-gradient(180deg, transparent 0, rgba(0, 0, 0, 0.5) 6%, #000 14%, #000 70%, rgba(0, 0, 0, 0.4) 86%, transparent 100%);
   mask-image: linear-gradient(180deg, transparent 0, rgba(0, 0, 0, 0.5) 6%, #000 14%, #000 70%, rgba(0, 0, 0, 0.4) 86%, transparent 100%);
 }
@@ -6236,11 +6224,95 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   .listening-world.is-lyrics .player-sidepanel { max-height: calc(100dvh - 132px); }
 }
 
-.lyrics-sync {
+.lyrics-dock {
   position: absolute;
   z-index: 4;
   right: 14px;
   bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: calc(100% - 28px);
+}
+.lyrics-dock__row { display: flex; align-items: center; gap: 8px; }
+/* Same glass as the timing pill, so the two read as one control cluster. */
+.lyrics-dock__info-btn,
+.lyrics-dock__info {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  color: #fff;
+}
+.lyrics-dock__info-btn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity var(--d-fast) var(--ease-standard), background var(--d-fast) var(--ease-standard);
+}
+.lyrics-dock__info-btn:hover,
+.lyrics-dock__info-btn.is-open { opacity: 1; background: rgba(255, 255, 255, 0.18); }
+.lyrics-dock__info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 18rem;
+  padding: 10px 12px;
+  border-radius: 16px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.lyrics-dock__info .ytm-lyrics__source { padding: 1px 8px; font-size: 11px; letter-spacing: 0.04em; }
+.lyrics-dock__menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 18px;
+  background: rgba(20, 22, 26, 0.72);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+.lyrics-dock__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--d-fast) var(--ease-standard);
+}
+.lyrics-dock__item:hover,
+.lyrics-dock__item:active { background: rgba(255, 255, 255, 0.12); }
+.lyrics-dock__item.is-on { color: var(--wave, #d9ec6b); }
+.lyrics-dock__item:disabled { opacity: 0.5; cursor: default; }
+
+/* The ⋯ menu is the phone's home for lyric actions; wider screens keep the header row. */
+.lyrics-dock__more-btn,
+.lyrics-dock__menu { display: none; }
+@media (max-width: 900px) {
+  .lyrics-dock__more-btn { display: grid; }
+  .lyrics-dock__menu { display: flex; }
+  .listening-world.is-lyrics .ytm-lyrics:has(.lyrics-dock) .ytm-lyrics__chrome { display: none; }
+}
+.lyrics-sync {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -6276,14 +6348,43 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
  * starts below the row and only softens the lines that scroll up beneath it. */
 /* Everything above the lyric list (buttons, source/match info, version picker, notes, alerts) stacks in
  * front of the fog. Only the scrolling lines pass beneath it. */
-.ytm-lyrics--nobackdrop > :not(.ytm-lyrics__scroll):not(.ytm-lyrics__edge):not(.lyrics-sync):not(.ytm-lyrics__state) {
+.ytm-lyrics--nobackdrop > :not(.ytm-lyrics__scroll):not(.ytm-lyrics__edge):not(.lyrics-dock):not(.ytm-lyrics__state) {
   position: relative;
   z-index: 4;
 }
-.ytm-lyrics--nobackdrop .ytm-lyrics__provenance { color: rgba(255, 255, 255, 0.72); }
 .ytm-lyrics--nobackdrop.ytm-lyrics--softfocus:not(.ytm-lyrics--compact) .ytm-lyrics__edge--top { top: 40px; }
 .player-sidepanel.is-lyrics .ytm-lyrics__chrome .tactile-control { opacity: 0.9; }
 .player-sidepanel.is-lyrics .ytm-lyrics__chrome .tactile-control { color: rgba(255, 255, 255, 0.9); }
+
+/* Lyrics header: the controls sit alone in the top-right corner, ending on the lyric column's right
+ * edge. Picker and notices hang off the column's left edge like the words. */
+.player-sidepanel.is-lyrics .ytm-lyrics { --lyrics-gutter: clamp(28px, 4vw, 48px); }
+@media (max-width: 900px) {
+  .player-sidepanel.is-lyrics .ytm-lyrics { --lyrics-gutter: 22px; }
+}
+.player-sidepanel.is-lyrics .ytm-lyrics__chrome {
+  justify-content: flex-end;
+  padding: 0 var(--lyrics-gutter) 2px;
+}
+/* Ghost pills carry 12px of inner padding; push the row out so the last label ends on the text edge. */
+.player-sidepanel.is-lyrics .ytm-lyrics__chrome-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px;
+  margin-inline-end: -12px;
+}
+.player-sidepanel.is-lyrics .lyrics-alternatives {
+  flex: none;
+  width: auto;
+  margin: 4px var(--lyrics-gutter) 12px;
+}
+.player-sidepanel.is-lyrics .ytm-lyrics__note,
+.player-sidepanel.is-lyrics .ytm-lyrics__alert {
+  align-self: flex-start;
+  max-width: calc(100% - 2 * var(--lyrics-gutter));
+  margin: 4px var(--lyrics-gutter) 8px;
+  text-align: left;
+}
 
 /* ── Settings page ─────────────────────────────────────────────────────────
  * One frosted panel per group, rows split into copy and control. Tokens only, so the
@@ -6421,3 +6522,249 @@ button.session-chip:hover { background: rgba(255, 255, 255, 0.11); }
   .settings-choice__option span,
   .settings-jump__link { transition: none; }
 }
+
+/* Desktop player (YouTube Music / Spotify layout): a stage with the cover on the left and the side
+ * panel (Lyrics / Up Next / Related) on the right, and the player itself in a frosted dock along the
+ * bottom — always, lyrics open or not. `.now-playing` dissolves (display: contents) so the cover, the
+ * track info and the controls become cells of one grid; the dock's glass is that grid's ::before.
+ * The cover and the panel share the stage row, each claiming its half. Hiding the lyrics
+ * (`.is-solo`) lets the cover take the whole stage, centred. Nothing animates layout. */
+@media (min-width: 901px) {
+  .listening-world .listening-body {
+    --stage-art: min(560px, calc(100dvh - 330px), 38vw);
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) auto minmax(0, 1fr) 22px;
+    grid-template-rows: minmax(0, 1fr) 20px 8px auto auto 10px;
+    column-gap: 24px;
+    row-gap: 0;
+    align-items: center;
+    max-width: none;
+    padding: 4px 20px 18px;
+    overflow: hidden;
+  }
+  .listening-world .listening-body::before {
+    content: '';
+    grid-column: 1 / -1;
+    grid-row: 3 / -1;
+    align-self: stretch;
+    z-index: -1;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.08);
+    -webkit-backdrop-filter: blur(28px) saturate(1.5);
+    backdrop-filter: blur(28px) saturate(1.5);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 18px 40px -24px rgba(0, 0, 0, 0.6);
+  }
+  .listening-world .now-playing { display: contents; }
+
+  /* Stage: cover centred in the left half, panel filling the right half. */
+  .listening-world .np-art {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: start;
+    width: var(--stage-art);
+    margin-left: calc((50% - var(--stage-art)) / 2);
+  }
+  .listening-world .player-sidepanel {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: end;
+    align-self: stretch;
+    width: 50%;
+    max-height: none;
+    min-height: 0;
+  }
+  /* Cover put away: the cover slides off left (Motion, in PlayerPanel) while the lyric column glides
+   * from the right half toward the centre — one transform on the panel, same duration and curve as
+   * the cover, so the two read as a single move. Width and text alignment never change mid-move. */
+  .listening-world .player-sidepanel { transition: transform var(--d-slow) var(--ease-press); }
+  /* The move lands the first letter on the tabs' left edge: the panel starts at the screen's centre
+   * and its text one gutter in, the tabs start ~145px left of centre, so the distance is constant. */
+  .listening-world.is-lyrics-full .player-sidepanel { transform: translateX(calc(-145px - clamp(28px, 4vw, 48px))); }
+  .listening-world.is-lyrics-full .np-art { pointer-events: none; }
+  .listening-world.is-solo .np-art { justify-self: center; margin-left: 0; --stage-art: min(580px, calc(100dvh - 330px), 60vw); width: var(--stage-art); }
+
+  /* Dock: track info left, transport + scrubber centre, actions right. */
+  .listening-world .np-controls { display: contents; }
+  .listening-world .np-meta {
+    grid-column: 2;
+    grid-row: 4 / span 2;
+    justify-self: start;
+    width: 100%;
+    max-width: 360px;
+    text-align: left;
+  }
+  .listening-world .np-dock-cover {
+    grid-column: 2;
+    grid-row: 4 / span 2;
+    justify-self: start;
+    position: relative;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    transition: transform var(--d-fast) var(--ease-press), opacity var(--d-fast) var(--ease-standard);
+  }
+  .listening-world .np-dock-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .listening-world .np-dock-cover:hover { transform: scale(1.06); }
+  .listening-world .np-dock-cover:active { transform: scale(0.96); }
+  .listening-world .np-dock-cover.is-focus { border-color: rgba(255, 255, 255, 0.55); }
+  .listening-world .np-meta { margin-left: 62px; max-width: 300px; }
+  .listening-world .np-title { font-size: 17px; line-height: 1.3; }
+  .listening-world .np-artist { font-size: 13px; }
+
+  .listening-world .np-btns { grid-column: 3; grid-row: 4; justify-content: center; gap: 22px; }
+  .listening-world .ctrl-play { width: 40px; height: 40px; box-shadow: none; }
+  .listening-world .np-btns .tactile-icon-control { width: 36px; height: 36px; }
+  .listening-world .np-controls > :first-child {
+    grid-column: 3;
+    grid-row: 5;
+    width: min(620px, 42vw);
+    margin-top: 2px;
+  }
+  /* Times sit either side of the bar on one line instead of a row beneath it. */
+  .listening-world .listening-progress {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0 12px;
+  }
+  .listening-world .listening-progress .progress-range {
+    grid-row: 1;
+    grid-column: 2;
+    --track-height: 4px;
+    --thumb-size: 12px;
+  }
+  .listening-world .listening-progress .progress-time:first-of-type { grid-row: 1; grid-column: 1; text-align: right; }
+  .listening-world .listening-progress .progress-time:last-of-type { grid-row: 1; grid-column: 3; text-align: left; }
+  .listening-world .listening-progress .progress-time { min-width: 38px; font-size: 12px; font-weight: 500; opacity: 0.8; }
+  .listening-world .playback-error { grid-column: 2 / 5; grid-row: 2; justify-self: center; margin: 0; }
+
+  .listening-world .np-actions {
+    grid-column: 4;
+    grid-row: 4 / span 2;
+    justify-self: end;
+    gap: 6px;
+  }
+  /* The dock carries Karaoke as an icon like the rest; Translate lives in the lyrics ⋯ menu. */
+  .listening-world .np-actions > .np-action--tool { display: inline-flex; }
+  .listening-world .np-actions > .np-action--translate,
+  .listening-world .np-live-karaoke { display: none; }
+
+  /* Bigger lyrics than before, short of YouTube Music's poster-size lines. */
+  .listening-world .ytm-lyrics--softfocus {
+    --lyric-line-size: calc(clamp(26px, 2.9vw, 44px) * var(--lyrics-scale, 1));
+    --lyric-line-height: 1.3;
+  }
+}
+
+/* Wide player: the lyric actions sit behind a ⋯ in the top bar's right corner, level with Back and
+ * the tabs. Opening it grows a frosted pill leftward out of that corner. The pill keeps its place
+ * and only scales and fades, so opening it shifts nothing; the ⋯ fades out as the pill arrives. */
+.listening-top__spacer { position: relative; display: flex; align-items: center; justify-content: flex-end; min-height: 44px; }
+.ytm-lyrics__actions { display: flex; align-items: center; justify-content: flex-end; }
+.ytm-lyrics__actions.is-collapsible { position: absolute; top: 50%; right: 0; transform: translateY(-50%); min-height: 44px; }
+.ytm-lyrics__actions.is-collapsible .ytm-lyrics__chrome-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  backdrop-filter: blur(22px) saturate(1.4);
+  box-shadow: 0 10px 28px -14px rgba(0, 0, 0, 0.55);
+  white-space: nowrap;
+  transform-origin: right center;
+  transform: scaleX(0.14);
+  opacity: 0;
+  transition: transform var(--d-base) var(--ease-decelerate), opacity var(--d-fast) var(--ease-standard);
+}
+.ytm-lyrics__actions.is-collapsible.is-open .ytm-lyrics__chrome-actions { transform: none; opacity: 1; }
+.ytm-lyrics__actions.is-collapsible .ytm-lyrics__chrome-actions .tactile-control {
+  min-height: 36px;
+  padding: 0 12px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+}
+.ytm-lyrics__actions.is-collapsible .ytm-lyrics__chrome-actions .ytm-lyrics__karaoke-btn.is-on { color: #0b0c10; }
+.ytm-lyrics__actions.is-collapsible .ytm-lyrics__chrome-actions .tactile-icon-control { width: 36px; height: 36px; border: 0; background: transparent; color: #fff; }
+/* Labels stay hidden while the pill is squeezed, so they never show stretched mid-morph. */
+.ytm-lyrics__actions.is-collapsible:not(.is-open) .ytm-lyrics__chrome-actions > * { opacity: 0 !important; }
+/* Between the phone layout and ~1340px the open pill would reach the centred tabs: icons only there.
+ * The label stays in the accessibility tree, only visually clipped. */
+@media (max-width: 1340px) {
+  .ytm-lyrics__actions.is-collapsible .tactile-control > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .ytm-lyrics__actions.is-collapsible .ytm-lyrics__chrome-actions .tactile-control { padding: 0 10px; }
+}
+
+.ytm-lyrics__actions-toggle,
+.ytm-lyrics__actions-close {
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
+}
+.ytm-lyrics__actions-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  opacity: 0.85;
+  transform: translateY(-50%);
+  transition: opacity var(--d-fast) var(--ease-standard), transform var(--d-base) var(--ease-decelerate);
+}
+.ytm-lyrics__actions-toggle:hover { opacity: 1; background: rgba(255, 255, 255, 0.16); }
+.ytm-lyrics__actions.is-open .ytm-lyrics__actions-toggle {
+  opacity: 0;
+  transform: translateY(-50%) scale(0.6) rotate(90deg);
+  pointer-events: none;
+}
+.ytm-lyrics__actions-close {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  opacity: 0.75;
+  transition: opacity var(--d-fast) var(--ease-standard);
+}
+.ytm-lyrics__actions-close:hover { opacity: 1; background: rgba(255, 255, 255, 0.12); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ytm-lyrics__actions.is-collapsible .ytm-lyrics__chrome-actions { transform: none; }
+  .ytm-lyrics__actions.is-open .ytm-lyrics__actions-toggle { transform: translateY(-50%); }
+}
+/* components.css drops the spacer below 960px; the wide player still needs it as the ⋯ slot. */
+@media (min-width: 901px) {
+  .listening-top__spacer { display: flex; }
+}
+
+@media (min-width: 901px) and (prefers-reduced-motion: reduce) {
+  .listening-world .player-sidepanel { transition: none; }
+}
+
+/* ⋯ → Black background: the artwork atmosphere fades out over plain black. Device-local setting. */
+.listening-world { background-color: #000; }
+.listening-world__atmosphere { transition: opacity var(--d-slow) var(--ease-standard); }
+.listening-world.is-black .listening-world__atmosphere { opacity: 0; }

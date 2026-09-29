@@ -18,6 +18,8 @@ export interface Settings {
   readonly autoplaySimilar: boolean;
   readonly lyricsSize: LyricsSize;
   readonly showLyricsSource: boolean;
+  /** Plain black behind the player instead of the artwork-coloured atmosphere. */
+  readonly playerBlackBackground: boolean;
   /** Keep each song's lyric sync nudge instead of resetting it on the next play. */
   readonly rememberLyricsOffset: boolean;
   /** Seconds, by song id. Only written while `rememberLyricsOffset` is on. */
@@ -41,6 +43,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoplaySimilar: true,
   lyricsSize: 'medium',
   showLyricsSource: true,
+  playerBlackBackground: false,
   rememberLyricsOffset: true,
   lyricsOffsets: {},
   karaokeMode: 'auto',
@@ -93,6 +96,7 @@ export function parseSettings(raw: string | null, legacyTheme: string | null = n
     autoplaySimilar: flag(stored.autoplaySimilar, DEFAULT_SETTINGS.autoplaySimilar),
     lyricsSize: oneOf(stored.lyricsSize, ['small', 'medium', 'large'], DEFAULT_SETTINGS.lyricsSize),
     showLyricsSource: flag(stored.showLyricsSource, DEFAULT_SETTINGS.showLyricsSource),
+    playerBlackBackground: flag(stored.playerBlackBackground, DEFAULT_SETTINGS.playerBlackBackground),
     rememberLyricsOffset: flag(stored.rememberLyricsOffset, DEFAULT_SETTINGS.rememberLyricsOffset),
     lyricsOffsets: offsets(stored.lyricsOffsets),
     karaokeMode: oneOf(stored.karaokeMode, ['auto', 'basic'], DEFAULT_SETTINGS.karaokeMode),

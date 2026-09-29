@@ -29,6 +29,7 @@ import { PlaylistMenu } from './PlaylistMenu';
 import { Artwork, IconButton, TactileButton } from './ui';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useNarrowViewport } from '../hooks/useNarrowViewport';
+import { useSettings } from '../hooks/useSettings';
 import { usePress } from '../hooks/usePress';
 import type { LiveKaraokeController } from '../hooks/useLiveKaraoke';
 import type { Palette } from '../lib/palette';
@@ -164,6 +165,20 @@ export function PlayerPanel({
   const phoneCover = isPhone && mode !== 'workspace' && tab === 'lyrics';
   const visibleTab: ListeningTab | null = phoneCover ? null : tab;
   const inPanelView = mode !== 'workspace' && tab !== 'lyrics';
+  // Wide screens show cover and lyrics side by side, so the lyrics button there is a plain
+  // show/hide: hiding the lyrics leaves the cover and controls centred on their own. The phone's
+  // "workspace" mode (lyrics take over, cover fades out) only applies to the stacked layout.
+  const [lyricsHidden, setLyricsHidden] = useState(false);
+  const [{ playerBlackBackground }] = useSettings();
+  // The top bar's right-hand slot: the lyrics panel renders its ⋯ actions there on wide screens.
+  const [topActionsSlot, setTopActionsSlot] = useState<HTMLDivElement | null>(null);
+  const desktopSolo = !isNarrowViewport && lyricsHidden && tab === 'lyrics';
+  const desktopLyricsVisible = tab === 'lyrics' && !lyricsHidden;
+  // Desktop: double-clicking the cover puts it away and lets the lyrics take the whole stage,
+  // centred. The lyrics button (then "Show cover") or switching tabs brings the cover back.
+  const [coverHidden, setCoverHidden] = useState(false);
+  const lyricsFull = !isNarrowViewport && coverHidden && desktopLyricsVisible;
+  const artHidden = (isNarrowViewport && mode === 'workspace') || lyricsFull;
   const showTranslate = Boolean(lyrics.onToggleTranslate) && lyrics.lines.length > 0;
 
   useEffect(() => {
@@ -235,6 +250,8 @@ export function PlayerPanel({
 
   const selectTab = (next: ListeningTab): void => {
     setTab(next);
+    setLyricsHidden(false);
+    setCoverHidden(false);
     if (next === 'lyrics') onOpenWorkspace();
     else onOpenImmersive();
   };
@@ -256,7 +273,7 @@ export function PlayerPanel({
         <motion.div
           key="listening-world"
           ref={panelRef}
-          className={`listening-world${mode === 'workspace' ? ' is-lyrics' : ''}${inPanelView ? ' is-panel' : ''}`}
+          className={`listening-world${mode === 'workspace' ? ' is-lyrics' : ''}${inPanelView ? ' is-panel' : ''}${desktopSolo ? ' is-solo' : ''}${lyricsFull ? ' is-lyrics-full' : ''}${playerBlackBackground ? ' is-black' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="player-title"
@@ -359,13 +376,17 @@ export function PlayerPanel({
                   <Sparkles size={14} aria-hidden="true" /> Related
                 </button>
               </div>
-              <div className="listening-top__spacer" aria-hidden="true" />
+              <div className="listening-top__spacer" ref={setTopActionsSlot} />
             </div>
 
             <div className="listening-body">
               <div className="now-playing">
                 <motion.div
                   className="np-art"
+                  onDoubleClick={() => {
+                    if (!isNarrowViewport && desktopLyricsVisible) setCoverHidden(true);
+                  }}
+                  title={!isNarrowViewport && desktopLyricsVisible ? 'Double-click to focus the lyrics' : undefined}
                   drag={swipeToDismissEnabled && mode !== 'workspace' ? 'x' : false}
                   dragDirectionLock
                   dragConstraints={{ left: 0, right: 0 }}
@@ -379,12 +400,28 @@ export function PlayerPanel({
                   }}
                   animate={
                     reduced
-                      ? { opacity: mode === 'workspace' ? 0 : 1 }
-                      : mode === 'workspace'
-                        ? { opacity: 0, scale: 0.72, y: -16 }
-                        : { opacity: 1, scale: isPlaying ? 1.015 : 1, y: 0 }
+                      ? { opacity: artHidden ? 0 : 1 }
+                      : lyricsFull
+                        ? // Desktop focus: the sleeve slides off to the left, turning slightly away,
+                          // while the lyrics glide into the centre (CSS, same duration and curve).
+                          { opacity: 0, x: '-62%', scale: 0.86, rotateY: 18, y: 0 }
+                        : artHidden
+                          ? { opacity: 0, scale: 0.72, y: -16, x: 0, rotateY: 0 }
+                          : { opacity: 1, scale: isPlaying ? 1.015 : 1, y: 0, x: 0, rotateY: 0 }
                   }
-                  transition={reduced ? { duration: motionTokens.duration.instant } : spring.lyrics}
+                  transition={
+                    reduced
+                      ? { duration: motionTokens.duration.instant }
+                      : isNarrowViewport
+                        ? spring.lyrics
+                        : {
+                            duration: motionTokens.duration.slow,
+                            ease: motionTokens.ease.emphasis,
+                            // Leaving, the cover is gone before it reaches the edge; returning, it
+                            // is solid by the time it lands.
+                            opacity: { duration: motionTokens.duration.base, ease: motionTokens.ease.standard }
+                          }
+                  }
                 >
                   {/* No shared layoutId - shared morphs read as top-left; sheet rises from the bottom. */}
                   <AnimatePresence initial={false} custom={coverDir.current}>
@@ -402,6 +439,28 @@ export function PlayerPanel({
                     </motion.div>
                   </AnimatePresence>
                 </motion.div>
+                {/* Desktop bottom bar: the cover in miniature, and the one obvious way to put the
+                    big cover away (lyrics fill the stage) or bring it back. */}
+                {!isNarrowViewport ? (
+                  <button
+                    type="button"
+                    className={`np-dock-cover${lyricsFull ? ' is-focus' : ''}`}
+                    onClick={() => {
+                      if (lyricsFull) {
+                        setCoverHidden(false);
+                        return;
+                      }
+                      setTab('lyrics');
+                      setLyricsHidden(false);
+                      setCoverHidden(true);
+                    }}
+                    aria-pressed={lyricsFull}
+                    aria-label={lyricsFull ? 'Show cover' : 'Hide cover and focus the lyrics'}
+                    title={lyricsFull ? 'Show cover' : 'Focus the lyrics'}
+                  >
+                    {song.artwork ? <img src={song.artwork} alt="" /> : null}
+                  </button>
+                ) : null}
                 <motion.div
                   key={`meta-${song.id}`}
                   className="np-meta"
@@ -472,9 +531,23 @@ export function PlayerPanel({
                     />
                     <IconButton
                       icon={Waves}
-                      label={mode === 'workspace' ? 'Show cover' : 'Show lyrics'}
-                      active={mode === 'workspace'}
-                      onClick={() => (mode === 'workspace' ? onOpenImmersive() : onOpenWorkspace())}
+                      label={isNarrowViewport ? (mode === 'workspace' ? 'Show cover' : 'Show lyrics') : lyricsFull ? 'Show cover' : desktopLyricsVisible ? 'Hide lyrics' : 'Show lyrics'}
+                      active={isNarrowViewport ? mode === 'workspace' : desktopLyricsVisible}
+                      onClick={() => {
+                        if (isNarrowViewport) {
+                          if (mode === 'workspace') onOpenImmersive();
+                          else onOpenWorkspace();
+                          return;
+                        }
+                        if (lyricsFull) {
+                          setCoverHidden(false);
+                        } else if (desktopLyricsVisible) {
+                          setLyricsHidden(true);
+                        } else {
+                          setTab('lyrics');
+                          setLyricsHidden(false);
+                        }
+                      }}
                     />
                     <PlaylistMenu song={song} />
                     <IconButton icon={muted ? VolumeX : Volume2} label={muted ? 'Unmute' : 'Mute'} active={muted} onClick={onMute} />
@@ -514,7 +587,7 @@ export function PlayerPanel({
                         disabled={Boolean(lyrics.translating)}
                         aria-pressed={Boolean(lyrics.translated)}
                         aria-busy={lyrics.translating || undefined}
-                        className={`np-action--tool${lyrics.translating ? ' is-busy' : ''}`}
+                        className={`np-action--tool np-action--translate${lyrics.translating ? ' is-busy' : ''}`}
                         onClick={lyrics.onToggleTranslate}
                       />
                     ) : null}
@@ -558,12 +631,13 @@ export function PlayerPanel({
                 </div>
               </div>
 
-              <div className={`player-sidepanel ${tab === 'lyrics' ? 'is-lyrics' : ''}`} role="tabpanel" hidden={phoneCover}>
+              <div className={`player-sidepanel ${tab === 'lyrics' ? 'is-lyrics' : ''}`} role="tabpanel" hidden={phoneCover || desktopSolo}>
                 {tab === 'lyrics' && !phoneCover ? (
                   <>
                     <p className="panel-title">Lyrics</p>
                     <LyricsPanel
                       {...lyrics}
+                      actionsSlot={topActionsSlot}
                       hideBackdrop
                       softFocus
                       artworkUrl={lyrics.artworkUrl ?? song.artwork}
