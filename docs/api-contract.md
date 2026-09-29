@@ -248,5 +248,24 @@ Codes are 8 characters from `abcdefghjkmnpqrstuvwxyz23456789`.
 | 502 | All providers down | "Music service is having a moment. Try again shortly." |
 | 504 | Timeout | "That took too long. Check your connection and retry." |
 
+### Rate limits
+
+Per client IP, per minute, in memory on each function instance (no database call per request).
+A `429` carries `Retry-After` / `RateLimit` headers and the envelope above.
+
+| Bucket | Routes | Limit |
+|---|---|---|
+| Song changes | different songs started via `GET /api/stream/:songId` (seeks within a song are free) | 30 |
+| Stream | every `/api/stream` request, Range requests included | 300 |
+| Plays | `POST /api/me/recently-played` | 30 |
+| Writes | non-GET `/api/me/*`, `/api/libraries*`, `/api/shared*` | 60 |
+| Lookup | `/api/search`, `/api/lyrics*`, `/api/artists*` | 90 |
+| Discovery | `/api/ai/*`, `/api/lyrics/translate`, `/api/recommendations` | 20 |
+| Uploads | `/api/uploads/*` | 10 |
+| Guests | `POST /api/auth/guest`, `POST /api/auth/anon` (each creates a profile) | 10 |
+| Auth / OAuth | `/api/auth/*`, `/api/oauth/*` | 30 |
+| MCP | `/api/mcp` | 120 |
+| Everything else | | 240 |
+
 ## Mock server
 P3 stands this up at T+2 from this document. P2 develops against it and **flips one env var** when the real API is live. That's the whole integration.

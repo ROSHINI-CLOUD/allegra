@@ -20,6 +20,7 @@ import { OAuthClients } from './oauth/clients.js';
 import { oauthRouter } from './oauth/router.js';
 import { OAuthSigner } from './oauth/tokens.js';
 import { MemoryCacheStore } from './lib/cache.js';
+import { songChangeLimiter, type SongChangeLimitConfig } from './lib/songChangeLimiter.js';
 import { sharedRouter } from './routes/shared.js';
 import { streamRouter } from './routes/stream.js';
 import { uploadsRouter } from './routes/uploads.js';
@@ -60,6 +61,12 @@ export interface AppOptions {
     readonly discovery?: RateLimitConfig;
     readonly mcp?: RateLimitConfig;
     readonly oauth?: RateLimitConfig;
+    readonly lookup?: RateLimitConfig;
+    readonly writes?: RateLimitConfig;
+    readonly plays?: RateLimitConfig;
+    readonly guests?: RateLimitConfig;
+    readonly uploads?: RateLimitConfig;
+    readonly songChanges?: SongChangeLimitConfig;
   };
   readonly enableRequestLogging?: boolean;
 }
@@ -155,13 +162,32 @@ export function createApp(options: AppOptions): Express {
   return app;
 }
 
+/**
+ * Every bucket is per client IP per minute: generous for a person, tight for a script. They sit
+ * in memory on each function instance (no database call per request, which is the point), so they
+ * are a first line, not a global quota — a platform firewall rule is the global backstop.
+ */
 function createRateLimiter(config: AppOptions['rateLimit']): (request: Request, response: Response, next: NextFunction) => void {
   const limits = config === false || config === undefined ? {} : config;
-  const api = limiter(limits.api ?? { windowMs: 60_000, limit: 300 });
+  const api = limiter(limits.api ?? { windowMs: 60_000, limit: 240 });
+  // Range requests: one song is many of these (every seek), so this stays loose and the
+  // song-change cap below does the real work.
   const stream = limiter(limits.stream ?? { windowMs: 60_000, limit: 300 });
+  // 30 different songs a minute is skipping through a playlist at two seconds a track.
+  const songChanges = songChangeLimiter(limits.songChanges ?? { windowMs: 60_000, limit: 30 }, sendTooMany);
   const auth = limiter(limits.auth ?? { windowMs: 60_000, limit: 30 });
+  // A new guest is a new profile row in the database. A person needs one.
+  const guests = limiter(limits.guests ?? { windowMs: 60_000, limit: 10 });
   // Translation spends a shared daily provider quota and recommendations fan out to the catalog.
   const discovery = limiter(limits.discovery ?? { windowMs: 60_000, limit: 20 });
+  // Search, lyrics and artist lookups each fan out to several providers.
+  const lookup = limiter(limits.lookup ?? { windowMs: 60_000, limit: 90 });
+  // Each recorded play is a profile read and write. Matches the song-change cap.
+  const plays = limiter(limits.plays ?? { windowMs: 60_000, limit: 30 });
+  // Likes, playlists, settings, taste signals: each is a database write.
+  const writes = limiter(limits.writes ?? { windowMs: 60_000, limit: 60 });
+  // Cover uploads land in file storage.
+  const uploads = limiter(limits.uploads ?? { windowMs: 60_000, limit: 10 });
   // A connected assistant can call tools in quick bursts, but not unboundedly.
   const mcp = limiter(limits.mcp ?? { windowMs: 60_000, limit: 120 });
   // Sign-in, code exchange and client registration: a handful per connect.
@@ -169,12 +195,17 @@ function createRateLimiter(config: AppOptions['rateLimit']): (request: Request, 
 
   return (request, response, next) => {
     const path = request.path;
+    const isRead = request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS';
     if (path === '/api/health' || path.startsWith('/.well-known/')) {
       next();
       return;
     }
     if (path.startsWith('/api/stream')) {
-      stream(request, response, next);
+      stream(request, response, () => songChanges(request, response, next));
+      return;
+    }
+    if (path === '/api/auth/guest' || path === '/api/auth/anon') {
+      auth(request, response, () => guests(request, response, next));
       return;
     }
     if (path.startsWith('/api/auth')) {
@@ -193,8 +224,32 @@ function createRateLimiter(config: AppOptions['rateLimit']): (request: Request, 
       discovery(request, response, next);
       return;
     }
+    if (path === '/api/me/recently-played' && !isRead) {
+      plays(request, response, next);
+      return;
+    }
+    if (path.startsWith('/api/uploads')) {
+      uploads(request, response, next);
+      return;
+    }
+    if (!isRead && (path.startsWith('/api/me') || path.startsWith('/api/libraries') || path.startsWith('/api/shared'))) {
+      writes(request, response, next);
+      return;
+    }
+    if (path === '/api/search' || path.startsWith('/api/lyrics') || path.startsWith('/api/artists')) {
+      lookup(request, response, next);
+      return;
+    }
     api(request, response, next);
   };
+}
+
+function sendTooMany(response: Response): void {
+  response.status(429).json({
+    success: false,
+    data: null,
+    error: 'Too many requests — give it a moment.'
+  });
 }
 
 function limiter(config: RateLimitConfig) {
@@ -203,13 +258,7 @@ function limiter(config: RateLimitConfig) {
     limit: config.limit,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
-    handler: (_request, response) => {
-      response.status(429).json({
-        success: false,
-        data: null,
-        error: 'Too many requests — give it a moment.'
-      });
-    }
+    handler: (_request, response) => sendTooMany(response)
   });
 }
 

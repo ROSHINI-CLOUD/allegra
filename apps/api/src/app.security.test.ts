@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import request from 'supertest';
 
-import { createApp } from './app.js';
+import { createApp, type AppOptions } from './app.js';
 
-function app(rateLimit?: false | { api: { windowMs: number; limit: number } }) {
+function app(rateLimit?: AppOptions['rateLimit']) {
   return createApp({
     version: 'test',
     jwtSecret: 'test-secret',
@@ -34,12 +34,26 @@ test('helmet, CORS allowlist, and JSON size limits are enforced', async () => {
 });
 
 test('rate limiting returns the frozen 429 envelope', async () => {
-  const server = app({ api: { windowMs: 60_000, limit: 1 } });
+  const server = app({ lookup: { windowMs: 60_000, limit: 1 } });
   await request(server).get('/api/search?q=test');
   const limited = await request(server).get('/api/search?q=test');
   assert.equal(limited.status, 429);
   assert.equal(limited.body.success, false);
   assert.equal(limited.body.error, 'Too many requests — give it a moment.');
+});
+
+test('a client may start only so many different songs a minute, but seeks within one are free', async () => {
+  const server = app({ stream: { windowMs: 60_000, limit: 1_000 }, songChanges: { windowMs: 60_000, limit: 2 } });
+  const status = async (id: string) => (await request(server).get(`/api/stream/${id}`).set('Range', 'bytes=0-')).status;
+  assert.notEqual(await status('song-a'), 429);
+  assert.notEqual(await status('song-a'), 429);
+  assert.notEqual(await status('song-b'), 429);
+  // A seek in a song already started is not a new song.
+  assert.notEqual(await status('song-b'), 429);
+  const third = await request(server).get('/api/stream/song-c');
+  assert.equal(third.status, 429);
+  assert.equal(third.body.error, 'Too many requests — give it a moment.');
+  assert.ok(Number(third.headers['retry-after']) > 0);
 });
 
 test('unknown routes and provider failures do not leak internals', async () => {
