@@ -44,6 +44,9 @@ export interface AppOptions {
   readonly musicBrainz?: MusicBrainzConfig;
   readonly lyricaApiUrl?: string;
   readonly betterLyricsApiUrl?: string;
+  readonly youLyPlusServers?: readonly string[];
+  readonly unisonApiUrl?: string;
+  readonly kugouApiUrl?: string;
   readonly betterLyricsApiKey?: string;
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
@@ -115,6 +118,9 @@ export function createApp(options: AppOptions): Express {
     ...(options.version ? { version: options.version } : {}),
     ...(options.lyricaApiUrl ? { lyricaApiUrl: options.lyricaApiUrl } : {}),
     ...(options.betterLyricsApiUrl ? { betterLyricsApiUrl: options.betterLyricsApiUrl } : {}),
+    ...(options.youLyPlusServers ? { youLyPlusServers: options.youLyPlusServers } : {}),
+    ...(options.unisonApiUrl ? { unisonApiUrl: options.unisonApiUrl } : {}),
+    ...(options.kugouApiUrl ? { kugouApiUrl: options.kugouApiUrl } : {}),
     ...(options.betterLyricsApiKey ? { betterLyricsApiKey: options.betterLyricsApiKey } : {}),
     ...(options.convexUrl ? { convexUrl: options.convexUrl } : {}),
     ...(options.convexServerSecret ? { convexServerSecret: options.convexServerSecret } : {}),

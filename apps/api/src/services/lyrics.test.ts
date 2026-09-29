@@ -191,12 +191,72 @@ test('BetterLyrics answers when LRCLIB has nothing', async () => {
   const service = new LyricsService(
     new LrclibProvider({ baseUrl: 'https://lrclib.test/api', fetchImpl: async () => json({}, 404) }),
     new MemoryCacheStore(),
-    undefined,
-    new BetterLyricsProvider({ baseUrl: 'https://better.test', fetchImpl: async () => json({ ttml }) })
+    { betterLyrics: new BetterLyricsProvider({ baseUrl: 'https://better.test', fetchImpl: async () => json({ ttml }) }) }
   );
 
   const payload = await service.find('Some Song', 'Some Artist', 180, false);
   assert.equal(payload?.source, 'BetterLyrics');
   assert.equal(payload?.type, 'synced');
   assert.equal(payload?.lines.length, 2);
+});
+
+test('alternatives gathers every distinct version, drops duplicates and other songs, synced first', async () => {
+  const synced = (words: string[]): string => words.map((word, index) => `[00:${String(index + 1).padStart(2, '0')}.00] ${word}`).join('\n');
+  const tamil = synced(['அவ', 'போல', 'இங்க', 'யாருனு', 'காட்டு', 'வெரல்', 'பட்டா', 'நூறு']);
+  const romanized = synced(['ava', 'pola', 'inga', 'yaarunu', 'kaattu', 'veral', 'patta', 'nooru']);
+  const service = new LyricsService(
+    new LrclibProvider({
+      baseUrl: 'https://lrclib.test/api',
+      fetchImpl: async () =>
+        json([
+          { id: 1, trackName: 'Pavazha Malli', artistName: 'Vivek', syncedLyrics: tamil, duration: 252 },
+          // The same words filed twice: one version, not two.
+          { id: 2, trackName: 'Pavazha Malli', artistName: 'Sai Abhyankkar', syncedLyrics: tamil, duration: 252 },
+          { id: 3, trackName: 'Pavazha Malli', artistName: 'Vivek', plainLyrics: 'ava pola inga\nyaarunu kaattu', duration: 250 },
+          { id: 4, trackName: 'Pavazha Malli', artistName: 'Vivek', syncedLyrics: romanized, duration: 251 },
+          { id: 5, trackName: 'A Different Song', artistName: 'Vivek', syncedLyrics: synced(['not', 'this', 'one']), duration: 252 }
+        ])
+    }),
+    new MemoryCacheStore()
+  );
+
+  const versions = await service.alternatives('Pavazha Malli (From "Think Indie")', 'Vivek, Sai Abhyankkar', 252, false);
+  assert.deepEqual(versions.map((version) => version.type), ['synced', 'synced', 'plain']);
+  assert.equal(versions.some((version) => version.lines.some((line) => line.text === 'not')), false);
+  assert.ok(versions[0]?.matchReason.startsWith('Vivek — Pavazha Malli'));
+});
+
+test('alternatives answers an empty list when no provider has another version', async () => {
+  const service = new LyricsService(
+    new LrclibProvider({ baseUrl: 'https://lrclib.test/api', fetchImpl: async () => json([]) }),
+    new MemoryCacheStore()
+  );
+  assert.deepEqual(await service.alternatives('Nothing Here', 'Nobody', 200, false), []);
+});
+
+test('a lookup past its budget answers null now and finishes in the background for the next ask', async () => {
+  const synced = '[00:01.00] one\n[00:02.00] two\n[00:03.00] three\n[00:04.00] four\n[00:05.00] five';
+  let requests = 0;
+  const service = new LyricsService(
+    new LrclibProvider({
+      baseUrl: 'https://lrclib.test/api',
+      fetchImpl: async () => {
+        requests += 1;
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        return json({ trackName: 'Slow Song', syncedLyrics: synced, duration: 200 });
+      }
+    }),
+    new MemoryCacheStore(),
+    { budgetMs: 30 }
+  );
+
+  const started = Date.now();
+  assert.equal(await service.find('Slow Song', 'Someone', 200, false), null);
+  assert.ok(Date.now() - started < 100, 'answered at the budget, not when the provider did');
+  // Asking again while the first lookup still runs joins it rather than starting a second.
+  assert.equal(await service.find('Slow Song', 'Someone', 200, false), null);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  const later = await service.find('Slow Song', 'Someone', 200, false);
+  assert.equal(later?.type, 'synced');
+  assert.equal(requests, 1);
 });

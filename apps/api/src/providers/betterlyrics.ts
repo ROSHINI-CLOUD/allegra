@@ -1,5 +1,5 @@
 import { decodeHtml } from '../lib/decodeHtml.js';
-import { fetchWithTimeout } from '../lib/fetchWithTimeout.js';
+import { fetchBodyWithTimeout } from '../lib/fetchWithTimeout.js';
 
 const DEFAULT_BASE_URL = 'https://lyrics-api.boidu.dev';
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -47,12 +47,12 @@ export class BetterLyricsProvider {
       if (this.apiKey) {
         headers['X-API-Key'] = this.apiKey;
       }
-      const response = await fetchWithTimeout(url, { headers }, this.timeoutMs, this.fetchImpl);
+      const response = await fetchBodyWithTimeout(url, { headers }, this.timeoutMs, this.fetchImpl);
       if (!response.ok) {
         // 401 = uncached song and no key configured; 404 = unknown song. Both just mean "next provider".
         return null;
       }
-      const body: unknown = await response.json();
+      const body: unknown = JSON.parse(response.body);
       const lyrics = extractLrc(body);
       return lyrics ? { lyrics, source: 'BetterLyrics' } : null;
     } catch {

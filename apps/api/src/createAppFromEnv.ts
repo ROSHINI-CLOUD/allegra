@@ -16,6 +16,9 @@ export function createAppFromEnv(env: NodeJS.Dict<string>): Express {
     lrclibApiUrl: config.lrclibApiUrl,
     ...(config.lyricaApiUrl ? { lyricaApiUrl: config.lyricaApiUrl } : {}),
     ...(config.betterLyricsApiUrl ? { betterLyricsApiUrl: config.betterLyricsApiUrl } : {}),
+    ...(config.youLyPlusServers ? { youLyPlusServers: config.youLyPlusServers } : {}),
+    ...(config.unisonApiUrl ? { unisonApiUrl: config.unisonApiUrl } : {}),
+    ...(config.kugouApiUrl ? { kugouApiUrl: config.kugouApiUrl } : {}),
     ...(config.betterLyricsApiKey ? { betterLyricsApiKey: config.betterLyricsApiKey } : {}),
     ...(config.musicBrainz ? { musicBrainz: config.musicBrainz } : {}),
     ...(config.convexUrl && config.convexServerSecret

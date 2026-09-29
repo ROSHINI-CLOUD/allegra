@@ -1,4 +1,4 @@
-import { fetchWithTimeout } from '../lib/fetchWithTimeout.js';
+import { fetchBodyWithTimeout, type FetchedBody } from '../lib/fetchWithTimeout.js';
 
 export interface LrclibEntry {
   readonly id?: number;
@@ -35,7 +35,7 @@ export class LrclibProvider {
       if (!response.ok) {
         return null;
       }
-      const body: unknown = await response.json();
+      const body: unknown = JSON.parse(response.body);
       return isEntry(body) ? body : null;
     } catch {
       return null;
@@ -53,7 +53,7 @@ export class LrclibProvider {
       if (!response.ok) {
         return [];
       }
-      const body: unknown = await response.json();
+      const body: unknown = JSON.parse(response.body);
       return Array.isArray(body) ? body.filter(isEntry) : [];
     } catch {
       return [];
@@ -67,15 +67,16 @@ export class LrclibProvider {
       if (!response.ok) {
         return [];
       }
-      const body: unknown = await response.json();
+      const body: unknown = JSON.parse(response.body);
       return Array.isArray(body) ? body.filter(isEntry) : [];
     } catch {
       return [];
     }
   }
 
-  private async request(url: URL): Promise<Response> {
-    return fetchWithTimeout(
+  private async request(url: URL): Promise<FetchedBody> {
+    // The deadline covers the body too: a stalled body must not hang the lyric lookup.
+    return fetchBodyWithTimeout(
       url,
       { headers: { Accept: 'application/json', 'User-Agent': 'Allegra/1.0 (+https://allegra.app)' } },
       10_000,

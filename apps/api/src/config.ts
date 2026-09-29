@@ -1,4 +1,5 @@
 import { parseTrustedProviderUrl } from './lib/publicUrl.js';
+import { DEFAULT_YOULYPLUS_SERVERS } from './providers/youlyplus.js';
 
 export interface AppConfig {
   readonly nodeEnv: 'development' | 'test' | 'production';
@@ -15,6 +16,10 @@ export interface AppConfig {
   readonly lyricaApiUrl?: string;
   readonly betterLyricsApiUrl?: string;
   readonly betterLyricsApiKey?: string;
+  /** LyricsPlus instances, raced. `YOULYPLUS_SERVERS=off` disables; a comma list replaces the defaults. */
+  readonly youLyPlusServers?: readonly string[];
+  readonly unisonApiUrl?: string;
+  readonly kugouApiUrl?: string;
   /** Convex deployment URL. Unset means user data stays in memory. */
   readonly convexUrl?: string;
   readonly convexServerSecret?: string;
@@ -53,6 +58,8 @@ const DEFAULT_GAANA = 'https://gaanaapibyprats.vercel.app/api';
 const DEFAULT_LRCLIB = 'https://lrclib.net/api';
 const DEFAULT_LYRICA = 'https://test-0k.onrender.com/lyrics';
 const DEFAULT_BETTER_LYRICS = 'https://lyrics-api.boidu.dev';
+const DEFAULT_UNISON = 'https://unison.boidu.dev';
+const DEFAULT_KUGOU = 'https://lyrics.kugou.com';
 const DEFAULT_MUSICBRAINZ = 'https://musicbrainz.org/ws/2';
 const DEFAULT_COVERART = 'https://coverartarchive.org';
 // MusicBrainz throttles anonymous agents harder, so it wants a way to reach whoever is calling.
@@ -90,6 +97,13 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
   const lyricaApiUrl = isOff(env.LYRICA_API_URL) ? undefined : readOptionalProviderUrl(env.LYRICA_API_URL, production, 'LYRICA_API_URL') ?? DEFAULT_LYRICA;
   const betterLyricsApiUrl = isOff(env.BETTERLYRICS_API_URL) ? undefined : readOptionalProviderUrl(env.BETTERLYRICS_API_URL, production, 'BETTERLYRICS_API_URL') ?? DEFAULT_BETTER_LYRICS;
   const betterLyricsApiKey = env.BETTERLYRICS_API_KEY?.trim() || undefined;
+  const youLyPlusServers = isOff(env.YOULYPLUS_SERVERS)
+    ? undefined
+    : env.YOULYPLUS_SERVERS?.trim()
+      ? env.YOULYPLUS_SERVERS.split(',').map((server, index) => readProviderUrl(server, undefined, production, `YOULYPLUS_SERVERS[${index}]`))
+      : [...DEFAULT_YOULYPLUS_SERVERS];
+  const unisonApiUrl = isOff(env.UNISON_API_URL) ? undefined : readOptionalProviderUrl(env.UNISON_API_URL, production, 'UNISON_API_URL') ?? DEFAULT_UNISON;
+  const kugouApiUrl = isOff(env.KUGOU_API_URL) ? undefined : readOptionalProviderUrl(env.KUGOU_API_URL, production, 'KUGOU_API_URL') ?? DEFAULT_KUGOU;
   // On by default: it only runs for a row whose album is somebody's playlist.
   const musicBrainz: MusicBrainzConfig | undefined = isOff(env.MUSICBRAINZ_API_URL)
     ? undefined
@@ -139,6 +153,9 @@ export function loadConfig(env: NodeJS.Dict<string>): AppConfig {
     ...(lyricaApiUrl ? { lyricaApiUrl } : {}),
     ...(betterLyricsApiUrl ? { betterLyricsApiUrl } : {}),
     ...(betterLyricsApiKey ? { betterLyricsApiKey } : {}),
+    ...(youLyPlusServers && youLyPlusServers.length > 0 ? { youLyPlusServers } : {}),
+    ...(unisonApiUrl ? { unisonApiUrl } : {}),
+    ...(kugouApiUrl ? { kugouApiUrl } : {}),
     ...(convexUrl && convexServerSecret ? { convexUrl, convexServerSecret } : {}),
     ...(convexSiteUrl ? { convexSiteUrl } : {}),
     enableRequestLogging: nodeEnv === 'production',

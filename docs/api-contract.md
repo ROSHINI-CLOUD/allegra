@@ -110,14 +110,19 @@ tokens stay server-side. `MotionArtwork` is `{ source: 'Apple Music', videoUrl: 
 ### `GET /api/lyrics` ⭐
 `songId`?, `title` (req), `artist` (req), `duration`?, `syncedOnly`=false
 `→ ApiResponse<LyricsPayload>`
-No lyrics anywhere → `{ success: false, error: "No lyrics found for this song." }`
+No lyrics anywhere → `404 { success: false, error: "No lyrics found for this song." }`
 Cache 30 d on hit, **24 h on miss**.
+
+Sources: LRCLIB first, then Better Lyrics, LyricsPlus, Unison, Lyrica and KuGou asked together (each
+optional, synced preferred, in that order on a tie). **Answers within ~11 s**: a lookup still running
+then answers `404` and keeps going in the background, caching its result, so the client's retry gets
+it. The client treats `404` as "no lyrics" (an empty state), never as a connection error.
 
 ### `GET /api/lyrics/alternatives` — additive
 `title` (req), `artist` (req), `duration`?, `syncedOnly`=false
 `→ ApiResponse<LyricsPayload[]>`
 
-Runs only when the listener opens **Other lyrics**. Returns up to six usable, de-duplicated renderings from the configured LRCLIB, Lyrica, Better Lyrics, YouLyPlus, and Unison providers; every item is a complete `LyricsPayload`, so selecting it requires no follow-up provider request. The normal `/api/lyrics` cascade stays the fast default. An empty array is a successful response: no alternative match was found.
+Runs only when the listener opens **Other lyrics**. Returns up to six usable, de-duplicated renderings (synced first) from every configured source: LRCLIB, Better Lyrics, LyricsPlus, Unison (up to five of its ranked entries), Lyrica and KuGou (up to three candidates); every item is a complete `LyricsPayload`, so selecting it requires no follow-up provider request. Two entries with the same opening words and type count as one. When a source says which recording it filed an item under, its `matchReason` starts with it (`Artist — Title • …`) so the picker can tell them apart. Sources get the same ~11 s budget; a list missing a slow source is returned but not cached. The normal `/api/lyrics` cascade stays the fast default. An empty array is a successful response: no alternative match was found. Cache 24 h on hit, 6 h on miss.
 
 ### `GET /api/stream/:songId` ⭐⭐ — not JSON
 Returns **audio bytes**.

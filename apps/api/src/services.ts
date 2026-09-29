@@ -15,7 +15,10 @@ import { GaanaProvider } from './providers/gaana.js';
 import { ItunesProvider } from './providers/itunes.js';
 import { LrclibProvider } from './providers/lrclib.js';
 import { BetterLyricsProvider } from './providers/betterlyrics.js';
+import { KuGouProvider } from './providers/kugou.js';
 import { LyricaProvider } from './providers/lyrica.js';
+import { UnisonProvider } from './providers/unison.js';
+import { YouLyPlusProvider } from './providers/youlyplus.js';
 import { MusicBrainzReleaseAuthority, type ReleaseAuthority } from './providers/musicbrainz.js';
 import { SaavnProvider } from './providers/saavn.js';
 import { MemoryUserStore, type UserStore } from './user/store.js';
@@ -28,6 +31,10 @@ export interface ServiceOptions {
   readonly lyricaApiUrl?: string;
   /** Better Lyrics API base URL. Unset disables that tier. */
   readonly betterLyricsApiUrl?: string;
+  /** LyricsPlus instances, Unison and KuGou. Each unset disables that source. */
+  readonly youLyPlusServers?: readonly string[];
+  readonly unisonApiUrl?: string;
+  readonly kugouApiUrl?: string;
   readonly musicBrainz?: MusicBrainzConfig;
   /** Injected in tests so the election runs without reaching MusicBrainz. */
   readonly releaseAuthority?: ReleaseAuthority;
@@ -99,6 +106,7 @@ export function createServices(options: ServiceOptions): AppServices {
   const convexVerifier = options.accountVerifier
     ?? (options.convexSiteUrl ? new ConvexTokenVerifier({ siteUrl: options.convexSiteUrl }) : undefined);
 
+  const fetchImpl = options.fetchImpl ? { fetchImpl: options.fetchImpl } : {};
   const stream = new StreamResolver({ saavn, cache, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) });
 
   return {
@@ -108,8 +116,13 @@ export function createServices(options: ServiceOptions): AppServices {
     lyrics: new LyricsService(new LrclibProvider({
       ...(options.lrclibApiUrl ? { baseUrl: options.lrclibApiUrl } : {}),
       ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
-    }), cache, options.lyricaApiUrl ? new LyricaProvider({ baseUrl: options.lyricaApiUrl, timeoutMs: 25_000, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) }) : undefined,
-      options.betterLyricsApiUrl ? new BetterLyricsProvider({ baseUrl: options.betterLyricsApiUrl, ...(options.betterLyricsApiKey ? { apiKey: options.betterLyricsApiKey } : {}), ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) }) : undefined),
+    }), cache, {
+      ...(options.lyricaApiUrl ? { lyrica: new LyricaProvider({ baseUrl: options.lyricaApiUrl, timeoutMs: 25_000, ...fetchImpl }) } : {}),
+      ...(options.betterLyricsApiUrl ? { betterLyrics: new BetterLyricsProvider({ baseUrl: options.betterLyricsApiUrl, ...(options.betterLyricsApiKey ? { apiKey: options.betterLyricsApiKey } : {}), ...fetchImpl }) } : {}),
+      ...(options.youLyPlusServers ? { youLyPlus: new YouLyPlusProvider({ servers: options.youLyPlusServers, ...fetchImpl }) } : {}),
+      ...(options.unisonApiUrl ? { unison: new UnisonProvider({ baseUrl: options.unisonApiUrl, ...fetchImpl }) } : {}),
+      ...(options.kugouApiUrl ? { kugou: new KuGouProvider({ baseUrl: options.kugouApiUrl, ...fetchImpl }) } : {})
+    }),
     auth: new AuthService({
       store: userStore,
       guest: guestVerifier,

@@ -1,4 +1,4 @@
-import { fetchWithTimeout } from '../lib/fetchWithTimeout.js';
+import { fetchBodyWithTimeout } from '../lib/fetchWithTimeout.js';
 
 const DEFAULT_TIMEOUT_MS = 45_000;
 
@@ -50,7 +50,7 @@ export class LyricaProvider {
           url.searchParams.set('duration', String(Math.floor(duration)));
         }
 
-        const response = await fetchWithTimeout(
+        const response = await fetchBodyWithTimeout(
           url,
           { headers: { Accept: 'application/json', 'User-Agent': 'Allegra/1.0' } },
           this.timeoutMs,
@@ -59,7 +59,7 @@ export class LyricaProvider {
         if (!response.ok) {
           continue;
         }
-        const body: unknown = await response.json();
+        const body: unknown = JSON.parse(response.body);
         const lyrics = extractLyrics(body);
         if (lyrics) {
           return { lyrics, source: `Lyrica(${strategy.label})` };

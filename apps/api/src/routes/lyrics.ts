@@ -25,6 +25,22 @@ export function lyricsRouter(lyrics: LyricsService): Router {
       sendFailure(response, error);
     }
   });
+  router.get('/lyrics/alternatives', async (request, response) => {
+    const title = boundedString(request.query.title);
+    const artist = boundedString(request.query.artist);
+    const duration = typeof request.query.duration === 'string' ? Number(request.query.duration) : undefined;
+    const syncedOnly = request.query.syncedOnly === 'true';
+    if (!title || !artist) {
+      response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
+      return;
+    }
+    try {
+      // An empty list is a successful answer: nothing else matched this recording.
+      sendSuccess(response, await lyrics.alternatives(title, artist, Number.isFinite(duration) ? duration : undefined, syncedOnly));
+    } catch (error) {
+      sendFailure(response, error);
+    }
+  });
   router.get('/lyrics/search', async (request, response) => {
     const title = boundedString(request.query.title);
     const artist = boundedString(request.query.artist);

@@ -1,27 +1,88 @@
 import { cacheKey, type CacheStore } from '../lib/cache.js';
+import { LATE, withinBudget } from '../lib/deadline.js';
 import { hasTimestamps, parseLyrics } from '../lib/lrc.js';
 import { scoreLyrics } from '../lib/matcher.js';
 import type { BetterLyricsProvider } from '../providers/betterlyrics.js';
+import type { KuGouProvider } from '../providers/kugou.js';
 import type { LrclibEntry, LrclibProvider } from '../providers/lrclib.js';
 import type { LyricaProvider } from '../providers/lyrica.js';
+import type { LyricsCandidate } from '../providers/lyricsCandidate.js';
+import type { UnisonProvider } from '../providers/unison.js';
+import type { YouLyPlusProvider } from '../providers/youlyplus.js';
 import type { LyricsPayload } from '../types.js';
 
 const HIT_TTL_SECONDS = 2_592_000;
 const MISS_TTL_SECONDS = 86_400;
+const ALTERNATIVES_TTL_SECONDS = 86_400;
+const MAX_ALTERNATIVES = 6;
+/**
+ * How long a listener waits for an answer. A song with no lyrics walks every tier in turn, which
+ * can take minutes; the web client gives up at 15 s and would report a dead connection instead of
+ * "no lyrics". Past this, the lookup keeps running and caches its result for the next ask.
+ */
+const LOOKUP_BUDGET_MS = 11_000;
+
+/** The optional sources behind LRCLIB. Each is asked only if configured, and none ever throws. */
+export interface LyricsSources {
+  readonly lyrica?: LyricaProvider;
+  readonly betterLyrics?: BetterLyricsProvider;
+  readonly youLyPlus?: YouLyPlusProvider;
+  readonly unison?: UnisonProvider;
+  readonly kugou?: KuGouProvider;
+  /** Overrides LOOKUP_BUDGET_MS (tests). */
+  readonly budgetMs?: number;
+}
 
 export class LyricsService {
+  /** Lookups still running, by cache key, so a retry joins the one in flight instead of starting over. */
+  private readonly inflight = new Map<string, Promise<LyricsPayload | null>>();
+
+  private readonly lyrica: LyricaProvider | undefined;
+  private readonly betterLyrics: BetterLyricsProvider | undefined;
+  private readonly youLyPlus: YouLyPlusProvider | undefined;
+  private readonly unison: UnisonProvider | undefined;
+  private readonly kugou: KuGouProvider | undefined;
+  private readonly budgetMs: number;
+
   public constructor(
     private readonly lrclib: LrclibProvider,
     private readonly cache: CacheStore,
-    private readonly lyrica?: LyricaProvider,
-    private readonly betterLyrics?: BetterLyricsProvider
-  ) {}
+    sources: LyricsSources = {}
+  ) {
+    this.lyrica = sources.lyrica;
+    this.betterLyrics = sources.betterLyrics;
+    this.youLyPlus = sources.youLyPlus;
+    this.unison = sources.unison;
+    this.kugou = sources.kugou;
+    this.budgetMs = sources.budgetMs ?? LOOKUP_BUDGET_MS;
+  }
+
+  /**
+   * The best lyrics for a song, or null: none found, or none found within the budget (the lookup
+   * then finishes in the background, so asking again shortly gets its answer from the cache).
+   */
+  public async find(
+    title: string,
+    artist: string,
+    duration: number | undefined,
+    syncedOnly: boolean
+  ): Promise<LyricsPayload | null> {
+    const cleaned = cleanLyricsQuery(title, artist);
+    const key = cacheKey('lyrics', cleaned.title, cleaned.artist, String(duration ?? 0), String(syncedOnly));
+    let lookup = this.inflight.get(key);
+    if (!lookup) {
+      lookup = this.cascade(title, artist, duration, syncedOnly).finally(() => this.inflight.delete(key));
+      this.inflight.set(key, lookup);
+    }
+    const value = await withinBudget(lookup, this.budgetMs);
+    return value === LATE ? null : value;
+  }
 
   /**
    * Cascade: LRCLIB (exact, then search, across title/artist variants) -> Lyrica and
    * BetterLyrics together -> a miss. Each tier is optional and never throws.
    */
-  public async find(
+  private async cascade(
     title: string,
     artist: string,
     duration: number | undefined,
@@ -60,15 +121,12 @@ export class LyricsService {
       }
     }
 
-    // 2. The optional aggregators, asked together so a slow one does not delay the other.
-    const [better, lyrica] = await Promise.all([
-      this.betterLyrics ? this.betterLyrics.find(cleaned.title, lead || cleaned.artist, duration) : Promise.resolve(null),
-      this.findLyrica(cleaned.title, cleaned.artist, lead, duration, syncedOnly)
-    ]);
-    const found = [better, lyrica]
-      .filter((candidate): candidate is { readonly lyrics: string; readonly source: string } => candidate !== null)
-      .map((candidate) => toPayloadFromRaw(candidate.lyrics, cleaned.title, duration, candidate.source))
-      // Synced beats plain; on a tie BetterLyrics (listed first) wins.
+    // 2. The optional aggregators, asked together so a slow one does not delay the others.
+    const aggregated = await this.fromAggregators(cleaned.title, cleaned.artist, lead, duration, syncedOnly);
+    const found = aggregated
+      .map((candidate) => candidatePayload(candidate, cleaned.title, duration))
+      .filter((payload) => !syncedOnly || payload.type === 'synced')
+      // Synced beats plain; on a tie the earlier source in fromAggregators' order wins.
       .sort((left, right) => Number(right.type === 'synced') - Number(left.type === 'synced'))[0];
     if (found) {
       await this.cache.set(key, found, HIT_TTL_SECONDS);
@@ -96,6 +154,29 @@ export class LyricsService {
     return best ? toPayload(best, requestedTitle, duration, fromGet === best ? 'LRCLIB' : 'LRCLIB-search') : null;
   }
 
+  /**
+   * One answer from each aggregator, in preference order: Better Lyrics and LyricsPlus (word-timed,
+   * often Apple), Unison (community-ranked), Lyrica, then KuGou, whose keyword search is the likeliest
+   * to land on another recording.
+   */
+  private async fromAggregators(
+    title: string,
+    artist: string,
+    lead: string,
+    duration: number | undefined,
+    syncedOnly: boolean
+  ): Promise<LyricsCandidate[]> {
+    const artistForSearch = lead || artist;
+    const found = await Promise.all([
+      this.betterLyrics ? this.betterLyrics.find(title, artistForSearch, duration) : Promise.resolve(null),
+      this.youLyPlus ? this.youLyPlus.find(title, artistForSearch, duration) : Promise.resolve(null),
+      this.unison ? this.unison.find(title, artistForSearch, duration) : Promise.resolve(null),
+      this.findLyrica(title, artist, lead, duration, syncedOnly),
+      this.kugou ? this.kugou.find(title, artistForSearch, duration) : Promise.resolve(null)
+    ]);
+    return found.filter((candidate): candidate is LyricsCandidate => candidate !== null);
+  }
+
   private async findLyrica(
     title: string,
     artist: string,
@@ -111,6 +192,78 @@ export class LyricsService {
       return first;
     }
     return this.lyrica.find(title, artist, duration, syncedOnly);
+  }
+
+  /**
+   * Every distinct usable rendering the providers have, for the "Other lyrics" picker. Unlike
+   * find() it asks every tier at once instead of stopping at the first hit, so it runs only when a
+   * listener asks. An empty list is an answer (nothing else matched), not a failure.
+   */
+  public async alternatives(
+    title: string,
+    artist: string,
+    duration: number | undefined,
+    syncedOnly: boolean
+  ): Promise<LyricsPayload[]> {
+    const cleaned = cleanLyricsQuery(title, artist);
+    const lead = leadArtist(cleaned.artist);
+    const key = cacheKey('lyrics-alternatives', cleaned.title, cleaned.artist, String(duration ?? 0), String(syncedOnly));
+    const cached = await this.cache.get<LyricsPayload[]>(key);
+    if (cached) {
+      return cached;
+    }
+
+    const attempts = lrclibAttempts(cleaned.title, cleaned.artist);
+    // Every tier gets the same budget; whatever has answered by then is the list. A tier still
+    // running is left to finish on its own, and the list is not cached, so a later ask sees it.
+    const artistForSearch = lead || cleaned.artist;
+    const single = (lookup: Promise<LyricsCandidate | null>): Promise<LyricsCandidate[]> => lookup.then((candidate) => (candidate ? [candidate] : []));
+    const [lrclibSettled, looseSettled, ...aggregatorSettled] = await Promise.all([
+      withinBudget(Promise.all(attempts.map((attempt) => this.lrclib.search(attempt.title, attempt.artist, duration))), this.budgetMs),
+      withinBudget(lead ? this.lrclib.searchText(`${cleaned.title} ${lead}`) : Promise.resolve([]), this.budgetMs),
+      // Same preference order as fromAggregators; Unison and KuGou can offer several versions each.
+      withinBudget(this.betterLyrics ? single(this.betterLyrics.find(cleaned.title, artistForSearch, duration)) : Promise.resolve([]), this.budgetMs),
+      withinBudget(this.youLyPlus ? single(this.youLyPlus.find(cleaned.title, artistForSearch, duration)) : Promise.resolve([]), this.budgetMs),
+      withinBudget(this.unison ? this.unison.search(cleaned.title, artistForSearch, duration) : Promise.resolve([]), this.budgetMs),
+      withinBudget(single(this.findLyrica(cleaned.title, cleaned.artist, lead, duration, syncedOnly)), this.budgetMs),
+      withinBudget(this.kugou ? this.kugou.findAll(cleaned.title, artistForSearch, duration) : Promise.resolve([]), this.budgetMs)
+    ]);
+    const complete = lrclibSettled !== LATE && looseSettled !== LATE && aggregatorSettled.every((value) => value !== LATE);
+    const searches = lrclibSettled === LATE ? [] : lrclibSettled;
+    const loose = looseSettled === LATE ? [] : looseSettled;
+    const aggregated = aggregatorSettled.flatMap((value) => (value === LATE ? [] : value));
+
+    const fromLrclib = [...searches.flat(), ...loose]
+      .filter((entry) => isUsable(entry, syncedOnly) && titlesAlike(entry.trackName, cleaned.title))
+      .sort((left, right) => scoreLyrics(right, cleaned.title, duration).score - scoreLyrics(left, cleaned.title, duration).score)
+      .map((entry) => {
+        const payload = toPayload(entry, cleaned.title, duration, 'LRCLIB');
+        // Several LRCLIB entries share a source name; the recording they were filed under tells them apart.
+        const filedAs = [entry.artistName, entry.trackName].filter(Boolean).join(' — ');
+        return filedAs ? { ...payload, matchReason: `${filedAs} • ${payload.matchReason}` } : payload;
+      });
+    const fromAggregators = aggregated
+      .map((candidate) => candidatePayload(candidate, cleaned.title, duration))
+      .filter((payload) => !syncedOnly || payload.type === 'synced');
+
+    const seen = new Set<string>();
+    const versions = [...fromAggregators, ...fromLrclib]
+      .filter((payload) => {
+        const fingerprint = lyricsFingerprint(payload);
+        if (!fingerprint || seen.has(fingerprint)) {
+          return false;
+        }
+        seen.add(fingerprint);
+        return true;
+      })
+      // Stable: synced first, each group keeping its provider and score order.
+      .sort((left, right) => Number(right.type === 'synced') - Number(left.type === 'synced'))
+      .slice(0, MAX_ALTERNATIVES);
+
+    if (complete) {
+      await this.cache.set(key, versions, versions.length > 0 ? ALTERNATIVES_TTL_SECONDS : MISS_TTL_SECONDS / 4);
+    }
+    return versions;
   }
 
   public async search(title: string, artist: string, duration?: number): Promise<Array<{
@@ -228,6 +381,22 @@ function toPayloadFromRaw(raw: string, title: string, duration: number | undefin
     matchReason: `${title} • ${synced ? 'Synced' : 'Plain text'}`,
     lines
   };
+}
+
+/** An aggregator's candidate as a payload; the recording it was filed under leads its match reason. */
+function candidatePayload(candidate: LyricsCandidate, title: string, duration: number | undefined): LyricsPayload {
+  const payload = toPayloadFromRaw(candidate.lyrics, title, duration, candidate.source);
+  return candidate.filedAs ? { ...payload, matchReason: `${candidate.filedAs} • ${payload.type === 'synced' ? 'Synced' : 'Plain text'}` } : payload;
+}
+
+/** Same words and same kind means the same version, whichever provider or entry it came from. */
+function lyricsFingerprint(payload: LyricsPayload): string {
+  const words = payload.lines
+    .map((line) => line.text.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ''))
+    .filter(Boolean)
+    .slice(0, 8)
+    .join('|');
+  return words ? `${payload.type}:${words}` : '';
 }
 
 function isUsable(entry: LrclibEntry, syncedOnly: boolean): boolean {
