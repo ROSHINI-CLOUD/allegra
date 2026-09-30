@@ -1,4 +1,4 @@
-import type { MusicBrainzConfig, TranslationConfig } from './config.js';
+import type { AppConfig } from './config.js';
 import { ArtworkService } from './services/artwork.js';
 import { LyricsService } from './services/lyrics.js';
 import { RecommendationService } from './services/recommendations.js';
@@ -24,36 +24,41 @@ import { SaavnProvider } from './providers/saavn.js';
 import { MemoryUserStore, type UserStore } from './user/store.js';
 import { ConvexLibraryStore } from './db/convexLibrary.js';
 
-export interface ServiceOptions {
-  readonly saavnApiUrl?: string;
-  readonly saavnSecondaryApiUrl?: string;
-  readonly gaanaApiUrl?: string;
-  readonly lrclibApiUrl?: string;
-  readonly lyricaApiUrl?: string;
-  /** Better Lyrics API base URL. Unset disables that tier. */
-  readonly betterLyricsApiUrl?: string;
-  /** LyricsPlus instances, Unison and KuGou. Each unset disables that source. */
-  readonly youLyPlusServers?: readonly string[];
-  readonly unisonApiUrl?: string;
-  readonly kugouApiUrl?: string;
-  readonly musicBrainz?: MusicBrainzConfig;
+/**
+ * Provider settings exactly as config.ts loads them (documented there). Each is optional here so a
+ * test sets only what it uses; an unset optional provider is simply not built.
+ */
+type ProviderSettings = Partial<
+  Pick<
+    AppConfig,
+    | 'version'
+    | 'saavnApiUrl'
+    | 'saavnSecondaryApiUrl'
+    | 'gaanaApiUrl'
+    | 'lrclibApiUrl'
+    | 'lyricaApiUrl'
+    | 'betterLyricsApiUrl'
+    | 'betterLyricsApiKey'
+    | 'youLyPlusServers'
+    | 'unisonApiUrl'
+    | 'kugouApiUrl'
+    | 'musicBrainz'
+    | 'translation'
+    | 'convexUrl'
+    | 'convexServerSecret'
+    | 'convexSiteUrl'
+  >
+>;
+
+export interface ServiceOptions extends ProviderSettings {
+  readonly jwtSecret: string;
+  readonly cacheStore?: CacheStore;
+  readonly fetchImpl?: typeof fetch;
   /** Injected in tests so the election runs without reaching MusicBrainz. */
   readonly releaseAuthority?: ReleaseAuthority;
-  readonly version?: string;
-  /** Optional key: without it only already-cached songs resolve. */
-  readonly betterLyricsApiKey?: string;
-  readonly cacheStore?: CacheStore;
   readonly userStore?: UserStore;
-  /** With both set, user data lives in Convex; otherwise it stays in memory. */
-  readonly convexUrl?: string;
-  readonly convexServerSecret?: string;
-  /** Convex site origin (…convex.site) — the issuer of Convex Auth session tokens. */
-  readonly convexSiteUrl?: string;
   /** Verifier for signed-in accounts. Built from convexSiteUrl unless supplied (tests). */
   readonly accountVerifier?: TokenVerifier;
-  readonly fetchImpl?: typeof fetch;
-  readonly jwtSecret: string;
-  readonly translation?: TranslationConfig;
 }
 
 export interface AppServices {

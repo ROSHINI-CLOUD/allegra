@@ -4,10 +4,7 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 
-import type { MusicBrainzConfig, TranslationConfig } from './config.js';
-import { createServices, type AppServices } from './services.js';
-import type { TokenVerifier } from './auth/verifier.js';
-import type { CacheStore } from './lib/cache.js';
+import { createServices, type AppServices, type ServiceOptions } from './services.js';
 import { createLogger, REDACTED_PATHS } from './lib/logger.js';
 import { artworkRouter } from './routes/artwork.js';
 import { authRouter } from './routes/auth.js';
@@ -31,32 +28,16 @@ export interface RateLimitConfig {
   readonly limit: number;
 }
 
-export interface AppOptions {
+/**
+ * Everything createServices takes passes straight through (provider settings, test fakes), so a
+ * new provider setting is added in config.ts and services.ts only. `services` skips building them.
+ */
+export interface AppOptions extends Omit<ServiceOptions, 'jwtSecret'> {
   readonly version: string;
   readonly allowedOrigin?: string;
   readonly additionalOrigins?: readonly string[];
   readonly jwtSecret?: string;
   readonly services?: AppServices;
-  readonly saavnApiUrl?: string;
-  readonly saavnSecondaryApiUrl?: string;
-  readonly gaanaApiUrl?: string;
-  readonly lrclibApiUrl?: string;
-  readonly musicBrainz?: MusicBrainzConfig;
-  readonly lyricaApiUrl?: string;
-  readonly betterLyricsApiUrl?: string;
-  readonly youLyPlusServers?: readonly string[];
-  readonly unisonApiUrl?: string;
-  readonly kugouApiUrl?: string;
-  readonly betterLyricsApiKey?: string;
-  readonly convexUrl?: string;
-  readonly convexServerSecret?: string;
-  /** Convex Auth issuer; used to verify Google session tokens at the API boundary. */
-  readonly convexSiteUrl?: string;
-  /** Injectable account-token verifier for tests and alternate identity providers. */
-  readonly accountVerifier?: TokenVerifier;
-  readonly translation?: TranslationConfig;
-  readonly cacheStore?: CacheStore;
-  readonly fetchImpl?: typeof fetch;
   readonly rateLimit?: false | {
     readonly api?: RateLimitConfig;
     readonly stream?: RateLimitConfig;
@@ -108,28 +89,8 @@ export function createApp(options: AppOptions): Express {
     );
   }
 
-  const services = options.services ?? createServices({
-    jwtSecret: options.jwtSecret ?? process.env.JWT_SECRET ?? 'local-development-only',
-    ...(options.saavnApiUrl ? { saavnApiUrl: options.saavnApiUrl } : {}),
-    ...(options.saavnSecondaryApiUrl ? { saavnSecondaryApiUrl: options.saavnSecondaryApiUrl } : {}),
-    ...(options.gaanaApiUrl ? { gaanaApiUrl: options.gaanaApiUrl } : {}),
-    ...(options.lrclibApiUrl ? { lrclibApiUrl: options.lrclibApiUrl } : {}),
-    ...(options.musicBrainz ? { musicBrainz: options.musicBrainz } : {}),
-    ...(options.version ? { version: options.version } : {}),
-    ...(options.lyricaApiUrl ? { lyricaApiUrl: options.lyricaApiUrl } : {}),
-    ...(options.betterLyricsApiUrl ? { betterLyricsApiUrl: options.betterLyricsApiUrl } : {}),
-    ...(options.youLyPlusServers ? { youLyPlusServers: options.youLyPlusServers } : {}),
-    ...(options.unisonApiUrl ? { unisonApiUrl: options.unisonApiUrl } : {}),
-    ...(options.kugouApiUrl ? { kugouApiUrl: options.kugouApiUrl } : {}),
-    ...(options.betterLyricsApiKey ? { betterLyricsApiKey: options.betterLyricsApiKey } : {}),
-    ...(options.convexUrl ? { convexUrl: options.convexUrl } : {}),
-    ...(options.convexServerSecret ? { convexServerSecret: options.convexServerSecret } : {}),
-    ...(options.convexSiteUrl ? { convexSiteUrl: options.convexSiteUrl } : {}),
-    ...(options.accountVerifier ? { accountVerifier: options.accountVerifier } : {}),
-    ...(options.translation ? { translation: options.translation } : {}),
-    ...(options.cacheStore ? { cacheStore: options.cacheStore } : {}),
-    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
-  });
+  const jwtSecret = options.jwtSecret ?? process.env.JWT_SECRET ?? 'local-development-only';
+  const services = options.services ?? createServices({ ...options, jwtSecret });
 
   app.use(express.json({ limit: '32kb' }));
 
@@ -150,7 +111,7 @@ export function createApp(options: AppOptions): Express {
   app.use('/api', sharedRouter(services.auth, services.catalog));
   app.use('/api', uploadsRouter(services.auth, services.covers));
   app.use('/api', discoveryRouter(services.translation, services.recommendations, services.auth, services.catalog));
-  const signer = new OAuthSigner(options.jwtSecret ?? process.env.JWT_SECRET ?? 'local-development-only');
+  const signer = new OAuthSigner(jwtSecret);
   app.use(oauthRouter({
     auth: services.auth,
     signer,
