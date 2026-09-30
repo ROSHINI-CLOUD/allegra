@@ -132,7 +132,9 @@ export default defineSchema({
     rev: v.number()
   })
     .index('by_userId_and_ref', ['userId', 'ref'])
-    .index('by_userId_and_rev', ['userId', 'rev']),
+    .index('by_userId_and_rev', ['userId', 'rev'])
+    // The profile copy reads current likes only, newest first, so unlikes never use up its budget.
+    .index('by_userId_and_liked_and_likedAt', ['userId', 'liked', 'likedAt']),
 
   libraryPlaylists: defineTable({
     userId: v.string(),
@@ -148,7 +150,8 @@ export default defineSchema({
     rev: v.number()
   })
     .index('by_userId_and_playlistId', ['userId', 'playlistId'])
-    .index('by_userId_and_rev', ['userId', 'rev']),
+    .index('by_userId_and_rev', ['userId', 'rev'])
+    .index('by_userId_and_deleted_and_createdAt', ['userId', 'deleted', 'createdAt']),
 
   libraryItems: defineTable({
     userId: v.string(),
@@ -161,7 +164,8 @@ export default defineSchema({
     rev: v.number()
   })
     .index('by_userId_and_playlistId_and_ref', ['userId', 'playlistId', 'ref'])
-    .index('by_userId_and_rev', ['userId', 'rev']),
+    .index('by_userId_and_rev', ['userId', 'rev'])
+    .index('by_userId_and_deleted_and_addedAt', ['userId', 'deleted', 'addedAt']),
 
   /** One per listener once their library moved to rows: the newest revision. Its presence means "rows are the truth". */
   libraryState: defineTable({

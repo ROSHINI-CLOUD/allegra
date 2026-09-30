@@ -33,8 +33,12 @@ import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/s
 import { requireSecret } from './profiles';
 import { songSnapshot } from './schema';
 
-/** Most rows read to rebuild the profile copy. Past these the copy is cut short (the rows stay complete). */
-// Together well under Convex's 16,384 documents read per function, leaving room for the batch itself.
+/**
+ * Most rows read to rebuild the profile copy: together well under Convex's 16,384 documents read
+ * per function, leaving room for the batch itself. Only current rows are read (never unlikes or
+ * removed songs), newest first, so past these a listener loses their oldest entries from the
+ * website's copy, never a playlist they just made. The rows, and so the phone, stay complete.
+ */
 const MAX_LIKES = 4000;
 const MAX_PLAYLISTS = 300;
 const MAX_ITEMS = 8000;
@@ -101,9 +105,21 @@ export async function libraryOwnsProfileCopy(ctx: QueryCtx, userId: string): Pro
 
 async function rebuildProfileCopy(ctx: MutationCtx, userId: string, profileId: Doc<'profiles'>['_id']): Promise<void> {
   const [likes, playlists, items] = await Promise.all([
-    ctx.db.query('libraryLikes').withIndex('by_userId_and_ref', (q) => q.eq('userId', userId)).take(MAX_LIKES),
-    ctx.db.query('libraryPlaylists').withIndex('by_userId_and_playlistId', (q) => q.eq('userId', userId)).take(MAX_PLAYLISTS),
-    ctx.db.query('libraryItems').withIndex('by_userId_and_playlistId_and_ref', (q) => q.eq('userId', userId)).take(MAX_ITEMS)
+    ctx.db
+      .query('libraryLikes')
+      .withIndex('by_userId_and_liked_and_likedAt', (q) => q.eq('userId', userId).eq('liked', true))
+      .order('desc')
+      .take(MAX_LIKES),
+    ctx.db
+      .query('libraryPlaylists')
+      .withIndex('by_userId_and_deleted_and_createdAt', (q) => q.eq('userId', userId).eq('deleted', false))
+      .order('desc')
+      .take(MAX_PLAYLISTS),
+    ctx.db
+      .query('libraryItems')
+      .withIndex('by_userId_and_deleted_and_addedAt', (q) => q.eq('userId', userId).eq('deleted', false))
+      .order('desc')
+      .take(MAX_ITEMS)
   ]);
   const copy = toProfileLibrary(likes.map(likeRow), playlists.map(playlistRow), items.map(itemRow));
   await ctx.db.patch(profileId, copy);
