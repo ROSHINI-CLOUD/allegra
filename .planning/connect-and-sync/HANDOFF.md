@@ -31,6 +31,11 @@ cd apps/mobile/android && ./gradlew assembleDebug # native build (JDK 17 via JAV
 2. **Device check of sign-in** (Settings → Allegra account). Release/dev builds default to **prod**
    (`apps/mobile/src/services/account/config.ts`), so test after the prod deploy.
 
+3. **Deploy order for this branch: Convex first, then the API.** The API calls `profiles:update`
+   (compare-and-set profile writes) and the profile copy reads new indexes in `convex/schema.ts`.
+   An API deployed ahead of Convex fails every profile change (plays, taste, settings) with a 502.
+   `apps/api/src/db/convexGateway.test.ts` checks every function the API names is exported by `convex/`.
+
 ## Next: Phase 3 — Connect backend (see PLAN.md §3 M2 and §5 Phase 3)
 
 - Read `convex/_generated/ai/guidelines.md` first (repo rule). It changed the plan: device presence
