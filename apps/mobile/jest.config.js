@@ -13,6 +13,8 @@ module.exports = {
   ],
   moduleNameMapper: {
     '^react-native$': '<rootDir>/node_modules/react-native/jest/setup.js',
+    // Code shared with Allegra web/API (tsconfig "paths" and metro.config.js).
+    '^@shared/(.*)$': '<rootDir>/../../packages/shared/$1',
     '\\.(jpg|jpeg|png|gif|mp3|wav|mp4|otf|ttf)$': '<rootDir>/scripts/ci/__mocks__/fileMock.js',
   },
   globals: {

@@ -1,5 +1,9 @@
 {
-  "compilerOptions": {},
+  "compilerOptions": {
+    "paths": {
+      "@shared/*": ["../../packages/shared/*"]
+    }
+  },
   "exclude": ["lakebed"],
   "extends": "expo/tsconfig.base"
 }

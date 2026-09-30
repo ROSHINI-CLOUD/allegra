@@ -18,6 +18,30 @@ Karaoke runs on the listener's device, so it has no API or cloud configuration.
 | Durable user data + Google sign-in | `CONVEX_URL`, `CONVEX_SERVER_SECRET` (+ `NEXT_PUBLIC_CONVEX_URL` in `apps/web/.env.local`) — see [auth-convex-google.md](./auth-convex-google.md) |
 | Recommendations, lyric translation | No key. Recommendations use catalog + listener taste; MyMemory translates lyrics. Set `LIBRETRANSLATE_API_URL` only for a self-hosted fallback. |
 
+### The phone app (LuvLyrics, `apps/mobile`)
+
+`apps/mobile` is Expo / React Native and is **not** a root workspace: it has its own lockfile and
+pins React for React Native, so it installs separately.
+
+```bash
+npm ci --prefix apps/mobile     # once, and after its package-lock.json changes
+npm run dev:mobile              # Metro for a dev build on a phone or emulator
+npm run mobile:check            # the app's own gate: secrets, lint, typecheck, tests
+```
+
+- A first native build: `cd apps/mobile/android && ./gradlew assembleDebug` (JDK 17 in `JAVA_HOME`,
+  `apps/mobile/android/local.properties` pointing at the Android SDK). Keep the checkout on a short
+  path without spaces (for example `C:\dev\allegra`): Windows CMake builds of Skia and Reanimated fail
+  on long paths.
+- `apps/mobile/android/app/debug.keystore` is gitignored and signs every build. Android only installs
+  an update over an app signed with the same key, so keep a copy of it outside the repo.
+- Shared code comes from `packages/` through the `@shared/*` alias (tsconfig, `metro.config.js`,
+  `jest.config.js`). Code in `packages/` imports no npm packages: Metro would otherwise resolve them
+  from the root `node_modules` and bundle a second React.
+- CI: `.github/workflows/mobile-ci.yml` (checks), `mobile-apk.yml` (publishes `apk-latest`, which
+  the app's updater reads), `mobile-smoke.yml` (emulator walk-through).
+- App rules live in [`apps/mobile/CLAUDE.md`](../apps/mobile/CLAUDE.md).
+
 ## The gate
 
 ```bash

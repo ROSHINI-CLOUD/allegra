@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const root = new URL('../../', import.meta.url);
@@ -45,6 +45,30 @@ test('the mobile app stays out of the web deployment install', async () => {
   // build and hoist a second React next to the web's.
   const pkg = await json('package.json');
   assert.ok(!pkg.workspaces.some((glob) => glob === 'apps/*' || glob === 'apps/mobile'));
+});
+
+test('the mobile app is built by root workflows, not a nested .github', async () => {
+  // GitHub only reads the root .github; a copy under apps/mobile would silently never run.
+  await assert.rejects(readdir(new URL('apps/mobile/.github', root)), 'apps/mobile/.github must not come back');
+  for (const name of ['mobile-ci.yml', 'mobile-apk.yml', 'mobile-smoke.yml']) {
+    const workflow = await text(`.github/workflows/${name}`);
+    assert.match(workflow, /working-directory: apps\/mobile/, `${name} must run inside apps/mobile`);
+    assert.match(workflow, /cache-dependency-path: apps\/mobile\/package-lock\.json/, `${name} must cache the app's own lockfile`);
+  }
+});
+
+test('shared packages import no npm packages', async () => {
+  // The phone bundles packages/ through Metro. A bare import there resolves from the root
+  // node_modules (the web's React), not the app's — two Reacts in one bundle.
+  const files = (await readdir(new URL('packages/', root), { recursive: true }))
+    .filter((file) => /\.tsx?$/.test(file) && !file.includes('node_modules'));
+  assert.ok(files.length > 0);
+  for (const file of files) {
+    const source = await text(`packages/${file.replaceAll('\\', '/')}`);
+    for (const [, specifier] of source.matchAll(/(?:import|export)[^'"]*?from\s+['"]([^'"]+)['"]/g)) {
+      assert.ok(specifier.startsWith('.'), `packages/${file} imports "${specifier}"; shared code may only import relative paths`);
+    }
+  }
 });
 
 test('Convex schema and functions exist for the UserStore seam', async () => {

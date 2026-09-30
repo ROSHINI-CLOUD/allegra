@@ -1,11 +1,11 @@
 /**
  * "Update app" in the About sheet. New builds are published by CI to the
- * `apk-latest` release of the public GitHub repo (.github/workflows/android-apk.yml);
+ * `apk-latest` release of the public Allegra repo (root .github/workflows/mobile-apk.yml);
  * this reads that release and hands back where to download it.
  */
-const RELEASE_API = 'https://api.github.com/repos/LuvLyricsApp/LuvLyricsApp/releases/tags/apk-latest';
+const RELEASE_API = 'https://api.github.com/repos/peterish8/allegra/releases/tags/apk-latest';
 /** Always the newest APK, whatever it is called inside the release. */
-export const LATEST_APK_URL = 'https://github.com/LuvLyricsApp/LuvLyricsApp/releases/download/apk-latest/LuvLyrics.apk';
+export const LATEST_APK_URL = 'https://github.com/peterish8/allegra/releases/download/apk-latest/LuvLyrics.apk';
 
 export interface LatestBuild {
   publishedAt: Date;

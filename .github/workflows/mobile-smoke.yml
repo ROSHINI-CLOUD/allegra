@@ -1,24 +1,38 @@
-name: Android smoke test
+name: Mobile smoke test
 
-# Boots the release build on an Android emulator and drives it with
-# lyricflow:// deep links (see .github/scripts/android-smoke.sh): screenshots
-# of launch, the player, Library and Settings, a background-playback check,
-# the app's diagnostics and the JS / crash lines from logcat. Catches "installs fine, then blank screen" failures that no unit
-# test can. The screenshot and full logcat are published to the "smoke-latest"
-# release and uploaded as a workflow artifact.
+# Boots the LuvLyrics release build on an Android emulator and drives it with
+# lyricflow:// deep links (.github/scripts/mobile-android-smoke.sh): screenshots of
+# launch, the player, Library and Settings, a background-playback check, the app's
+# diagnostics and the JS / crash lines from logcat. Catches "installs fine, then
+# blank screen" failures no unit test can. Results go to the "smoke-latest"
+# release and a workflow artifact.
 
 on:
   push:
-    branches: [main, claude/luvlyricsapp-ui-redesign-njxgnc, claude/luvlyricsapp-ui-ux-overhaul-o7eggn]
-    paths: ['src/**', 'android/**', 'index.ts', 'App.tsx', 'app.json', 'package.json', 'package-lock.json', '.github/**']
+    branches: [main]
+    paths:
+      - 'apps/mobile/src/**'
+      - 'apps/mobile/android/**'
+      - 'apps/mobile/index.ts'
+      - 'apps/mobile/App.tsx'
+      - 'apps/mobile/app.json'
+      - 'apps/mobile/package.json'
+      - 'apps/mobile/package-lock.json'
+      - 'packages/**'
+      - '.github/workflows/mobile-smoke.yml'
+      - '.github/scripts/mobile-android-smoke.sh'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: android-smoke
+  group: mobile-smoke
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/mobile
 
 jobs:
   smoke:
@@ -27,43 +41,40 @@ jobs:
     timeout-minutes: 75
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
 
-      - name: Install dependencies
+      - name: Install
         run: npm ci
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
 
       - name: Signing key
         run: |
           mkdir -p /tmp/tpl && cd /tmp/tpl
           npm pack expo-template-bare-minimum@sdk-54 --silent
           tar -xzf expo-template-bare-minimum-*.tgz package/android/app/debug.keystore
-          cp package/android/app/debug.keystore "$GITHUB_WORKSPACE/android/app/debug.keystore"
+          cp package/android/app/debug.keystore "$GITHUB_WORKSPACE/apps/mobile/android/app/debug.keystore"
 
       # Same release build as the phone APK, but for the emulator's x86_64 CPU.
       - name: Build release APK (x86_64)
-        working-directory: android
+        working-directory: apps/mobile/android
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon \
             -PreactNativeArchitectures=x86_64 \
             "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g"
-          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/LuvLyrics-x86_64.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/apps/mobile/LuvLyrics-x86_64.apk"
 
       - name: Enable KVM
         run: |
@@ -78,17 +89,13 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
+          working-directory: apps/mobile
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash .github/scripts/android-smoke.sh LuvLyrics-x86_64.apk
+          script: bash ../../.github/scripts/mobile-android-smoke.sh LuvLyrics-x86_64.apk
 
-      # On GLES the emulator freezes ~1s after opening Luvs (sometimes at
-      # Playlists): no app crash, no guest kernel message, qemu idle at 0% CPU
-      # for ~30s (a deadlock), then gone, with no host segfault, OOM or
-      # minidump. Not the renderer backend (swiftshader, lavapipe), not host
-      # video decoding, not two audio outputs; with HWUI on Vulkan it survives.
-      # The main walk therefore draws through Vulkan (android-smoke.sh), and this
-      # short second boot opens only Luvs on GLES as a canary for the emulator
-      # bug. Its files are published with a pass2- prefix.
+      # On GLES the emulator deadlocks ~1s after opening Luvs (no app crash, qemu
+      # idle): the main walk draws through Vulkan, and this short second boot
+      # opens only Luvs on GLES as a canary for that emulator bug.
       - name: Luvs, second pass
         if: always()
         continue-on-error: true
@@ -98,15 +105,16 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
+          working-directory: apps/mobile
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -show-kernel
-          script: bash .github/scripts/android-smoke.sh LuvLyrics-x86_64.apk luvs
+          script: bash ../../.github/scripts/mobile-android-smoke.sh LuvLyrics-x86_64.apk luvs
 
       - name: Upload smoke results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-smoke
-          path: smoke/
+          name: mobile-smoke
+          path: apps/mobile/smoke/
           retention-days: 14
 
       - name: Publish screenshot and logcat
@@ -121,8 +129,8 @@ jobs:
             --prerelease --target "$GITHUB_SHA" \
             --title "Emulator smoke test — latest" \
             --notes "Launch, player (cover and lyrics), Library and Settings screenshots, background playback check, diagnostics and full logcat, from \`${GITHUB_REF_NAME}\` at ${GITHUB_SHA::7}."
-          # gh publishes the draft after the uploads; once that step was lost
-          # and the release stayed an untagged draft that no link could reach.
+          # gh publishes the draft after the uploads; once that step was lost and
+          # the release stayed an untagged draft that no link could reach.
           if [ "$(gh release view smoke-latest --json isDraft -q .isDraft 2>/dev/null)" != "false" ]; then
             gh release edit smoke-latest --draft=false --tag smoke-latest || true
           fi

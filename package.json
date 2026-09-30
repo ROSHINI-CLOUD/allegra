@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "dev:mobile": "npm --prefix apps/mobile start",
     "mock": "node mocks/server.mjs",
     "contract-test": "node tests/contract/contract-smoke.mjs",
     "infra:test": "node --test tests/infra/infra-files.test.mjs",
@@ -17,7 +18,8 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm test --workspaces --if-present && npm run infra:test",
     "build": "npm run build --workspaces --if-present",
-    "e2e": "playwright test -c tests/e2e/playwright.config.ts"
+    "e2e": "playwright test -c tests/e2e/playwright.config.ts",
+    "mobile:check": "npm --prefix apps/mobile run ci"
   },
   "dependencies": {
     "@auth/core": "^0.41.3",

@@ -1,5 +1,15 @@
 # LuvLyrics — Project Reference
 
+## Where this app lives
+- `apps/mobile` in the **Allegra monorepo** (repo rules: `../../CLAUDE.md`). Not a root workspace:
+  `npm ci` here, own lockfile, own React pin. From the root: `npm run dev:mobile`, `npm run mobile:check`.
+- Shared code comes from `../../packages` as `@shared/*` (tsconfig `paths`, `metro.config.js`,
+  `jest.config.js`). Code in `packages/` must import no npm packages — Metro would take them from the
+  root `node_modules` and bundle a second React.
+- CI is at the repo root: `.github/workflows/mobile-ci.yml`, `mobile-apk.yml`, `mobile-smoke.yml`.
+  `mobile-apk.yml` publishes `apk-latest` on `peterish8/allegra`, which `services/appUpdate.ts` reads.
+- Connect and library sync with Allegra web: `../../.planning/connect-and-sync/PLAN.md`.
+
 ## Commit style
 - Never add AI attribution lines (no "Co-Authored-By" footers). Commits look like normal human commits.
 - Use conventional commits: `fix(scope):`, `feat(scope):`, `refactor(scope):`, etc.
