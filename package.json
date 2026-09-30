@@ -12,11 +12,12 @@
     "mock": "node mocks/server.mjs",
     "contract-test": "node tests/contract/contract-smoke.mjs",
     "infra:test": "node --test tests/infra/infra-files.test.mjs",
+    "convex:test": "node --import tsx --test \"tests/convex/**/*.test.ts\"",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm test --workspaces --if-present && npm run infra:test",
+    "test": "npm test --workspaces --if-present && npm run infra:test && npm run convex:test",
     "build": "npm run build --workspaces --if-present",
     "e2e": "playwright test -c tests/e2e/playwright.config.ts",
     "mobile:check": "npm --prefix apps/mobile run ci"

@@ -330,7 +330,15 @@ PR (squash, conventional commit, no AI footer, per `CLAUDE.md`).
 
 **Verify:** unit tests on both sides. Download a streamed song and confirm the row has `origin_id = 'saavn:…'`.
 
-### Phase 2 — Google sign-in on the phone (h 1.5 d / CC 2 h)
+### Phase 2 — Google sign-in on the phone (h 1.5 d / CC 2 h) — code done, device check pending
+Done: `convex/authRedirect.ts` (+ `tests/convex/`), `apps/mobile/src/services/account/`
+(`AccountProvider`, `signInFlow`, `secureStorage`, `allegraApi`, `config`), Settings → Allegra account,
+the three native modules added to the checked-in `ExpoModulesPackageList.kt`, and the secure-store
+backup-exclusion rules added to the checked-in manifest (the `android/` folder is committed, so config
+plugins never run). Found on the way: the live site uses Convex **`neighborly-ocelot-786`** (prod) while
+this checkout and LuvLyrics' bug reports use **`charming-jaguar-140`** (dev), so the app defaults to prod.
+**Not done, needs the owner:** deploy `convex/auth.ts` (dev for a dev-build test, then prod), then the
+device check below.
 1. Server: add `callbacks.redirect` in `convex/auth.ts` with an allow-list test (`lyricflow://auth`
    yes, `https://evil.com` no). Add the mobile redirect to the docs.
 2. Mobile: add deps `convex`, `@convex-dev/auth`, `expo-secure-store`, `expo-web-browser` and
@@ -347,6 +355,10 @@ PR (squash, conventional commit, no AI footer, per `CLAUDE.md`).
 - Sign out clears the secure store.
 
 ### Phase 3 — Connect backend (h 2 d / CC 2 h)
+**Changed after reading `convex/_generated/ai/guidelines.md`:** device online/offline uses the
+`@convex-dev/presence` component (a query can't read the clock, so a hand-rolled "seen in the last
+2 min" goes stale), and the command cap uses `@convex-dev/rate-limiter` (counting rows races).
+`devices` keeps only stable data (name, kind, app version); heartbeats live in presence.
 1. Add the schema tables (M2) and `convex/connect.ts`, plus the `sweep` cron in `convex/crons.ts`.
 2. Tests with `convex-test`:
    - ownership checks (a command can't target another user's device)

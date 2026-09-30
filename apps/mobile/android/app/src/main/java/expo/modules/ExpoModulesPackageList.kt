@@ -58,6 +58,10 @@ class ExpoModulesPackageList : ModulesProvider {
         expo.modules.sqlite.SQLiteModule::class.java,
         expo.modules.systemui.SystemUIModule::class.java,
         expo.modules.video.VideoModule::class.java,
+        // Allegra account sign-in (services/account): deep link back, keystore, in-app browser.
+        expo.modules.linking.ExpoLinkingModule::class.java,
+        expo.modules.securestore.SecureStoreModule::class.java,
+        expo.modules.webbrowser.WebBrowserModule::class.java,
 
         // Local app modules
         com.lyricflow.app.modules.StartupModule::class.java,

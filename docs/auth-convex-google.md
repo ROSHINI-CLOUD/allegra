@@ -104,3 +104,32 @@ so every route accepts either without knowing the difference.
 | Google returns `redirect_uri_mismatch` | Redirect URI missing, or uses `.convex.cloud` instead of `.convex.site` |
 | Signed in, but the API still says guest | `CONVEX_URL` missing on the API, so no `CONVEX_SITE_URL` is derived and the token cannot be verified |
 | Signed in, but the library is empty | `CONVEX_SERVER_SECRET` differs between the API and Convex |
+
+## The phone app (LuvLyrics, `apps/mobile`)
+
+The phone signs in to the **same** Convex deployment as the website, so one Google account is one
+listener on both. There is no Android OAuth client: Google redirects to Convex (the URI from step 3,
+unchanged), and Convex sends the listener back into the app.
+
+```
+LuvLyrics ─ signIn('google', { redirectTo: 'lyricflow://auth' }) ─► Convex Auth ─► Google
+    ▲                                                                              │
+    └── in-app browser returns lyricflow://auth?code=… ◄── Convex /api/auth/callback ┘
+        signIn('google', { code }) → session JWT in the OS keystore (expo-secure-store)
+```
+
+- `convex/auth.ts` allows that return link through `callbacks.redirect` (`convex/authRedirect.ts`,
+  tested in `tests/convex/`). Only `lyricflow://auth` is accepted besides `SITE_URL`: a wider rule would
+  hand a session code to any site. **Deploy it to every deployment the app signs in against**
+  (production, and dev when testing a dev build).
+- The app reads `EXPO_PUBLIC_ALLEGRA_CONVEX_URL` and `EXPO_PUBLIC_ALLEGRA_API_URL`. Unset, a build
+  talks to production (`neighborly-ocelot-786`, `allegravibe.vercel.app`). A dev build can point at the
+  dev deployment and at the laptop's API by LAN IP: the phone cannot reach the laptop's `localhost`.
+- The session lives in the OS keystore; the app sends it to the API as `Bearer`, exactly like the web.
+- Code: `apps/mobile/src/services/account/` (`signInFlow.ts` is the flow, tested with fakes).
+
+| Symptom (phone) | Usual cause |
+|---|---|
+| "Couldn't sign in" right after choosing a Google account | `convex/auth.ts` with the redirect callback not deployed to that deployment |
+| The browser opens and never returns to the app | A build without the `lyricflow` scheme or without the `expo-web-browser` plugin — rebuild the native app |
+| Signed in, but no name shows | The API at `EXPO_PUBLIC_ALLEGRA_API_URL` is unreachable or verifies a different Convex deployment |

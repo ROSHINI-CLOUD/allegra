@@ -1,6 +1,8 @@
 import Google from '@auth/core/providers/google';
 import { convexAuth } from '@convex-dev/auth/server';
 
+import { allowedAuthRedirect } from './authRedirect';
+
 /**
  * Sign-in lives in Convex, not in our API.
  *
@@ -11,5 +13,11 @@ import { convexAuth } from '@convex-dev/auth/server';
  * listening, search, playback) keeps working.
  */
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
-  providers: [Google]
+  providers: [Google],
+  callbacks: {
+    // The website, plus LuvLyrics coming back to lyricflow://auth (convex/authRedirect.ts).
+    async redirect({ redirectTo }) {
+      return allowedAuthRedirect(redirectTo, process.env.SITE_URL);
+    }
+  }
 });

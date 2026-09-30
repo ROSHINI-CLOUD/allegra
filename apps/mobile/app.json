@@ -30,7 +30,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-"backgroundColor": "#020A16"
+        "backgroundColor": "#020A16"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.lyricflow.app",
@@ -95,7 +95,9 @@
             }
           ]
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {

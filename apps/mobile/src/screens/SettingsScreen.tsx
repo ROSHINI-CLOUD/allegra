@@ -38,6 +38,7 @@ import { AppBackground, LYRICS_SIZE_MAX, LYRICS_SIZE_MIN, LyricsAlign, MiniPlaye
 import { CustomAlert } from '../components/CustomAlert';
 import { Toast } from '../components/Toast';
 import ListenTogetherSettings from '../components/settings/ListenTogetherSettings';
+import AllegraAccountSettings from '../components/settings/AllegraAccountSettings';
 import { Colors } from '../constants/colors';
 import { SettingsStrings } from '../constants/uiStrings';
 import { exportAllSongs, shareExportedFile, importSongsFromJson } from '../utils/exportImport';
@@ -253,6 +254,7 @@ const SettingsScreen: React.FC<Props> = () => {
             <JumpChips
               onJump={jump}
               items={[
+                { key: 'account', label: 'Account' },
                 { key: 'player', label: 'Player' },
                 { key: 'playback', label: 'Playback' },
                 { key: 'lyrics', label: 'Lyrics' },
@@ -266,6 +268,8 @@ const SettingsScreen: React.FC<Props> = () => {
             />
           </ScrollView>
         </View>
+
+        <AllegraAccountSettings onLayout={at('account')} onNotice={setNotice} />
 
         <Section icon="play-circle-outline" title="Player" lead="How Now Playing and the mini player look." onLayout={at('player')}>
           <Kit.Switch
