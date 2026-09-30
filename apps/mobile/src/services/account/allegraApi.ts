@@ -101,9 +101,11 @@ export interface AllegraSong {
   source: string;
 }
 
-export const getAllegraSongs = async (token: string, ids: readonly string[]): Promise<AllegraSong[]> => {
+/** The catalog's songs for these ids (unknown ids are left out), or null when the API could not be reached. */
+export const getAllegraSongs = async (token: string, ids: readonly string[]): Promise<AllegraSong[] | null> => {
   if (ids.length === 0) return [];
   const reply = await send<AllegraSong[]>('GET', `/api/songs?ids=${ids.map(encodeURIComponent).join(',')}`, token);
+  if (reply.outcome === 'offline') return null;
   return reply.outcome === 'sent' && Array.isArray(reply.data) ? reply.data : [];
 };
 

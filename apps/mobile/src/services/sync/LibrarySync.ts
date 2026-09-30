@@ -299,9 +299,11 @@ async function apply(changes: readonly LibraryChange[], token: string): Promise<
   const index = buildLocalIndex(songs);
   const playlistIds = new Set(playlists.filter(list => !list.isDefault).map(list => list.id));
   const actions = planInbound(changes, index, playlistIds);
-  const details = await detailsFor(actions, token);
+  const { details, complete } = await detailsFor(actions, token);
 
-  let ok = true;
+  // Details that could not be fetched (offline) mean a like or playlist song would be skipped:
+  // apply the rest, but keep our place so the next pull brings those back.
+  let ok = complete;
   for (const action of actions) {
     try {
       await applyAction(action, details);
@@ -349,8 +351,12 @@ async function applyAction(action: LocalAction, details: Map<string, SongSnapsho
   }
 }
 
-/** Songs a change named without details (e.g. liked on the website before snapshots existed). */
-async function detailsFor(actions: readonly LocalAction[], token: string): Promise<Map<string, SongSnapshot>> {
+/**
+ * Songs a change named without details (e.g. liked on the website while the catalog was down).
+ * `complete` is false when the API could not be reached for some of them; a song the catalog
+ * no longer has cannot be shown and is left out for good.
+ */
+async function detailsFor(actions: readonly LocalAction[], token: string): Promise<{ details: Map<string, SongSnapshot>; complete: boolean }> {
   const missing = new Set<string>();
   for (const action of actions) {
     if ((action.kind === 'online_like' || (action.kind === 'playlist_online' && action.present)) && !action.song) {
@@ -359,14 +365,20 @@ async function detailsFor(actions: readonly LocalAction[], token: string): Promi
     }
   }
   const found = new Map<string, SongSnapshot>();
+  let complete = true;
   const ids = [...missing];
   for (let i = 0; i < ids.length; i += 50) {
-    for (const song of await api.getAllegraSongs(token, ids.slice(i, i + 50))) {
+    const songs = await api.getAllegraSongs(token, ids.slice(i, i + 50));
+    if (!songs) {
+      complete = false;
+      continue;
+    }
+    for (const song of songs) {
       const ref = songRef(song.source, song.id);
       if (ref) found.set(ref, { ref, title: song.title, artist: song.artist, ...(song.album ? { album: song.album } : {}), artwork: song.artwork, duration: song.duration });
     }
   }
-  return found;
+  return { details: found, complete };
 }
 
 const rowOf = (song: SongSnapshot, at: number): db.OnlineSongRow => ({
