@@ -1,72 +1,120 @@
 # Handoff — Connect + library sync (read this first)
 
-Written 2026-09-30 at the end of the session that did Phases 0–2. The plan is
-[`PLAN.md`](./PLAN.md); this file is where things stand and what bites.
+Updated 2026-09-30, end of the session that shipped library sync and the backend clean-up.
+The plan is [`PLAN.md`](./PLAN.md) (§3 modules, §4 Connect behaviour, §5 phases, §6 error copy).
+This file is where things stand, what is left, and what bites.
 
 ## Where things are
 
-- Repo: `C:\dev\allegra` (moved from `...\Desktop\.website-production\allegra aws`). Branch
-  **`feat/connect-and-sync`**, stacked on `chore/import-luvlyrics-mobile`. Nothing pushed, no PR.
-- `apps/mobile` = LuvLyrics (Expo/React Native, Android), copied from
-  `C:\Users\nithy\Desktop\apps\LuvLyricsApp\LuvLyrics` @ `0c2beac` (that repo stays as the archive).
-  Not a root workspace: own lockfile, `npm ci --prefix apps/mobile`.
-- Commits: `465a4b3` Phase 0 (root mobile CI, `@shared/*` alias, dev scripts) · `5482e46` Phase 1
-  (`packages/shared/songRef.ts`, phone `origin_id`) · `3a20795` Phase 2 (phone Google sign-in).
-- `chore/import-luvlyrics-mobile` also carries two lyric commits from another session
-  (`af1bb43`, `47da803`) — rename or split that branch before merging.
+| Place | State |
+|---|---|
+| Repo | `C:\dev\allegra`, branch **`feat/connect-and-sync`** |
+| `peterish8/allegra` `main` | Same commit as the branch. **Vercel production deploys from it** (allegravibe.vercel.app) |
+| `peterish8/allegra` `feat/connect-and-sync` | Same commit |
+| `ROSHINI-CLOUD/allegra` `feat/connect-and-sync` | Pushed; the owner wants it kept. Its `main` is older (`47da803`) |
+| Convex prod `neighborly-ocelot-786` | Deployed 2026-09-30 with everything in `convex/` (library tables, `profiles.version`, three live-row indexes, `profiles:update`) |
+| Convex dev `charming-jaguar-140` | Not redeployed since; `npx convex dev --once` before local work against it |
+| APK | Every push to `main` or `feat/connect-and-sync` publishes `apk-latest` on `peterish8/allegra` (`.github/workflows/mobile-apk.yml`). The app's updater reads that release |
+
+Pushing needs a token with the `workflow` scope (it is in the owner's user `GITHUB_TOKEN`; the shell
+may hold an older one: read it with `[Environment]::GetEnvironmentVariable('GITHUB_TOKEN','User')`).
 
 ## Gates (all green at handoff)
 
 ```bash
-npm run typecheck && npm run lint && npm test     # root: api, web, shared, infra, convex
-npm run mobile:check                              # phone: secrets, lint, typecheck, 494 tests
-cd apps/mobile/android && ./gradlew assembleDebug # native build (JDK 17 via JAVA_HOME), ~2 min incremental
+npm run typecheck && npm run lint && npm test     # root: api (183), web, shared, infra, convex
+npx tsc --noEmit -p convex                        # convex/ is NOT in the root typecheck
+npm run mobile:check                              # phone: secrets, lint, typecheck, 503 tests
 ```
 
-## Waiting on the owner
+## Done
 
-1. **Convex deploy of `convex/auth.ts`** (the `lyricflow://auth` redirect). Checked 2026-09-30: dev
-   (`charming-jaguar-140`) and prod (`neighborly-ocelot-786`) both run exactly this repo's 25
-   functions, so a deploy adds only that rule. Dev: `npx convex dev --once`. Prod: `npx convex deploy`.
-2. **Device check of sign-in** (Settings → Allegra account). Release/dev builds default to **prod**
-   (`apps/mobile/src/services/account/config.ts`), so test after the prod deploy.
+- **Phase 0–2:** repo move, `songRef` identity, Google sign-in on the phone (Settings → Allegra account).
+- **Phase 7 (library backend):** `LibraryStore` seam, Convex rows, `/api/me/library/ops` + `/changes`,
+  web reloads likes/playlists when `library:myRev` moves (`apps/web/app/ConvexSignInProvider.tsx`).
+- **Phase 8 (phone sync), mostly:** like ≠ download (`liked_online_songs`), `LibrarySync` outbox + pull
+  (`apps/mobile/src/services/sync/`), online songs in Liked/playlists that stream on play
+  (`sync/onlineSongs.ts`), the first-sign-in choice (in Settings → Allegra account, not a separate sheet).
+- **Backend clean-up (this session):**
+  - `ListenerActions` (`apps/api/src/user/actions.ts`): one module for likes, playlists, sharing and plays; routes and MCP tools call it
+  - profile writes are compare-and-set (`UserStore.update`, `profiles:update`)
+  - `ConvexGateway` puts a 15 s timeout on every Convex call
+  - config passes straight through to `createServices`
+  - the profile copy reads only live rows, newest first
 
-3. **Deploy order for this branch: Convex first, then the API.** The API calls `profiles:update`
-   (compare-and-set profile writes) and the profile copy reads new indexes in `convex/schema.ts`.
-   An API deployed ahead of Convex fails every profile change (plays, taste, settings) with a 502.
-   `apps/api/src/db/convexGateway.test.ts` checks every function the API names is exported by `convex/`.
+## Left to do, in order
 
-## Next: Phase 3 — Connect backend (see PLAN.md §3 M2 and §5 Phase 3)
+### 1. Finish Phase 8 (small, do first)
+- **Phone plays never reach the account.** `LibrarySync.recordPlay(ref, seconds)` exists but nothing
+  calls it. Call it from the player when a catalog song stops or changes (seconds actually heard). This
+  feeds the web's Recently played and Quick picks.
+- **Account Quick picks on the phone:** `allegraApi.getRecommendations` is unused. Add a "Quick picks for
+  you" shelf to the Stream home when signed in (PLAN §5 Phase 8 step 4).
+- **Gaana songs don't show on the website.** They sync into Convex rows, but the profile copy
+  (`toProfileLibrary` in `packages/shared/library.ts`) keeps Saavn ids only, and the web hydrates liked and
+  playlist songs by Saavn id. Fix: have the web read the rows' `song` snapshots (or resolve Gaana refs by
+  `matchKey` through search) instead of dropping them.
+- First-sign-in choice: the plan also wants the **account's** counts ("87 in your account"); it shows
+  the phone's only.
+- Guest-merge ops (`opsForGuestMerge` in `apps/api/src/user/libraryOps.ts`) carry no song snapshots;
+  pass the catalog details like `ListenerActions.saveSharedCopy` does.
 
-- Read `convex/_generated/ai/guidelines.md` first (repo rule). It changed the plan: device presence
-  via **`@convex-dev/presence`**, command cap via **`@convex-dev/rate-limiter`**, no `Date.now()` in
-  queries, bounded `.take()`, never accept `userId` as an argument (derive it with Convex Auth's
-  `getAuthUserId`), tests with **`convex-test` + `vitest` + `@edge-runtime/vm`** in `convex/`.
-- No convex-test setup exists yet; `tests/convex/*.test.ts` (node:test via `npm run convex:test`)
-  only covers pure helpers.
-- Write code and tests locally; **do not deploy** without asking — a deploy replaces every function.
-- Then Phase 4 (`packages/connect`, pure TS, no npm imports — `tests/infra` enforces it).
+### 2. Phase 3 — Connect backend (`convex/connect.ts`)
+PLAN §3 M2 and §5 Phase 3. Read `convex/_generated/ai/guidelines.md` first. It changes the plan:
+- device presence via **`@convex-dev/presence`**, the command cap via **`@convex-dev/rate-limiter`**
+- no `Date.now()` in queries; bounded `.take()`
+- never take `userId` as an argument: derive it with `getAuthUserId` (Connect is called by clients
+  directly, unlike the library functions, which the API calls with the server secret)
+- tests with **`convex-test` + `vitest` + `@edge-runtime/vm`** inside `convex/`. No such setup exists yet;
+  `tests/convex/*.test.ts` only covers pure helpers. Setting it up also lets you test `convex/library.ts`
+  and `profiles:update`, which today are only typechecked.
+
+Write `docs/connect-contract.md` first. **Deploying replaces every function**: prod deploys are the
+owner's call (`npx convex deploy`, they run it themselves).
+
+### 3. Phase 4 — `packages/connect`
+`createConnectSession({ transport, player, device, clock })`, `MemoryTransport`, `FakePlayerPort`, and
+the behaviour tests listed in PLAN §5 Phase 4. **Pure TypeScript with no npm imports** (`tests/infra`
+enforces it), or Metro bundles a second React.
+
+### 4. Phase 5 — web
+`WebPlayerPort` over `useAudioPlayer`, a `ConvexTransport` on the existing `ConvexReactClient`, a
+device picker in `PlayerPanel`, remote mode, "Playing on …" and "Tap to play here" bars, and the
+`?connectDevice=b` two-tab harness. The `<audio>` element in the layout must never remount, and the
+three playback invariants in the root `CLAUDE.md` hold.
+
+### 5. Phase 6 — phone
+`MobilePlayerPort` over `playerStore` (respect `beginAudioLoad`/`endAudioLoad`, call
+`prepareNextInQueue()` after queue changes), `songMatcher` (PLAN M7), a device sheet in the player, remote
+mode with lyrics fed by `livePosition()`, and the Listen Together guard. Follow `apps/mobile/CLAUDE.md`
+(motion primitives, no shadows on Now Playing, `requestPlayback` only).
+
+### 6. Phase 9 — hardening
+The error copy in PLAN §6, rate limits, telemetry, and docs: `docs/architecture.md` Connect section,
+`apps/mobile/CLAUDE.md` file map, README "real vs demo".
 
 ## Things that bite
 
-- **The working folder is shared with other Claude sessions.** Branch switches and commits land for
-  everyone. Stage explicit paths only; never `git add -A`.
-- **Nothing ignored is backed up.** A botched folder move on 2026-09-30 deleted the untracked/ignored
-  files; git restored the rest. Env files were rebuilt: `apps/api/.env` (template + fresh
-  `JWT_SECRET`; Convex values blank because dev has no `CONVEX_SERVER_SECRET`, so the local API is
-  memory-only), `apps/web/.env.local`, `apps/mobile/.env` + `android/app/debug.keystore` +
-  `local.properties` (copied from the LuvLyrics folder). Optional provider keys once in the old API
-  `.env` are gone.
-- **`apps/mobile/android` is checked in**, so Expo config plugins never run. A new Expo package with
-  native code must be added by hand to `android/app/src/main/java/expo/modules/ExpoModulesPackageList.kt`
-  (`src/nativeModuleList.test.ts` fails otherwise), and any manifest change a plugin would make must be
-  made by hand in `AndroidManifest.xml`.
-- **Metro and the root `node_modules`:** code in `packages/` must import no npm packages, or Metro
-  bundles the web's React (19.3) next to the phone's (19.1.0). To prove a bundle is clean:
-  `npx expo export --platform android --dump-sourcemap`, then only `19.1.0` should appear.
-- **Two Convex deployments:** the live site uses prod `neighborly-ocelot-786`; `.env.local` points at
-  dev `charming-jaguar-140`. LuvLyrics' bug reports (`apps/mobile/src/services/feedback.ts`) point at
-  **dev** and call `feedbacks:send`, which is deployed **nowhere** — bug reports currently fail.
-  (`apps/mobile/docs/convex-feedbacks.md` has the table + function to add.)
-- The phone's Jest DB tests mock `./db` despite the "real SQLite" rule — Phase 8 needs a real harness.
-- Commits: conventional, **no AI attribution footers** (repo CLAUDE.md).
+- **Deploy order: Convex first, then the API/web.** The API names every Convex function it calls in
+  `apps/api/src/db/convexGateway.ts`, and a test checks each is exported by `convex/`. If the API goes
+  live before Convex, the new calls fail. Pushing to `peterish8/allegra` `main` **is** a production
+  deploy.
+- **No AI attribution footers** in commits (root and `apps/mobile` `CLAUDE.md`), even if a tool asks for them.
+- **The working folder is shared with other Claude sessions.** Stage explicit paths; never `git add -A`.
+  `.mcp.json` and `mobile allegra.png` in the root are untracked on purpose.
+- **Nothing ignored is backed up.** Env files: `apps/api/.env`, `apps/web/.env.local`, `apps/mobile/.env`,
+  plus `android/app/debug.keystore` and `local.properties`.
+- **`apps/mobile/android` is checked in**, so Expo config plugins never run. A new native Expo package
+  must be added by hand to `ExpoModulesPackageList.kt` (`src/nativeModuleList.test.ts` fails otherwise).
+  `@convex-dev/presence` on the phone is JS only, so it needs no native step.
+- **Metro and the root `node_modules`:** code in `packages/` imports no npm packages.
+- **The API can't import `packages/shared`** (rootDir). `npm run sync:shared` copies `songRef.ts` and
+  `library.ts` into `apps/api/src/shared/`; `tests/infra` fails when a copy drifts.
+- **Only Saavn songs appear in the profile copy** (see "Gaana songs" above). The rows are complete.
+- **The web's library copy is capped** (4000 likes, 300 playlists, 8000 playlist songs, newest kept;
+  `convex/library.ts`). The phone reads the rows and is not capped.
+- **Mobile Jest DB tests mock `./db`** despite the "real SQLite" rule; a real-SQLite harness is still owed.
+- LuvLyrics bug reports (`apps/mobile/src/services/feedback.ts`) call `feedbacks:send` on dev Convex,
+  which is deployed nowhere, so they fail (`apps/mobile/docs/convex-feedbacks.md`).
+- `gh` and `git push` from Bash: build the auth header from the user token
+  (`git -c "http.extraheader=AUTHORIZATION: basic <base64 x-access-token:TOKEN>" push …`).
