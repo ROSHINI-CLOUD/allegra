@@ -34,9 +34,10 @@ import { requireSecret } from './profiles';
 import { songSnapshot } from './schema';
 
 /** Most rows read to rebuild the profile copy. Past these the copy is cut short (the rows stay complete). */
-const MAX_LIKES = 5000;
-const MAX_PLAYLISTS = 500;
-const MAX_ITEMS = 10000;
+// Together well under Convex's 16,384 documents read per function, leaving room for the batch itself.
+const MAX_LIKES = 4000;
+const MAX_PLAYLISTS = 300;
+const MAX_ITEMS = 8000;
 const MAX_PAGE = 500;
 
 const at = v.number();

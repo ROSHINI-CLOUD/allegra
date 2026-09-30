@@ -235,8 +235,15 @@ async function flush(current: Session): Promise<boolean> {
         return [];
       }
     });
-    const reply = ops.length > 0 ? await api.postLibraryOps(token, ops) : { outcome: 'refused' as const };
+    let reply = ops.length > 0 ? await api.postLibraryOps(token, ops) : { outcome: 'refused' as const };
     if (reply.outcome === 'offline') return false;
+    if (reply.outcome === 'refused' && ops.length > 1) {
+      // One bad operation must not cost the good ones: send them singly, drop only what is still refused.
+      for (const op of ops) {
+        reply = await api.postLibraryOps(token, [op]);
+        if (reply.outcome === 'offline') return false;
+      }
+    }
     // Sent, or refused for good (malformed): either way these entries are done.
     await db.removeOutbox(batch.map(entry => entry.id));
     if (reply.outcome === 'refused') log('batch refused', ops.length);
@@ -270,8 +277,13 @@ async function pull(current: Session): Promise<boolean> {
     const reply = await api.getLibraryChanges(token, since);
     if (reply.outcome !== 'sent') return false;
     if (reply.data.changes.length > 0) {
-      await apply(reply.data.changes, token);
+      const applied = await apply(reply.data.changes, token);
       changed = true;
+      // Not stored: the next pull asks for these again (applying is idempotent).
+      if (!applied) {
+        await refreshStores();
+        return false;
+      }
     }
     since = reply.data.rev;
     await db.setMeta(revKey(current.userId), String(since));
@@ -281,20 +293,24 @@ async function pull(current: Session): Promise<boolean> {
   return true;
 }
 
-async function apply(changes: readonly LibraryChange[], token: string): Promise<void> {
+/** False when any change could not be written, so the caller keeps its place and retries. */
+async function apply(changes: readonly LibraryChange[], token: string): Promise<boolean> {
   const [songs, playlists] = await Promise.all([db.getLocalSongs(), db.getLocalPlaylists()]);
   const index = buildLocalIndex(songs);
   const playlistIds = new Set(playlists.filter(list => !list.isDefault).map(list => list.id));
   const actions = planInbound(changes, index, playlistIds);
   const details = await detailsFor(actions, token);
 
+  let ok = true;
   for (const action of actions) {
     try {
       await applyAction(action, details);
     } catch (error) {
+      ok = false;
       log('apply failed', action.kind, error);
     }
   }
+  return ok;
 }
 
 async function applyAction(action: LocalAction, details: Map<string, SongSnapshot>): Promise<void> {
