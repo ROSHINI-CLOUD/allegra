@@ -71,11 +71,16 @@ export class StreamResolver {
     response.on('close', onClose);
     Readable.fromWeb(upstream.response.body as NodeReadableStream<Uint8Array>)
       .on('error', () => {
+        // An event handler cannot throw to the route's try/catch: throwing here would be an
+        // uncaught exception. Before the first byte the client can still get the JSON failure.
         upstream.abort();
         if (!response.headersSent) {
-          throw new ProviderUnavailableError();
+          response.removeHeader('content-length');
+          response.removeHeader('content-range');
+          response.status(502).type('application/json').json({ success: false, data: null, error: 'Music service is having a moment. Try again shortly.' });
+          return;
         }
-        response.end();
+        response.destroy();
       })
       .pipe(response);
   }
