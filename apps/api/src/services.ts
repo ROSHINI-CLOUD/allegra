@@ -5,6 +5,7 @@ import { RecommendationService } from './services/recommendations.js';
 import { TranslationService } from './services/translation.js';
 import { CatalogService } from './catalog/catalog.js';
 import { ConvexCoverStorage, ConvexGrantLedger, ConvexUserStore } from './db/convex.js';
+import { ConvexGateway } from './db/convexGateway.js';
 import { MemoryGrantLedger, type GrantLedger } from './oauth/ledger.js';
 import { AuthService } from './auth/auth.js';
 import { ConvexTokenVerifier, FirstMatchVerifier, GuestTokenVerifier, type TokenVerifier } from './auth/verifier.js';
@@ -101,9 +102,11 @@ export function createServices(options: ServiceOptions): AppServices {
         })
       : undefined);
   const catalog = new CatalogService({ saavn, gaana, cache, ...(releaseAuthority ? { releaseAuthority } : {}) });
-  const convexStore = options.convexUrl && options.convexServerSecret
-    ? new ConvexUserStore({ url: options.convexUrl, serverSecret: options.convexServerSecret })
+  // With both set, listener data lives in Convex; otherwise it stays in memory.
+  const convex = options.convexUrl && options.convexServerSecret
+    ? new ConvexGateway({ url: options.convexUrl, serverSecret: options.convexServerSecret, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) })
     : undefined;
+  const convexStore = convex ? new ConvexUserStore(convex) : undefined;
   const userStore = options.userStore ?? convexStore ?? new MemoryUserStore();
 
   // Guest tokens are ours; Convex Auth signs the ones that come back from Google.
@@ -135,9 +138,7 @@ export function createServices(options: ServiceOptions): AppServices {
       verifier: new FirstMatchVerifier(guestVerifier, convexVerifier),
       ...(convexStore ? { directory: convexStore } : {}),
       // Likes and playlists live in Convex rows beside the profile; in memory otherwise.
-      ...(convexStore && options.convexUrl && options.convexServerSecret
-        ? { library: new ConvexLibraryStore({ url: options.convexUrl, serverSecret: options.convexServerSecret }) }
-        : {})
+      ...(convexStore && convex ? { library: new ConvexLibraryStore(convex) } : {})
     }),
     translation: new TranslationService(cache, {
       ...(options.translation?.baseUrl ? { baseUrl: options.translation.baseUrl } : {}),
@@ -146,12 +147,8 @@ export function createServices(options: ServiceOptions): AppServices {
       ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
     }),
     recommendations: new RecommendationService(catalog, cache),
-    ...(options.convexUrl && options.convexServerSecret
-      ? { covers: new ConvexCoverStorage({ url: options.convexUrl, serverSecret: options.convexServerSecret }) }
-      : {}),
-    grants: options.convexUrl && options.convexServerSecret
-      ? new ConvexGrantLedger({ url: options.convexUrl, serverSecret: options.convexServerSecret })
-      : new MemoryGrantLedger(),
+    ...(convex ? { covers: new ConvexCoverStorage(convex) } : {}),
+    grants: convex ? new ConvexGrantLedger(convex) : new MemoryGrantLedger(),
     accountsEnabled: Boolean(convexVerifier)
   };
 }

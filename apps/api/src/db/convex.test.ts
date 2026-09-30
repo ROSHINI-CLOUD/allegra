@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ConvexUserStore, type ConvexClientLike } from './convex.js';
+import { ConvexUserStore } from './convex.js';
+import { ConvexGateway, type ConvexClientLike } from './convexGateway.js';
 import type { UserData } from '../user/store.js';
 
 const user: UserData = {
@@ -33,7 +34,7 @@ function fakeClient(rows: Map<string, unknown>): { client: ConvexClientLike; cal
 
 test('save then get round-trips a user and sends the server secret every time', async () => {
   const { client, calls } = fakeClient(new Map());
-  const store = new ConvexUserStore({ url: 'https://example.convex.cloud', serverSecret: 'a-long-shared-secret', client });
+  const store = new ConvexUserStore(new ConvexGateway({ url: 'https://example.convex.cloud', serverSecret: 'a-long-shared-secret', client }));
 
   await store.save(user);
   assert.deepEqual(await store.get('u1'), user);
@@ -43,18 +44,18 @@ test('save then get round-trips a user and sends the server secret every time', 
 
 test('an unknown user is null, not an error', async () => {
   const { client } = fakeClient(new Map());
-  const store = new ConvexUserStore({ url: 'https://example.convex.cloud', serverSecret: 'a-long-shared-secret', client });
+  const store = new ConvexUserStore(new ConvexGateway({ url: 'https://example.convex.cloud', serverSecret: 'a-long-shared-secret', client }));
   assert.equal(await store.get('missing'), null);
 });
 
 test('a malformed row is treated as missing rather than crashing the request', async () => {
   const { client } = fakeClient(new Map([['u2', { userId: 'u2', likedSongIds: 'nope' }]]));
-  const store = new ConvexUserStore({ url: 'https://example.convex.cloud', serverSecret: 'a-long-shared-secret', client });
+  const store = new ConvexUserStore(new ConvexGateway({ url: 'https://example.convex.cloud', serverSecret: 'a-long-shared-secret', client }));
   assert.equal(await store.get('u2'), null);
 });
 
 test('non-object settings fall back to an empty object', async () => {
   const { client } = fakeClient(new Map([['u3', { ...user, userId: 'u3', settings: null }]]));
-  const store = new ConvexUserStore({ url: 'https://example.convex.cloud', serverSecret: 'a-long-shared-secret', client });
+  const store = new ConvexUserStore(new ConvexGateway({ url: 'https://example.convex.cloud', serverSecret: 'a-long-shared-secret', client }));
   assert.deepEqual((await store.get('u3'))?.settings, {});
 });

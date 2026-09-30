@@ -1,65 +1,38 @@
-import { ConvexHttpClient } from 'convex/browser';
-import { anyApi } from 'convex/server';
-
 import type { CoverStorage, StoredCover } from '../lib/covers.js';
 import type { GrantLedger } from '../oauth/ledger.js';
 import type { LibraryRecord, RecentRecord, ShareRecord, TasteEntry, TasteProfile, UserData, UserStore } from '../user/store.js';
+import type { ConvexGateway } from './convexGateway.js';
 
-/** Function references into convex/profiles.ts and convex/shares.ts. anyApi is untyped, so name what we use. */
-const profilesApi = anyApi.profiles as unknown as { readonly get: unknown; readonly byEmail: unknown; readonly save: unknown; readonly identity: unknown };
-const sharesApi = anyApi.shares as unknown as { readonly get: unknown; readonly byLibrary: unknown; readonly save: unknown; readonly remove: unknown };
-const oauthApi = anyApi.oauth as unknown as { readonly consume: unknown };
-const coversApi = anyApi.covers as unknown as { readonly generateUploadUrl: unknown; readonly inspect: unknown; readonly remove: unknown };
-
-/** The two calls the store needs. Narrow on purpose so tests can fake it. */
-export interface ConvexClientLike {
-  query(reference: unknown, args: Record<string, unknown>): Promise<unknown>;
-  mutation(reference: unknown, args: Record<string, unknown>): Promise<unknown>;
-}
-
-export interface ConvexUserStoreOptions {
-  readonly url: string;
-  readonly serverSecret: string;
-  readonly client?: ConvexClientLike;
-}
-
+/** Profiles and shares in Convex (convex/profiles.ts, convex/shares.ts). */
 export class ConvexUserStore implements UserStore {
-  private readonly client: ConvexClientLike;
-  private readonly secret: string;
-
-  public constructor(options: ConvexUserStoreOptions) {
-    // The client is used as a plain HTTP caller: no websocket, no auth token.
-    // Access is gated by the shared secret checked inside each Convex function.
-    this.client = options.client ?? (new ConvexHttpClient(options.url) as unknown as ConvexClientLike);
-    this.secret = options.serverSecret;
-  }
+  public constructor(private readonly convex: ConvexGateway) {}
 
   public async get(userId: string): Promise<UserData | null> {
-    return parseUserData(await this.client.query(profilesApi.get, { secret: this.secret, userId }));
+    return parseUserData(await this.convex.query('profiles:get', { userId }));
   }
 
   public async findByEmail(email: string): Promise<UserData | null> {
-    return parseUserData(await this.client.query(profilesApi.byEmail, { secret: this.secret, email }));
+    return parseUserData(await this.convex.query('profiles:byEmail', { email }));
   }
 
   public async save(user: UserData): Promise<void> {
-    await this.client.mutation(profilesApi.save, { secret: this.secret, user });
+    await this.convex.mutation('profiles:save', { user });
   }
 
   public async getShare(code: string): Promise<ShareRecord | null> {
-    return parseShare(await this.client.query(sharesApi.get, { secret: this.secret, code }));
+    return parseShare(await this.convex.query('shares:get', { code }));
   }
 
   public async findShare(ownerId: string, libraryId: string): Promise<ShareRecord | null> {
-    return parseShare(await this.client.query(sharesApi.byLibrary, { secret: this.secret, ownerId, libraryId }));
+    return parseShare(await this.convex.query('shares:byLibrary', { ownerId, libraryId }));
   }
 
   public async saveShare(share: ShareRecord): Promise<void> {
-    await this.client.mutation(sharesApi.save, { secret: this.secret, share });
+    await this.convex.mutation('shares:save', { share });
   }
 
   public async deleteShare(code: string): Promise<void> {
-    await this.client.mutation(sharesApi.remove, { secret: this.secret, code });
+    await this.convex.mutation('shares:remove', { code });
   }
 
   /**
@@ -68,7 +41,7 @@ export class ConvexUserStore implements UserStore {
    * never block someone from signing in.
    */
   public async identity(userId: string): Promise<{ email?: string; displayName?: string } | null> {
-    const raw = await this.client.query(profilesApi.identity, { secret: this.secret, userId });
+    const raw = await this.convex.query('profiles:identity', { userId });
     if (!raw || typeof raw !== 'object') return null;
     const record = raw as Record<string, unknown>;
     return {
@@ -139,23 +112,17 @@ function parseUserData(value: unknown): UserData | null {
 
 /** Playlist covers in Convex file storage (convex/covers.ts), behind the same server secret. */
 export class ConvexCoverStorage implements CoverStorage {
-  private readonly client: ConvexClientLike;
-  private readonly secret: string;
-
-  public constructor(options: ConvexUserStoreOptions) {
-    this.client = options.client ?? (new ConvexHttpClient(options.url) as unknown as ConvexClientLike);
-    this.secret = options.serverSecret;
-  }
+  public constructor(private readonly convex: ConvexGateway) {}
 
   public async uploadUrl(): Promise<string> {
-    const url = await this.client.mutation(coversApi.generateUploadUrl, { secret: this.secret });
+    const url = await this.convex.mutation('covers:generateUploadUrl');
     if (typeof url !== 'string' || !url.startsWith('https://')) throw new Error('Convex returned no upload URL.');
     return url;
   }
 
   public async inspect(storageId: string): Promise<StoredCover | null> {
     try {
-      const raw = await this.client.query(coversApi.inspect, { secret: this.secret, storageId });
+      const raw = await this.convex.query('covers:inspect', { storageId });
       if (!raw || typeof raw !== 'object') return null;
       const record = raw as Record<string, unknown>;
       if (typeof record.url !== 'string' || typeof record.size !== 'number') return null;
@@ -168,7 +135,7 @@ export class ConvexCoverStorage implements CoverStorage {
 
   public async remove(storageId: string): Promise<void> {
     try {
-      await this.client.mutation(coversApi.remove, { secret: this.secret, storageId });
+      await this.convex.mutation('covers:remove', { storageId });
     } catch {
       // Best effort by contract.
     }
@@ -177,19 +144,13 @@ export class ConvexCoverStorage implements CoverStorage {
 
 /** Single-use OAuth tokens across serverless instances (convex/oauth.ts). */
 export class ConvexGrantLedger implements GrantLedger {
-  private readonly client: ConvexClientLike;
-  private readonly secret: string;
-
-  public constructor(options: ConvexUserStoreOptions) {
-    this.client = options.client ?? (new ConvexHttpClient(options.url) as unknown as ConvexClientLike);
-    this.secret = options.serverSecret;
-  }
+  public constructor(private readonly convex: ConvexGateway) {}
 
   public async consume(jti: string, expiresAtMs: number): Promise<boolean> {
     // A Convex failure refuses the grant: a code must never be accepted twice because the
     // ledger was unreachable.
     try {
-      return (await this.client.mutation(oauthApi.consume, { secret: this.secret, jti, expiresAt: expiresAtMs })) === true;
+      return (await this.convex.mutation('oauth:consume', { jti, expiresAt: expiresAtMs })) === true;
     } catch {
       return false;
     }

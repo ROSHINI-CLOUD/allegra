@@ -1,42 +1,24 @@
-import { ConvexHttpClient } from 'convex/browser';
-import { anyApi } from 'convex/server';
-
 import type { LibraryChange, LibraryOp, RejectReason } from '../shared/library.js';
 import type { LibraryApplyResult, LibraryPage, LibraryStore } from '../user/library.js';
-import type { ConvexClientLike } from './convex.js';
-
-/** convex/library.ts. anyApi is untyped, so name what we use. */
-const libraryApi = anyApi.library as unknown as { readonly apply: unknown; readonly changes: unknown };
+import type { ConvexGateway } from './convexGateway.js';
 
 const REJECT_REASONS: readonly RejectReason[] = ['bad_time', 'no_playlist', 'missing_name'];
 
-export interface ConvexLibraryStoreOptions {
-  readonly url: string;
-  readonly serverSecret: string;
-  readonly client?: ConvexClientLike;
-}
-
 /** Library sync in Convex: one transaction per batch, rules in packages/shared/library.ts. */
 export class ConvexLibraryStore implements LibraryStore {
-  private readonly client: ConvexClientLike;
-  private readonly secret: string;
-
-  public constructor(options: ConvexLibraryStoreOptions) {
-    this.client = options.client ?? (new ConvexHttpClient(options.url) as unknown as ConvexClientLike);
-    this.secret = options.serverSecret;
-  }
+  public constructor(private readonly convex: ConvexGateway) {}
 
   public async apply(userId: string, ops: readonly LibraryOp[]): Promise<LibraryApplyResult> {
-    return parseApply(await this.client.mutation(libraryApi.apply, { secret: this.secret, userId, ops }));
+    return parseApply(await this.convex.mutation('library:apply', { userId, ops }));
   }
 
   public async changes(userId: string, since: number, limit: number): Promise<LibraryPage> {
-    let page = await this.client.query(libraryApi.changes, { secret: this.secret, userId, since, limit });
+    let page = await this.convex.query('library:changes', { userId, since, limit });
     // A listener whose library still lives only in their profile: move it into rows (an empty
     // batch does just that), so the first sync sends everything they already have.
     if (isRecord(page) && page.seeded === false) {
       await this.apply(userId, []);
-      page = await this.client.query(libraryApi.changes, { secret: this.secret, userId, since, limit });
+      page = await this.convex.query('library:changes', { userId, since, limit });
     }
     return parsePage(page);
   }
