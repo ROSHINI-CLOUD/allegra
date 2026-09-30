@@ -14,6 +14,7 @@ import { downloadManager } from '../services/DownloadManager';
 import { findYouTubeVideoId } from '../services/YouTubeSearchService';
 import { patchYoutubeVideoId } from '../database/queries';
 import { useQueueShape } from '../store/downloadQueueSelectors';
+import { songRef } from '@shared/songRef';
 
 export const BackgroundDownloader = () => {
     // This component is mounted for the whole app lifetime, so it must not
@@ -195,6 +196,8 @@ export const BackgroundDownloader = () => {
                 updateItem(item.id, { status: 'completed', progress: 1, stageStatus: 'Done' });
                 
                 if (__DEV__) console.log(`[BackgroundDownloader] Calling addSong...`);
+                // Remember which catalog song this was, so another device can play it (Connect, sync).
+                newSong.originId = songRef(item.song.source, item.song.id) ?? undefined;
                 await addSong(newSong);
 
                 // A streamed song the listener liked while it downloaded: the like

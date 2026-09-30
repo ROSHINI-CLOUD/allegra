@@ -261,6 +261,13 @@ const initializeTables = async (database: SQLite.SQLiteDatabase): Promise<void> 
       await database.execAsync('ALTER TABLE songs ADD COLUMN youtube_video_id TEXT');
       log('Migration complete');
     }
+    // Connect / library sync: which catalog song a download came from (packages/shared/songRef).
+    if (!columns.some(c => c.name === 'origin_id')) {
+      log('Adding origin_id column...');
+      await database.execAsync('ALTER TABLE songs ADD COLUMN origin_id TEXT');
+      log('Migration complete');
+    }
+    await database.execAsync('CREATE INDEX IF NOT EXISTS idx_songs_origin_id ON songs(origin_id)');
   } catch (e) {
     log('Migration check failed', e);
     throw e; // RETHROW to ensure init fails if schema is broken

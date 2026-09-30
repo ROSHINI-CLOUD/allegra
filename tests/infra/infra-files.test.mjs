@@ -61,7 +61,8 @@ test('shared packages import no npm packages', async () => {
   // The phone bundles packages/ through Metro. A bare import there resolves from the root
   // node_modules (the web's React), not the app's — two Reacts in one bundle.
   const files = (await readdir(new URL('packages/', root), { recursive: true }))
-    .filter((file) => /\.tsx?$/.test(file) && !file.includes('node_modules'));
+    // Tests run under Node and are never bundled, so they may import node: modules.
+    .filter((file) => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file) && !file.includes('node_modules'));
   assert.ok(files.length > 0);
   for (const file of files) {
     const source = await text(`packages/${file.replaceAll('\\', '/')}`);

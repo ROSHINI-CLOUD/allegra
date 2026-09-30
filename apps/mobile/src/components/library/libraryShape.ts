@@ -2,13 +2,11 @@
  * Pure shaping for the Library screen: the artist orbit, the A–Z rail and the
  * cover deck's card positions. Kept free of React so it can be tested.
  */
+import { leadArtist } from '@shared/songRef';
 import type { Song } from '../../types/song';
 
-/** "A, B & C" / "A feat. B" → "A": the artist whose song it is. */
-export const leadArtist = (artist: string | undefined | null): string => {
-  const lead = (artist ?? '').split(/,|&| feat\.? | ft\.? | x | with /i)[0]?.trim() ?? '';
-  return lead && !/^unknown artist$/i.test(lead) ? lead : '';
-};
+/** "A, B & C" / "A feat. B" → "A": the artist whose song it is. Shared with Allegra (packages/shared/songRef.ts). */
+export { leadArtist };
 
 export interface ArtistGroup {
   name: string;

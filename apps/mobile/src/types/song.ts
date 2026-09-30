@@ -32,6 +32,8 @@ export interface Song {
   isHidden?: boolean; // Whether song is hidden
   transliteratedLyrics?: LyricLine[]; // Romanized/Colloquial lyrics
   youtubeVideoId?: string; // YouTube video ID for beta video preview feature
+  /** The catalog song a download came from (`saavn:<id>`, see packages/shared/songRef). Lets another device play it. */
+  originId?: string;
 
   // AI Karaoke fields removed
 }

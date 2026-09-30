@@ -5,7 +5,10 @@
  * or the library already holds the same title by the same lead artist — so a
  * song saved last week still shows its tick when it turns up in a suggestion.
  */
-import { leadArtist } from '../components/library/libraryShape';
+import { matchKey } from '@shared/songRef';
+
+// The key lives in packages/shared so Allegra web and Connect match songs exactly as the phone does.
+export { matchKey };
 
 export type DownloadPhase = 'idle' | 'queued' | 'paused' | 'downloading' | 'saved' | 'failed';
 
@@ -16,33 +19,6 @@ export interface DownloadState {
 }
 
 type QueueStatus = 'pending' | 'staging' | 'downloading' | 'completed' | 'failed' | 'paused';
-
-const fold = (s: string): string => {
-  let out = s.toLowerCase();
-  try {
-    out = out.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
-  } catch {
-    // No normalize() on this engine: accents simply stay.
-  }
-  return out;
-};
-
-// Apostrophes and quotes go ("Don't" = "Dont"); other punctuation separates words.
-const words = (s: string): string =>
-  s.replace(/['’"“”]/g, '').replace(/[\s\-_.,!?:;/&+·]+/g, ' ').trim();
-
-const cleanTitle = (title: string): string =>
-  words(fold(title)
-    .replace(/\s*[([].*?[)\]]/g, '') // (feat. …), [Official Video], (From "…")
-    .replace(/\s+-\s+.*$/, '') // "Song - Remastered 2011"
-    .replace(/\s+(feat|ft)\.?\s.*$/, ''));
-
-const cleanArtist = (artist: string | undefined | null): string =>
-  words(fold(leadArtist(artist)));
-
-/** The same song from any source: cleaned title + lead artist. */
-export const matchKey = (title: string, artist?: string | null): string =>
-  `${cleanTitle(title)}|${cleanArtist(artist)}`;
 
 const keyCache = new WeakMap<object, Set<string>>();
 

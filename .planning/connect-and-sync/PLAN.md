@@ -317,9 +317,13 @@ PR (squash, conventional commit, no AI footer, per `CLAUDE.md`).
 - `cd apps/mobile/android && ./gradlew assembleDebug` from `C:\dev\allegra`
 - a Metro bundle that imports `@allegra/shared/types` works on a device
 
-### Phase 1 — One song identity
-1. Add `packages/shared/songRef.ts` (M1) with tests. Move the web's `songIdentity` and the phone's
-   `matchKey` onto the shared `matchKey`, with tests proving the same output.
+### Phase 1 — One song identity ✅ done
+1. Add `packages/shared/songRef.ts` (M1) with tests. The phone's `matchKey` / `leadArtist` moved there
+   verbatim. **The web's `songIdentity` stays**: it keys queue dedupe on *all* artists sorted, a
+   different job from matching a download to a catalog row (lead artist only), so merging them would
+   change behaviour on both sides.
+   Note for Phase 8: despite the "real SQLite" rule, the phone's Jest DB tests mock `./db`. The sync
+   engine needs a real-SQLite harness (an adapter behind `withDbWrite`/`withDbRead`) before its tests.
 2. Mobile SQLite migration (`db_migration.ts`): add `songs.origin_id TEXT` and an index.
    `StreamService.save` and `DownloadManager` write `origin_id` for downloads that came from a stream.
 3. Backfill on boot: nothing (the matcher's title + artist fallback covers older rows).
