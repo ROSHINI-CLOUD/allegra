@@ -7,7 +7,7 @@
  * the provider can change without touching them (the web's SignInContext does
  * the same).
  */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ConvexReactClient } from 'convex/react';
 import { ConvexAuthProvider, useAuthActions, useAuthToken } from '@convex-dev/auth/react';
 import * as WebBrowser from 'expo-web-browser';
@@ -16,6 +16,8 @@ import { getAccountProfile, type AccountProfile } from './allegraApi';
 import { ALLEGRA_CONVEX_URL } from './config';
 import { secureStorage } from './secureStorage';
 import { runGoogleSignIn, type SignInOutcome } from './signInFlow';
+import { attach, detach } from '../sync/LibrarySync';
+import { useOnlineLibraryStore } from '../../store/onlineLibraryStore';
 
 /** One client for the app's lifetime: a re-render must never reconnect. */
 export const allegraConvex = new ConvexReactClient(ALLEGRA_CONVEX_URL, { unsavedChangesWarning: false });
@@ -56,6 +58,25 @@ const AccountBridge: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { signIn, signOut } = useAuthActions();
   const token = useAuthToken();
   const [profile, setProfile] = useState<AccountProfile | null>(null);
+  // The engine asks for the token each time it calls the API: Convex Auth refreshes it.
+  const tokenRef = useRef<string | null>(null);
+  tokenRef.current = token ?? null;
+
+  useEffect(() => {
+    useOnlineLibraryStore.getState().load();
+  }, []);
+
+  // Library sync runs while signed in, once we know which account this is.
+  const userId = token ? profile?.userId : undefined;
+  useEffect(() => {
+    if (token === undefined) return; // still reading the stored session
+    if (!userId) {
+      if (token === null) detach();
+      return;
+    }
+    attach({ userId, getToken: () => tokenRef.current }, allegraConvex).catch(() => undefined);
+  }, [token, userId]);
+
 
   useEffect(() => {
     if (!token) {

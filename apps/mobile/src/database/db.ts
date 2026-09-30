@@ -184,6 +184,44 @@ const initializeTables = async (database: SQLite.SQLiteDatabase): Promise<void> 
       updated_at TEXT NOT NULL
     );
 
+    -- Library sync with the Allegra account (services/sync). Songs liked or added to a playlist
+    -- on another device that are not downloaded here: a like is not a download.
+    CREATE TABLE IF NOT EXISTS liked_online_songs (
+      ref TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      artist TEXT,
+      album TEXT,
+      artwork TEXT,
+      duration REAL NOT NULL DEFAULT 0,
+      liked_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS playlist_online_songs (
+      playlist_id TEXT NOT NULL,
+      ref TEXT NOT NULL,
+      title TEXT NOT NULL,
+      artist TEXT,
+      album TEXT,
+      artwork TEXT,
+      duration REAL NOT NULL DEFAULT 0,
+      added_at INTEGER NOT NULL,
+      PRIMARY KEY (playlist_id, ref),
+      FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE
+    );
+
+    -- Changes made here that the account has not seen yet, oldest first, and the sync cursor.
+    CREATE TABLE IF NOT EXISTS sync_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sync_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_songs_title ON songs(title);
     CREATE INDEX IF NOT EXISTS idx_songs_artist ON songs(artist);
     CREATE INDEX IF NOT EXISTS idx_lyrics_song_id ON lyrics(song_id);

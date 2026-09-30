@@ -7,8 +7,8 @@ import { lyricaService } from '../services/LyricaService';
 import { useLyricsScanQueueStore } from '../store/lyricsScanQueueStore';
 import { processLyricsScanQueue } from '../services/lyricsScanWorker';
 import { usePlaylistStore } from '../store/playlistStore';
-import { useStreamLikesStore } from '../store/streamLikesStore';
-import { matchKey } from '../utils/downloadState';
+import { useOnlineLibraryStore } from '../store/onlineLibraryStore';
+import { removeOnlineLike } from '../database/syncQueries';
 import * as playlistQueries from '../database/playlistQueries';
 import { downloadManager } from '../services/DownloadManager';
 import { findYouTubeVideoId } from '../services/YouTubeSearchService';
@@ -200,11 +200,12 @@ export const BackgroundDownloader = () => {
                 newSong.originId = songRef(item.song.source, item.song.id) ?? undefined;
                 await addSong(newSong);
 
-                // A streamed song the listener liked while it downloaded: the like
-                // goes on the row it just got, which puts it in Liked songs.
-                if (useStreamLikesStore.getState().take(matchKey(newSong.title, newSong.artist))) {
+                // A song liked online that is now downloaded: the like moves onto the
+                // row (Liked songs), the same catalog song, so the account sees no change.
+                if (newSong.originId && useOnlineLibraryStore.getState().likedRefs.has(newSong.originId)) {
                     const playlists = usePlaylistStore.getState();
                     if (!playlists.likedSongIds.has(newSong.id)) playlists.toggleLiked(newSong.id).catch(() => {});
+                    removeOnlineLike(newSong.originId).then(() => useOnlineLibraryStore.getState().load()).catch(() => {});
                 }
 
                 // Beta: silently fetch YouTube videoId after song saved
@@ -257,7 +258,6 @@ export const BackgroundDownloader = () => {
                 // Also remove from active set on error before updating status
                 activeDownloads.current.delete(item.id);
                 
-                useStreamLikesStore.getState().remove(matchKey(item.song.title, item.song.artist));
                 updateItem(item.id, { status: 'failed', error: errorMessage, stageStatus: 'Failed' });
             } finally {
                 // Double check cleanup just in case

@@ -48,6 +48,10 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { usePlayerStore, playerControls } from '../store/playerStore';
 import { useSettingsStore } from '../store/settingsStore';
 import * as playlistQueries from '../database/playlistQueries';
+import { getOnlinePlaylistSongs } from '../database/syncQueries';
+import { useOnlineLibraryStore } from '../store/onlineLibraryStore';
+import { LIKED_PLAYLIST_ID } from '../services/sync/plan';
+import { onlineRowToSong, playList, removeOnlineFromPlaylist } from '../services/sync/onlineSongs';
 import { PlaylistItem } from '../components/PlaylistItem';
 import { CustomMenu } from '../components/CustomMenu';
 import { CoverFlow } from '../components/CoverFlow';
@@ -334,7 +338,11 @@ export const PlaylistDetailScreen: React.FC = () => {
 
       setPlaylistName(playlist?.name ? displayPlaylistName(playlist.name) : 'Playlist');
       setPlaylistCover(playlist?.coverImageUri || null);
-      setSongs(playlistSongs);
+      const onlineRows = playlistId === LIKED_PLAYLIST_ID
+        ? useOnlineLibraryStore.getState().likes
+        : await getOnlinePlaylistSongs(playlistId);
+      const onlineSongs = onlineRows.map(onlineRowToSong).filter(song => !playlistSongs.some(local => local.id === song.id));
+      setSongs([...playlistSongs, ...onlineSongs]);
     } catch (e) {
       console.error('Failed to load playlist', e);
     } finally {
@@ -347,6 +355,12 @@ export const PlaylistDetailScreen: React.FC = () => {
       loadData();
     }, [loadData])
   );
+
+  // Songs that arrive from another device while the screen is open.
+  const onlineVersion = useOnlineLibraryStore(state => state.playlistVersion + state.likes.length);
+  useEffect(() => {
+    loadData();
+  }, [onlineVersion, loadData]);
 
   const filteredSongs = useSortedSongs(songs, searchQuery, sortOption, sortDirection);
 
@@ -411,20 +425,24 @@ export const PlaylistDetailScreen: React.FC = () => {
     if (activeIsPlaying) {
       usePlayerStore.getState().requestPlayback(!usePlayerStore.getState().isPlaying);
     } else if (songs.length > 0) {
-      setPlaylistQueue(playlistId, songs, 0);
+      playList(playlistId, songs, 0).then(ok => {
+        if (!ok) setToast({ visible: true, message: "Couldn't find these songs online", type: 'error' });
+      });
     }
-  }, [activeIsPlaying, songs, playlistId, setPlaylistQueue]);
+  }, [activeIsPlaying, songs, playlistId]);
 
   const shufflePlaylist = useCallback(() => {
-    if (songs.length > 0) setPlaylistQueue(playlistId, shuffled(songs), 0);
-  }, [songs, playlistId, setPlaylistQueue]);
+    if (songs.length > 0) playList(playlistId, shuffled(songs), 0);
+  }, [songs, playlistId]);
   
   const handleSongPress = useCallback((song: Song, index: number) => {
     // If we filter, the index passed is from filtered list.
     // We should queue the FILTERED list so "Next" matches what user sees.
-    setPlaylistQueue(playlistId, filteredSongs, index);
-    play();
-  }, [playlistId, filteredSongs, setPlaylistQueue, play]);
+    playList(playlistId, filteredSongs, index).then(ok => {
+      if (ok) play();
+      else setToast({ visible: true, message: "Couldn't find this song online", type: 'error' });
+    });
+  }, [playlistId, filteredSongs, play]);
 
   const handleDeleteSong = useCallback(async (songId: string) => {
     setSongToDelete(songId);
@@ -853,7 +871,14 @@ export const PlaylistDetailScreen: React.FC = () => {
         confirmText="Remove"
         onConfirm={async () => {
             if (songToDelete) {
-                await playlistQueries.removeSongFromPlaylist(playlistId, songToDelete);
+                if (songToDelete.startsWith('stream:') && playlistId !== LIKED_PLAYLIST_ID) {
+                    await removeOnlineFromPlaylist(playlistId, songToDelete);
+                } else if (songToDelete.startsWith('stream:')) {
+                    const { toggleLike } = (await import('../store/songsStore')).useSongsStore.getState();
+                    await toggleLike(songToDelete);
+                } else {
+                    await playlistQueries.removeSongFromPlaylist(playlistId, songToDelete);
+                }
                 loadData();
                 setShowDeleteConfirm(false);
                 setToast({ visible: true, message: 'Song removed from playlist', type: 'success' });

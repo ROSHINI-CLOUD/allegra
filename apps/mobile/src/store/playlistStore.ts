@@ -8,6 +8,7 @@ import { Playlist } from '../types/song';
 import * as playlistQueries from '../database/playlistQueries';
 import * as songQueries from '../database/queries';
 import { usePlayerStore } from './playerStore';
+import { recordMembership, recordPlaylistChange, recordPlaylistDelete } from '../services/sync/recordLocal';
 
 interface PlaylistState {
   // State
@@ -81,6 +82,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const id = await playlistQueries.createPlaylist(name, description, coverUri);
+      recordPlaylistChange(id, { name, description: description ?? null });
       await get().fetchPlaylists(); // Refresh list to get sort order correct
       return id;
     } catch (error) {
@@ -95,6 +97,9 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await playlistQueries.updatePlaylist(id, updates);
+      if (updates.name !== undefined || updates.description !== undefined) {
+        recordPlaylistChange(id, { ...(updates.name ? { name: updates.name } : {}), ...(updates.description !== undefined ? { description: updates.description || null } : {}) });
+      }
       await get().fetchPlaylists();
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to update playlist', isLoading: false });
@@ -107,6 +112,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await playlistQueries.deletePlaylist(id);
+      recordPlaylistDelete(id);
       await get().fetchPlaylists();
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to delete playlist', isLoading: false });
@@ -127,6 +133,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       }
 
       await playlistQueries.addSongToPlaylist(playlistId, songId);
+      recordMembership(playlistId, songId, true, playlistId === get().defaultPlaylistId);
       
       // OPTIMIZATION: Update local count instead of re-fetching
       // await get().fetchPlaylists();
@@ -155,6 +162,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
   addSongsToPlaylist: async (playlistId, songIds) => {
     try {
         await playlistQueries.addSongsToPlaylist(playlistId, songIds);
+        for (const songId of songIds) recordMembership(playlistId, songId, true, playlistId === get().defaultPlaylistId);
         
         // Optimistic update for count
         set(state => ({
@@ -182,6 +190,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       }
 
       await playlistQueries.removeSongFromPlaylist(playlistId, songId);
+      recordMembership(playlistId, songId, false, playlistId === get().defaultPlaylistId);
       
       // CRITICAL: Queue sync to prevent ghost songs
       const playerState = usePlayerStore.getState();

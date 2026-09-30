@@ -9,8 +9,8 @@ import * as queries from '../database/queries';
 import { useDailyStatsStore } from './dailyStatsStore';
 import { nativeSearch } from '../services/NativeSearch';
 import { libraryLookup, matchKey } from '../utils/downloadState';
-import { useStreamLikesStore } from './streamLikesStore';
 import { reconcileSongs } from './songsReconcile';
+import { fromMobileId } from '@shared/songRef';
 
 // Deliberately no static import of './playerStore' here: playerStore imports this
 // module, and a back-edge evaluated at init left playerStore half-initialised
@@ -281,27 +281,39 @@ export const useSongsStore = create<SongsState>()((set, get) => ({
       // consumers that read song.isLiked directly (list rows,
       // SongCard) stay reactive without a full refetch.
       toggleLike: async (songId: string): Promise<LikeResult> => {
-         // A streamed song has no library row to like — saving it downloads it
-         // into the library, and the like is applied to the row it gets (see
-         // streamLikesStore). A copy already in the library is liked directly.
+         // A streamed song is liked online: a like is not a download (Download is its own
+         // button). It syncs to the Allegra account like any other like. A copy already
+         // in the library is liked directly.
          if (songId.startsWith('stream:')) {
              const { StreamService } = await import('../services/stream/StreamService');
              const meta = StreamService.catalogFor(songId);
              if (!meta) return 'error';
-             const key = matchKey(meta.title, meta.artist);
-             const saved = libraryLookup(get().songs).get(key);
+             const saved = libraryLookup(get().songs).get(matchKey(meta.title, meta.artist));
              if (saved) return get().toggleLike(saved.id);
-             const likes = useStreamLikesStore.getState();
-             if (likes.pending.includes(key)) {
-                 likes.remove(key);
-                 return 'unliked';
-             }
-             likes.add(key);
-             if (!StreamService.save(meta)) {
-                 likes.remove(key);
+             const ref = fromMobileId(songId);
+             if (!ref) return 'error';
+             const at = Date.now();
+             // Imported late, like StreamService above: songsStore's own import graph stays small.
+             const { useOnlineLibraryStore } = await import('./onlineLibraryStore');
+             const { removeOnlineLike, upsertOnlineLike } = await import('../database/syncQueries');
+             const { record } = await import('../services/sync/LibrarySync');
+             const { likeOp } = await import('../services/sync/plan');
+             try {
+                 if (useOnlineLibraryStore.getState().likedRefs.has(ref)) {
+                     await removeOnlineLike(ref);
+                     record(likeOp(ref, false, at));
+                     await useOnlineLibraryStore.getState().load();
+                     return 'unliked';
+                 }
+                 const artwork = [meta.highResArt, meta.thumbnail].find(url => url && /^https:\/\//.test(url)) ?? '';
+                 const song = { ref, title: meta.title, artist: meta.artist, artwork, duration: meta.duration ?? 0 };
+                 await upsertOnlineLike({ ...song, at });
+                 record(likeOp(ref, true, at, song));
+                 await useOnlineLibraryStore.getState().load();
+                 return 'liked';
+             } catch {
                  return 'error';
              }
-             return 'saving';
          }
          try {
              const { usePlaylistStore } = await import('./playlistStore');

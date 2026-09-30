@@ -79,6 +79,11 @@ export const StreamService = {
     return true;
   },
 
+  /** Makes songs queued from elsewhere (synced playlists and likes) known here: likes, lyrics and history work on them. */
+  register(songs: UnifiedSong[]): void {
+    remember(songs);
+  },
+
   catalogFor(streamId: string): UnifiedSong | undefined {
     return catalog.get(streamId);
   },

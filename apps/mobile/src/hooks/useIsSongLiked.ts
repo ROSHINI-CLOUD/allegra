@@ -1,13 +1,13 @@
 import { usePlaylistStore } from '../store/playlistStore';
 import { useSongsStore } from '../store/songsStore';
-import { useStreamLikesStore } from '../store/streamLikesStore';
-import { useDownloadQueueStore } from '../store/downloadQueueStore';
+import { useOnlineLibraryStore } from '../store/onlineLibraryStore';
+import { fromMobileId } from '@shared/songRef';
 import { libraryLookup, matchKey } from '../utils/downloadState';
 
 export interface LikeState {
   /** Show the heart filled. */
   liked: boolean;
-  /** Liked, but the streamed song is still downloading into the library. */
+  /** Kept for callers; liking no longer downloads, so this is always false. */
   saving: boolean;
 }
 
@@ -15,7 +15,7 @@ export interface LikeState {
  * The heart's state. For a song in the library the single source of truth is
  * playlistStore.likedSongIds (so it can't drift from the toggle path). A
  * streamed song has no row of its own: it counts as liked when its copy in the
- * library is, or while its like is waiting on the download that will create it.
+ * library is, or when it is liked online (onlineLibraryStore, synced with the account).
  */
 export function useSongLikeState(song: { id: string; title: string; artist?: string } | null | undefined): LikeState {
   const id = song?.id;
@@ -25,15 +25,10 @@ export function useSongLikeState(song: { id: string; title: string; artist?: str
   const rowLiked = usePlaylistStore(state => (id ? state.likedSongIds.has(id) : false));
   const libraryId = useSongsStore(state => (key ? libraryLookup(state.songs).get(key)?.id : undefined));
   const libraryLiked = usePlaylistStore(state => (libraryId ? state.likedSongIds.has(libraryId) : false));
-  const waiting = useStreamLikesStore(state => (key ? state.pending.includes(key) : false));
-  // A like only waits while its download is really in flight; a cancelled or
-  // failed one lets go of the heart.
-  const downloading = useDownloadQueueStore(state => (
-    id ? state.queue.some(q => q.id === id && q.status !== 'completed' && q.status !== 'failed') : false
-  ));
+  const ref = stream && id ? fromMobileId(id) : null;
+  const onlineLiked = useOnlineLibraryStore(state => (ref ? state.likedRefs.has(ref) : false));
 
-  const saving = waiting && downloading && !libraryLiked;
-  return { liked: rowLiked || libraryLiked || saving, saving };
+  return { liked: rowLiked || libraryLiked || onlineLiked, saving: false };
 }
 
 /** Whether a song is liked. Pass the song, not just its id, to get streamed songs right. */
