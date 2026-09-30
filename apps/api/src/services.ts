@@ -8,6 +8,7 @@ import { ConvexCoverStorage, ConvexGrantLedger, ConvexUserStore } from './db/con
 import { ConvexGateway } from './db/convexGateway.js';
 import { MemoryGrantLedger, type GrantLedger } from './oauth/ledger.js';
 import { AuthService } from './auth/auth.js';
+import { ListenerActions } from './user/actions.js';
 import { ConvexTokenVerifier, FirstMatchVerifier, GuestTokenVerifier, type TokenVerifier } from './auth/verifier.js';
 import { MemoryCacheStore, type CacheStore } from './lib/cache.js';
 import type { CoverStorage } from './lib/covers.js';
@@ -68,6 +69,8 @@ export interface AppServices {
   readonly artwork: ArtworkService;
   readonly lyrics: LyricsService;
   readonly auth: AuthService;
+  /** What a listener does (likes, playlists, sharing, plays), for the routes and the MCP tools alike. */
+  readonly actions: ListenerActions;
   readonly translation: TranslationService;
   readonly recommendations: RecommendationService;
   /** Playlist cover storage (Convex). Undefined without Convex: uploads answer 503. */
@@ -117,6 +120,16 @@ export function createServices(options: ServiceOptions): AppServices {
 
   const fetchImpl = options.fetchImpl ? { fetchImpl: options.fetchImpl } : {};
   const stream = new StreamResolver({ saavn, cache, ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}) });
+  const auth = new AuthService({
+    store: userStore,
+    guest: guestVerifier,
+    verifier: new FirstMatchVerifier(guestVerifier, convexVerifier),
+    ...(convexStore ? { directory: convexStore } : {}),
+    // Likes and playlists live in Convex rows beside the profile; in memory otherwise.
+    ...(convexStore && convex ? { library: new ConvexLibraryStore(convex) } : {})
+  });
+  // Playlist cover storage needs Convex; without it uploads answer 503.
+  const covers = convex ? new ConvexCoverStorage(convex) : undefined;
 
   return {
     catalog,
@@ -132,14 +145,8 @@ export function createServices(options: ServiceOptions): AppServices {
       ...(options.unisonApiUrl ? { unison: new UnisonProvider({ baseUrl: options.unisonApiUrl, ...fetchImpl }) } : {}),
       ...(options.kugouApiUrl ? { kugou: new KuGouProvider({ baseUrl: options.kugouApiUrl, ...fetchImpl }) } : {})
     }),
-    auth: new AuthService({
-      store: userStore,
-      guest: guestVerifier,
-      verifier: new FirstMatchVerifier(guestVerifier, convexVerifier),
-      ...(convexStore ? { directory: convexStore } : {}),
-      // Likes and playlists live in Convex rows beside the profile; in memory otherwise.
-      ...(convexStore && convex ? { library: new ConvexLibraryStore(convex) } : {})
-    }),
+    auth,
+    actions: new ListenerActions(auth, userStore, catalog, covers),
     translation: new TranslationService(cache, {
       ...(options.translation?.baseUrl ? { baseUrl: options.translation.baseUrl } : {}),
       ...(options.translation?.contactEmail ? { contactEmail: options.translation.contactEmail } : {}),
@@ -147,7 +154,7 @@ export function createServices(options: ServiceOptions): AppServices {
       ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
     }),
     recommendations: new RecommendationService(catalog, cache),
-    ...(convex ? { covers: new ConvexCoverStorage(convex) } : {}),
+    ...(covers ? { covers } : {}),
     grants: convex ? new ConvexGrantLedger(convex) : new MemoryGrantLedger(),
     accountsEnabled: Boolean(convexVerifier)
   };

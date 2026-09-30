@@ -107,8 +107,8 @@ export function createApp(options: AppOptions): Express {
   app.use('/api', lyricsRouter(services.lyrics));
   app.use('/api', streamRouter(services.stream));
   app.use('/api', authRouter(services.auth));
-  app.use('/api', userRouter(services.auth, services.catalog, services.covers));
-  app.use('/api', sharedRouter(services.auth, services.catalog));
+  app.use('/api', userRouter(services.auth, services.catalog, services.actions, services.covers));
+  app.use('/api', sharedRouter(services.auth, services.catalog, services.actions));
   app.use('/api', uploadsRouter(services.auth, services.covers));
   app.use('/api', discoveryRouter(services.translation, services.recommendations, services.auth, services.catalog));
   const signer = new OAuthSigner(jwtSecret);

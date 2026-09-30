@@ -1,29 +1,21 @@
-import crypto from 'node:crypto';
 import { Router } from 'express';
 
 import type { AuthService } from '../auth/auth.js';
 import type { CatalogService } from '../catalog/catalog.js';
-import { opsForPlaylistCopy } from '../user/libraryOps.js';
-import type { LibraryRecord, UserData } from '../user/store.js';
+import type { ListenerActions } from '../user/actions.js';
+import type { UserData } from '../user/store.js';
 import { getUserId, sendUnauthorized } from './auth.js';
 import { sendFailure, sendSuccess } from './common.js';
 
-/** Six url-safe characters ~ 2 billion codes; long enough not to guess, short enough to read out loud. */
-const CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
-
-export function newCode(): string {
-  return Array.from(crypto.randomBytes(8), (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join('').slice(0, 8);
-}
-
-const CODE_SHAPE = /^[a-z0-9]{6,12}$/;
+const LINK_OFF = "We couldn't find that. The link may have been turned off.";
 
 /**
  * Sharing. A share is a code that points at one of the owner's playlists, so the link stays live as the owner
  * adds songs. Anyone with the code can read it and save a copy; only the owner can create or revoke it.
+ * The rules live in ListenerActions (user/actions.ts), which the MCP tools share.
  */
-export function sharedRouter(auth: AuthService, catalog: CatalogService): Router {
+export function sharedRouter(auth: AuthService, catalog: CatalogService, actions: ListenerActions): Router {
   const router = Router();
-  const store = auth.userStore;
 
   router.post('/libraries/:id/share', async (request, response) => {
     const user = await currentUser(auth, request);
@@ -31,19 +23,9 @@ export function sharedRouter(auth: AuthService, catalog: CatalogService): Router
       sendUnauthorized(response);
       return;
     }
-    const library = user.libraries.find((item) => item.id === request.params.id);
-    if (!library) {
-      response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
-      return;
-    }
     try {
-      const existing = await store.findShare(user.userId, library.id);
-      const code = existing?.code ?? newCode();
-      if (!existing) await store.saveShare({ code, ownerId: user.userId, libraryId: library.id, createdAt: new Date().toISOString() });
-      if (!library.isPublic) {
-        await auth.library.apply(user.userId, [{ op: 'playlist_upsert', playlistId: library.id, isPublic: true, at: Date.now() }]);
-      }
-      sendSuccess(response, { code, path: `#shared/${code}` }, existing ? 200 : 201);
+      const { code, created } = await actions.share(user, String(request.params.id));
+      sendSuccess(response, { code, path: `#shared/${code}` }, created ? 201 : 200);
     } catch (error) {
       sendFailure(response, error);
     }
@@ -55,15 +37,8 @@ export function sharedRouter(auth: AuthService, catalog: CatalogService): Router
       sendUnauthorized(response);
       return;
     }
-    const library = user.libraries.find((item) => item.id === request.params.id);
-    if (!library) {
-      response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
-      return;
-    }
     try {
-      const existing = await store.findShare(user.userId, library.id);
-      if (existing) await store.deleteShare(existing.code);
-      await auth.library.apply(user.userId, [{ op: 'playlist_upsert', playlistId: library.id, isPublic: false, at: Date.now() }]);
+      await actions.unshare(user, String(request.params.id));
       response.status(204).end();
     } catch (error) {
       sendFailure(response, error);
@@ -73,18 +48,13 @@ export function sharedRouter(auth: AuthService, catalog: CatalogService): Router
   // Public: this is what a friend opens. No session needed to listen along.
   router.get('/shared/:code', async (request, response) => {
     const code = String(request.params.code ?? '').toLowerCase();
-    if (!CODE_SHAPE.test(code)) {
-      response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
-      return;
-    }
     try {
-      const share = await store.getShare(code);
-      const owner = share ? await store.get(share.ownerId) : null;
-      const library = owner?.libraries.find((item) => item.id === share?.libraryId);
-      if (!share || !owner || !library || !library.isPublic) {
-        response.status(404).json({ success: false, data: null, error: "We couldn't find that. The link may have been turned off." });
+      const shared = await actions.openShare(code);
+      if (!shared) {
+        response.status(404).json({ success: false, data: null, error: LINK_OFF });
         return;
       }
+      const { owner, library } = shared;
       const songs = library.songIds.length > 0 ? await catalog.getSongs(library.songIds) : [];
       sendSuccess(response, {
         code,
@@ -106,29 +76,13 @@ export function sharedRouter(auth: AuthService, catalog: CatalogService): Router
       sendUnauthorized(response);
       return;
     }
-    const code = String(request.params.code ?? '').toLowerCase();
     try {
-      const share = CODE_SHAPE.test(code) ? await store.getShare(code) : null;
-      const owner = share ? await store.get(share.ownerId) : null;
-      const source = owner?.libraries.find((item) => item.id === share?.libraryId);
-      if (!source || !source.isPublic) {
-        response.status(404).json({ success: false, data: null, error: "We couldn't find that. The link may have been turned off." });
+      const saved = await actions.saveSharedCopy(user, String(request.params.code ?? '').toLowerCase());
+      if (!saved) {
+        response.status(404).json({ success: false, data: null, error: LINK_OFF });
         return;
       }
-      // The copy shows the owner's cover but does not own the file (no coverKey), so replacing or
-      // deleting it here can never delete the owner's image.
-      const stored: LibraryRecord = {
-        id: crypto.randomUUID(),
-        name: source.name,
-        ...(source.description ? { description: source.description } : {}),
-        isPublic: false,
-        songIds: [...source.songIds],
-        createdAt: new Date().toISOString(),
-        ...(source.coverUrl ? { coverUrl: source.coverUrl } : {})
-      };
-      await auth.library.apply(user.userId, opsForPlaylistCopy(stored, Date.now()));
-      const saved = (await auth.getUser(user.userId))?.libraries.find((item) => item.id === stored.id);
-      sendSuccess(response, saved ?? stored, 201);
+      sendSuccess(response, saved, 201);
     } catch (error) {
       sendFailure(response, error);
     }

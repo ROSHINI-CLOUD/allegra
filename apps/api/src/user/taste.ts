@@ -1,3 +1,4 @@
+import { deriveMoodPrompts } from './moodPrompts.js';
 import type { TasteEntry, TasteProfile } from './store.js';
 
 /**
@@ -99,6 +100,26 @@ export function playWeight(playedSeconds: number, songSeconds: number): number {
   if (playedSeconds < 10) return SIGNAL_WEIGHT.skip;
   const heard = songSeconds > 0 ? playedSeconds / songSeconds : 1;
   return heard >= 0.5 || playedSeconds >= 60 ? SIGNAL_WEIGHT.play : 0.4;
+}
+
+export interface TasteSummary {
+  readonly topArtists: { name: string; score: number }[];
+  readonly languages: { name: string; score: number }[];
+  readonly signals: number;
+  readonly onboarded: boolean;
+  readonly prompts: string[];
+}
+
+/** The slice of taste the browser and MCP need: who they love, in what language, and whether to ask them to pick favourites. */
+export function tasteSummary(taste: TasteProfile | undefined): TasteSummary {
+  const value = taste ?? emptyTaste();
+  const summary = {
+    topArtists: value.artists.slice(0, 12).map((entry) => ({ name: entry.name, score: entry.score })),
+    languages: value.languages.slice(0, 5).map((entry) => ({ name: entry.name, score: entry.score })),
+    signals: value.signals,
+    onboarded: value.onboarded
+  };
+  return { ...summary, prompts: deriveMoodPrompts(summary) };
 }
 
 /** Two profiles of the same person (a guest session and the account they then signed into): scores add up. */

@@ -1,22 +1,24 @@
-import crypto from 'node:crypto';
 import { Router } from 'express';
 
 import type { AuthService } from '../auth/auth.js';
 import type { CatalogService } from '../catalog/catalog.js';
 import { parseLanguages } from '../lib/languages.js';
 import { MAX_COVER_BYTES, isCoverContentType, looksLikeStorageId, type CoverStorage } from '../lib/covers.js';
-import { parseLibraryOps, type LibraryOp, type PlaylistCover } from '../shared/library.js';
-import type { UnifiedSong } from '../types.js';
-import type { LibraryApplyResult } from '../user/library.js';
-import type { SongSnapshot } from '../shared/songRef.js';
-import { refForId, snapshotOf } from '../user/libraryOps.js';
-import { RECENTLY_PLAYED_LIMIT, type LibraryRecord, type TasteProfile, type UserData } from '../user/store.js';
-import { deriveMoodPrompts } from '../user/moodPrompts.js';
-import { SIGNAL_WEIGHT, applySeeds, applySignal, emptyTaste, playWeight } from '../user/taste.js';
+import { parseLibraryOps, type PlaylistCover } from '../shared/library.js';
+import type { ListenerActions } from '../user/actions.js';
+import { RECENTLY_PLAYED_LIMIT, type UserData } from '../user/store.js';
+import { applySeeds, tasteSummary } from '../user/taste.js';
 import { getUserId, sendUnauthorized } from './auth.js';
 import { asRecord, positiveInt, sendFailure, sendSuccess, sanitizeSettings, songId } from './common.js';
 
-export function userRouter(auth: AuthService, catalog: CatalogService, covers?: CoverStorage): Router {
+const MISSING = "Something's missing from that request.";
+
+/**
+ * The listener's own data over HTTP. What they do (likes, playlists, plays) is a ListenerActions
+ * call (user/actions.ts), the same one the MCP tools and the phone's sync make; these handlers
+ * only read the request and shape the reply. Reply shapes are docs/api-contract.md.
+ */
+export function userRouter(auth: AuthService, catalog: CatalogService, actions: ListenerActions, covers?: CoverStorage): Router {
   const router = Router();
 
   router.get('/libraries', async (request, response) => {
@@ -25,23 +27,19 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
     sendSuccess(response, user.libraries);
   });
 
-  // Every playlist and like change below is a library operation (user/library.ts): it lands in
-  // one transaction and syncs to the listener's other devices. Shapes are unchanged.
-
   router.post('/libraries', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
     const body = asRecord(request.body);
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name || name.length > 100) {
-      response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
+      response.status(400).json({ success: false, data: null, error: MISSING });
       return;
     }
-    const description = typeof body.description === 'string' ? body.description.trim().slice(0, 500) : '';
-    const id = crypto.randomUUID();
     try {
-      await applyLibrary(auth, user.userId, [{ op: 'playlist_upsert', playlistId: id, name, ...(description ? { description } : {}), isPublic: body.isPublic === true, at: Date.now() }], covers);
-      sendSuccess(response, await libraryAfter(auth, user.userId, id), 201);
+      const description = typeof body.description === 'string' ? body.description : undefined;
+      const library = await actions.createPlaylist(user, { name, ...(description ? { description } : {}), isPublic: body.isPublic === true });
+      sendSuccess(response, library, 201);
     } catch (error) {
       sendFailure(response, error);
     }
@@ -50,8 +48,8 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
   router.patch('/libraries/:id', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    const current = user.libraries.find((library) => library.id === request.params.id);
-    if (!current) {
+    // Checked before touching any upload, so a request for a playlist that isn't there changes nothing.
+    if (!user.libraries.some((library) => library.id === request.params.id)) {
       response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
       return;
     }
@@ -70,7 +68,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
       }
       const stored = looksLikeStorageId(storageId) ? await covers.inspect(storageId) : null;
       if (!stored) {
-        response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
+        response.status(400).json({ success: false, data: null, error: MISSING });
         return;
       }
       if (!isCoverContentType(stored.contentType) || stored.size > MAX_COVER_BYTES) {
@@ -81,26 +79,14 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
       cover = { key: storageId, url: stored.url };
     }
 
-    const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 100) : undefined;
-    const description = typeof body.description === 'string' ? body.description.trim().slice(0, 500) || null : undefined;
     try {
-      await applyLibrary(
-        auth,
-        user.userId,
-        [
-          {
-            op: 'playlist_upsert',
-            playlistId: current.id,
-            ...(name ? { name } : {}),
-            ...(description !== undefined ? { description } : {}),
-            ...(typeof body.isPublic === 'boolean' ? { isPublic: body.isPublic } : {}),
-            ...(cover !== undefined ? { cover } : {}),
-            at: Date.now()
-          }
-        ],
-        covers
-      );
-      sendSuccess(response, await libraryAfter(auth, user.userId, current.id));
+      const library = await actions.updatePlaylist(user, String(request.params.id), {
+        ...(typeof body.name === 'string' ? { name: body.name } : {}),
+        ...(typeof body.description === 'string' ? { description: body.description } : {}),
+        ...(typeof body.isPublic === 'boolean' ? { isPublic: body.isPublic } : {}),
+        ...(cover !== undefined ? { cover } : {})
+      });
+      sendSuccess(response, library);
     } catch (error) {
       sendFailure(response, error);
     }
@@ -109,13 +95,8 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
   router.delete('/libraries/:id', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    const removed = user.libraries.find((library) => library.id === request.params.id);
-    if (!removed) {
-      response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
-      return;
-    }
     try {
-      await applyLibrary(auth, user.userId, [{ op: 'playlist_delete', playlistId: removed.id, at: Date.now() }], covers);
+      await actions.deletePlaylist(user, String(request.params.id));
       response.status(204).end();
     } catch (error) {
       sendFailure(response, error);
@@ -126,17 +107,12 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
     const id = songId(asRecord(request.body).songId);
-    const library = user.libraries.find((item) => item.id === request.params.id);
-    const ref = id ? refForId(id) : null;
-    if (!id || !ref || !library) {
+    if (!id) {
       response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
       return;
     }
     try {
-      const song = await lookUp(catalog, id);
-      await applyLibrary(auth, user.userId, [{ op: 'playlist_add', playlistId: library.id, ref, ...withSnapshot(song), at: Date.now() }], covers);
-      if (!library.songIds.includes(id) && song) await learnFrom(auth, user.userId, song, SIGNAL_WEIGHT.playlistAdd);
-      sendSuccess(response, await libraryAfter(auth, user.userId, library.id));
+      sendSuccess(response, await actions.addToPlaylist(user, String(request.params.id), id));
     } catch (error) {
       sendFailure(response, error);
     }
@@ -145,15 +121,8 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
   router.delete('/libraries/:id/songs/:songId', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    const library = user.libraries.find((item) => item.id === request.params.id);
-    const ref = refForId(String(request.params.songId));
-    if (!library || !ref) {
-      response.status(404).json({ success: false, data: null, error: "We couldn't find that." });
-      return;
-    }
     try {
-      await applyLibrary(auth, user.userId, [{ op: 'playlist_remove', playlistId: library.id, ref, at: Date.now() }], covers);
-      sendSuccess(response, await libraryAfter(auth, user.userId, library.id));
+      sendSuccess(response, await actions.removeFromPlaylist(user, String(request.params.id), String(request.params.songId)));
     } catch (error) {
       sendFailure(response, error);
     }
@@ -173,15 +142,12 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
     const id = songId(asRecord(request.body).songId);
-    const ref = id ? refForId(id) : null;
-    if (!id || !ref) {
-      response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
+    if (!id) {
+      response.status(400).json({ success: false, data: null, error: MISSING });
       return;
     }
     try {
-      const song = await lookUp(catalog, id);
-      await applyLibrary(auth, user.userId, [{ op: 'like', ref, ...withSnapshot(song), at: Date.now() }], covers);
-      if (!user.likedSongIds.includes(id) && song) await learnFrom(auth, user.userId, song, SIGNAL_WEIGHT.like);
+      await actions.like(user, id);
       sendSuccess(response, { songId: id }, 201);
     } catch (error) {
       sendFailure(response, error);
@@ -191,14 +157,8 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
   router.delete('/me/liked/:songId', async (request, response) => {
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
-    const id = String(request.params.songId);
-    const ref = refForId(id);
     try {
-      if (ref) await applyLibrary(auth, user.userId, [{ op: 'unlike', ref, at: Date.now() }], covers);
-      if (user.likedSongIds.includes(id)) {
-        const song = await lookUp(catalog, id);
-        if (song) await learnFrom(auth, user.userId, song, SIGNAL_WEIGHT.unlike);
-      }
+      await actions.unlike(user, String(request.params.songId));
       response.status(204).end();
     } catch (error) {
       sendFailure(response, error);
@@ -211,24 +171,11 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
     if (!user) return;
     const ops = parseLibraryOps(asRecord(request.body).ops);
     if (!ops) {
-      response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
+      response.status(400).json({ success: false, data: null, error: MISSING });
       return;
     }
     try {
-      const result = await applyLibrary(auth, user.userId, ops, covers);
-      // What the device did teaches taste the same way the website's buttons do.
-      const rejected = new Set(result.rejected.map((item) => item.index));
-      const lessons: { song: SongSnapshot; weight: number }[] = [];
-      ops.forEach((op, index) => {
-        if (rejected.has(index) || !('song' in op) || !op.song) return;
-        const alreadyLiked = user.likedSongIds.some((id) => refForId(id) === op.ref);
-        if (op.op === 'like' && !alreadyLiked) lessons.push({ song: op.song, weight: SIGNAL_WEIGHT.like });
-        if (op.op === 'playlist_add') lessons.push({ song: op.song, weight: SIGNAL_WEIGHT.playlistAdd });
-      });
-      if (lessons.length > 0) {
-        await auth.updateProfile(user.userId, (current) => lessons.reduce((taught, lesson) => teach(taught, lesson.song, lesson.weight), current));
-      }
-      sendSuccess(response, { rev: result.rev, rejected: result.rejected });
+      sendSuccess(response, await actions.applyFromDevice(user, ops));
     } catch (error) {
       sendFailure(response, error);
     }
@@ -264,22 +211,12 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
     const id = songId(body.songId);
     const playDuration = typeof body.playDuration === 'number' && Number.isFinite(body.playDuration) && body.playDuration >= 0 ? body.playDuration : 0;
     if (!id) {
-      response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
+      response.status(400).json({ success: false, data: null, error: MISSING });
       return;
     }
-    // A phone that played offline sends when it happened; anything else is "now".
-    const entry = { songId: id, playDuration, playedAt: playedAtFrom(body.playedAt) ?? new Date().toISOString() };
     try {
-      // Pressing play is a mild vote. How long they stayed arrives separately, as a listen signal.
-      const song = await lookUp(catalog, id);
-      await auth.updateProfile(user.userId, (current) => {
-        const recentlyPlayed = [entry, ...current.recentlyPlayed.filter((item) => item.songId !== id)]
-          .sort((left, right) => right.playedAt.localeCompare(left.playedAt))
-          .slice(0, RECENTLY_PLAYED_LIMIT);
-        const taught = song ? teach(current, song, playDuration > 0 ? playWeight(playDuration, song.duration) : 0.3) : current;
-        return { ...taught, recentlyPlayed };
-      });
-      sendSuccess(response, entry, 201);
+      // A phone that played offline sends when it happened; anything else is "now".
+      sendSuccess(response, await actions.recordPlay(user, id, playDuration, playedAtFrom(body.playedAt) ?? new Date().toISOString()), 201);
     } catch (error) {
       sendFailure(response, error);
     }
@@ -342,11 +279,11 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
     const id = songId(body.songId);
     const seconds = typeof body.seconds === 'number' && Number.isFinite(body.seconds) && body.seconds >= 0 ? Math.min(body.seconds, 3600) : null;
     if (!id || seconds === null) {
-      response.status(400).json({ success: false, data: null, error: "Something's missing from that request." });
+      response.status(400).json({ success: false, data: null, error: MISSING });
       return;
     }
     try {
-      await learn(auth, catalog, user.userId, id, (song) => playWeight(seconds, song.duration));
+      await actions.listened(user, id, seconds);
       response.status(204).end();
     } catch (error) {
       sendFailure(response, error);
@@ -356,39 +293,9 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
   return router;
 }
 
-/** The slice of taste the browser needs: who they love, in what language, and whether to ask them to pick favourites. */
-export function tasteSummary(taste: TasteProfile | undefined): { topArtists: { name: string; score: number }[]; languages: { name: string; score: number }[]; signals: number; onboarded: boolean; prompts: string[] } {
-  const value = taste ?? emptyTaste();
-  const summary = {
-    topArtists: value.artists.slice(0, 12).map((entry) => ({ name: entry.name, score: entry.score })),
-    languages: value.languages.slice(0, 5).map((entry) => ({ name: entry.name, score: entry.score })),
-    signals: value.signals,
-    onboarded: value.onboarded
-  };
-  return {
-    ...summary,
-    prompts: deriveMoodPrompts(summary)
-  };
-}
-
 function stringList(value: unknown, max: number): string[] {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter((item): item is string => typeof item === 'string').map((item) => item.trim().slice(0, 80)).filter(Boolean))].slice(0, max);
-}
-
-/**
- * Folds one behaviour on one song into the listener's taste and saves it. Looking the song up can
- * fail (provider down); that must never fail the action the listener took, so then nothing is learned.
- */
-export async function learn(auth: AuthService, catalog: CatalogService, userId: string, id: string, weightFor: (song: { duration: number }) => number): Promise<UserData | null> {
-  const song = await lookUp(catalog, id);
-  if (!song) return auth.getUser(userId);
-  return learnFrom(auth, userId, song, weightFor(song));
-}
-
-/** One behaviour on one known song, folded into taste atomically. */
-function learnFrom(auth: AuthService, userId: string, song: { readonly artist: string; readonly language?: string }, weight: number): Promise<UserData | null> {
-  return auth.updateProfile(userId, (current) => teach(current, song, weight));
 }
 
 async function authenticatedUser(auth: AuthService, request: Parameters<typeof getUserId>[1], response: Parameters<typeof sendUnauthorized>[0]): Promise<UserData | null> {
@@ -410,47 +317,6 @@ async function authenticatedUser(auth: AuthService, request: Parameters<typeof g
   }
 }
 
-/** Applies library operations, then deletes playlist covers nothing uses any more. */
-async function applyLibrary(auth: AuthService, userId: string, ops: readonly LibraryOp[], covers: CoverStorage | undefined): Promise<LibraryApplyResult> {
-  const result = await auth.library.apply(userId, ops);
-  for (const key of result.removedCoverKeys) {
-    try {
-      await covers?.remove(key);
-    } catch {
-      // A leftover image costs storage, not correctness; the playlist change already landed.
-    }
-  }
-  return result;
-}
-
-/** A playlist as the profile shows it right after a change. */
-async function libraryAfter(auth: AuthService, userId: string, id: string): Promise<LibraryRecord> {
-  const library = (await auth.getUser(userId))?.libraries.find((item) => item.id === id);
-  if (!library) throw new Error('Playlist missing after change');
-  return library;
-}
-
-/** The song snapshot to carry on an operation, when the catalog found the song. */
-function withSnapshot(song: UnifiedSong | null): { song: SongSnapshot } | Record<string, never> {
-  const snapshot = song ? snapshotOf(song) : undefined;
-  return snapshot ? { song: snapshot } : {};
-}
-
-/** The catalog row for an id, or null when the provider is down (the action still goes ahead). */
-async function lookUp(catalog: CatalogService, id: string): Promise<UnifiedSong | null> {
-  try {
-    const [song] = await catalog.getSongs([id]);
-    return song ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/** One behaviour on one song, folded into taste. */
-function teach(user: UserData, song: { readonly artist: string; readonly language?: string }, weight: number): UserData {
-  return { ...user, taste: applySignal(user.taste, { artist: song.artist, ...(song.language ? { language: song.language } : {}) }, weight) };
-}
-
 /** An ISO time within the last week and not in the future, or null. */
 function playedAtFrom(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -459,4 +325,3 @@ function playedAtFrom(value: unknown): string | null {
   if (!Number.isFinite(time) || time > now + 60_000 || time < now - 7 * 24 * 3600_000) return null;
   return new Date(Math.min(time, now)).toISOString();
 }
-

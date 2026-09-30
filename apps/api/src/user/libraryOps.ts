@@ -26,8 +26,11 @@ export function snapshotOf(song: UnifiedSong): SongSnapshot | undefined {
   };
 }
 
-/** Creates a playlist exactly as `library` describes it, songs in order. */
-export function opsForPlaylistCopy(library: LibraryRecord, at: number): LibraryOp[] {
+/**
+ * Creates a playlist exactly as `library` describes it, songs in order. Songs with an entry in
+ * `snapshots` carry their details, so other devices can show them without a lookup.
+ */
+export function opsForPlaylistCopy(library: LibraryRecord, at: number, snapshots: ReadonlyMap<string, SongSnapshot> = new Map()): LibraryOp[] {
   const ops: LibraryOp[] = [
     {
       op: 'playlist_upsert',
@@ -42,7 +45,8 @@ export function opsForPlaylistCopy(library: LibraryRecord, at: number): LibraryO
   library.songIds.forEach((id, index) => {
     const ref = refForId(id);
     // One millisecond apart keeps the playlist's order (addedAt orders it).
-    if (ref) ops.push({ op: 'playlist_add', playlistId: library.id, ref, at: at + index });
+    const song = snapshots.get(id);
+    if (ref) ops.push({ op: 'playlist_add', playlistId: library.id, ref, ...(song ? { song } : {}), at: at + index });
   });
   return ops;
 }

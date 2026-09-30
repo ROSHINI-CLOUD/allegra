@@ -127,11 +127,6 @@ export class AuthService {
     return this.libraryStore;
   }
 
-  /** Storage seam for the routes that need it (sharing looks up other people's playlists). */
-  public get userStore(): UserStore {
-    return this.store;
-  }
-
   private async persist(user: UserData): Promise<void> {
     try {
       await this.store.save(user);

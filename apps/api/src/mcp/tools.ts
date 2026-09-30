@@ -1,17 +1,13 @@
-import crypto from 'node:crypto';
-
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import type { AuthService } from '../auth/auth.js';
 import { buildRecommendationInput } from '../services/recommendationContext.js';
-import { learn, tasteSummary } from '../routes/user.js';
-import { newCode } from '../routes/shared.js';
 import type { AppServices } from '../services.js';
 import type { UnifiedSong } from '../types.js';
-import { SIGNAL_WEIGHT, playWeight } from '../user/taste.js';
-import { opsForPlaylistCopy, refForId } from '../user/libraryOps.js';
+import { tasteSummary } from '../user/taste.js';
+import { refForId } from '../user/libraryOps.js';
 import type { LibraryRecord } from '../user/store.js';
 import { loadCaller, type McpCaller } from './context.js';
 import { summarizeListening } from './stats.js';
@@ -78,7 +74,7 @@ function withUser<A>(
  * see server.ts.
  */
 export function registerTools(server: McpServer, services: AppServices, userId: string): void {
-  const { auth, catalog, lyrics, translation, recommendations } = services;
+  const { auth, catalog, lyrics, translation, recommendations, actions } = services;
   const bound = <A>(handler: (args: A, caller: McpCaller) => Promise<CallToolResult>) => withUser(auth, userId, handler);
 
   server.registerTool(
@@ -163,15 +159,12 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
       inputSchema: { name: z.string().min(1).max(100), description: z.string().max(500).optional(), isPublic: z.boolean().optional() }
     },
     bound(async (args, caller) => {
-      const library: LibraryRecord = {
-        id: crypto.randomUUID(),
-        name: args.name.trim(),
-        ...(args.description?.trim() ? { description: args.description.trim() } : {}),
-        isPublic: args.isPublic === true,
-        songIds: [],
-        createdAt: new Date().toISOString()
-      };
-      await auth.library.apply(caller.user.userId, opsForPlaylistCopy(library, Date.now()));
+      if (!args.name.trim()) return fail('Give the playlist a name.');
+      const library = await actions.createPlaylist(caller.user, {
+        name: args.name,
+        ...(args.description ? { description: args.description } : {}),
+        ...(args.isPublic !== undefined ? { isPublic: args.isPublic } : {})
+      });
       return ok(librarySummary(library));
     })
   );
@@ -183,16 +176,9 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
       inputSchema: { playlistId: z.string().min(1).max(80), songId: SONG_ID }
     },
     bound(async (args, caller) => {
-      const index = caller.user.libraries.findIndex((library) => library.id === args.playlistId);
-      const library = index >= 0 ? caller.user.libraries[index] : undefined;
-      if (!library) return fail("Couldn't find that playlist.");
-      const ref = refForId(args.songId);
-      if (!ref) return fail("Couldn't find that song.");
-      const adding = !library.songIds.includes(args.songId);
-      await auth.library.apply(caller.user.userId, [{ op: 'playlist_add', playlistId: library.id, ref, at: Date.now() }]);
-      if (adding) await learn(auth, catalog, caller.userId, args.songId, () => SIGNAL_WEIGHT.playlistAdd);
-      const updated: LibraryRecord = { ...library, songIds: adding ? [...library.songIds, args.songId] : library.songIds };
-      return ok(librarySummary(updated));
+      if (!caller.user.libraries.some((library) => library.id === args.playlistId)) return fail("Couldn't find that playlist.");
+      if (!refForId(args.songId)) return fail("Couldn't find that song.");
+      return ok(librarySummary(await actions.addToPlaylist(caller.user, args.playlistId, args.songId)));
     })
   );
 
@@ -200,15 +186,8 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
     'share_playlist',
     { description: 'Create (or fetch the existing) share link for one of the listener’s playlists. This makes the playlist public.', inputSchema: { playlistId: z.string().min(1).max(80) } },
     bound(async (args, caller) => {
-      const library = caller.user.libraries.find((item) => item.id === args.playlistId);
-      if (!library) return fail("Couldn't find that playlist.");
-      const store = auth.userStore;
-      const existing = await store.findShare(caller.userId, library.id);
-      const code = existing?.code ?? newCode();
-      if (!existing) await store.saveShare({ code, ownerId: caller.userId, libraryId: library.id, createdAt: new Date().toISOString() });
-      if (!library.isPublic) {
-        await auth.library.apply(caller.user.userId, [{ op: 'playlist_upsert', playlistId: library.id, isPublic: true, at: Date.now() }]);
-      }
+      if (!caller.user.libraries.some((library) => library.id === args.playlistId)) return fail("Couldn't find that playlist.");
+      const { code } = await actions.share(caller.user, args.playlistId);
       return ok({ code, path: `#shared/${code}` });
     })
   );
@@ -220,18 +199,15 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
       inputSchema: { songId: SONG_ID, action: z.enum(['like', 'unlike', 'skip']) }
     },
     bound(async (args, caller) => {
-      const { user } = caller;
-      if (args.action === 'like' || args.action === 'unlike') {
-        const ref = refForId(args.songId);
-        if (!ref) return fail("Couldn't find that song.");
-        const liking = args.action === 'like';
-        const changes = liking !== user.likedSongIds.includes(args.songId);
-        await auth.library.apply(user.userId, [{ op: liking ? 'like' : 'unlike', ref, at: Date.now() }]);
-        if (changes) await learn(auth, catalog, user.userId, args.songId, () => (liking ? SIGNAL_WEIGHT.like : SIGNAL_WEIGHT.unlike));
-        return ok({ songId: args.songId, action: args.action, liked: liking });
+      if (args.action === 'skip') {
+        await actions.skipped(caller.user, args.songId);
+        return ok({ songId: args.songId, action: args.action });
       }
-      await learn(auth, catalog, user.userId, args.songId, () => SIGNAL_WEIGHT.skip);
-      return ok({ songId: args.songId, action: args.action });
+      if (!refForId(args.songId)) return fail("Couldn't find that song.");
+      const liking = args.action === 'like';
+      if (liking) await actions.like(caller.user, args.songId);
+      else await actions.unlike(caller.user, args.songId);
+      return ok({ songId: args.songId, action: args.action, liked: liking });
     })
   );
 
@@ -241,9 +217,6 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
       description: 'Log how many seconds of a song were actually listened to. Mostly-heard counts as a vote for it; a few seconds counts against it — the same formula the player uses.',
       inputSchema: { songId: SONG_ID, playedSeconds: z.number().min(0).max(3600) }
     },
-    bound(async (args, caller) => {
-      const taught = await learn(auth, catalog, caller.userId, args.songId, (song) => playWeight(args.playedSeconds, song.duration));
-      return ok(tasteSummary(taught?.taste ?? caller.user.taste));
-    })
+    bound(async (args, caller) => ok(tasteSummary((await actions.listened(caller.user, args.songId, args.playedSeconds)).taste)))
   );
 }
