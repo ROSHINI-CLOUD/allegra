@@ -103,7 +103,6 @@ export const PlaylistDetailScreen: React.FC = () => {
   const currentSongId = usePlayerStore(state => state.currentSongId);
   const currentPlaylistId = usePlayerStore(state => state.currentPlaylistId);
   const currentSong = usePlayerStore(state => state.currentSong);
-  const setPlaylistQueue = usePlayerStore(state => state.setPlaylistQueue);
   const { play } = playerControls;
   const isPlaying = usePlayerStore(state => state.isPlaying);
   const activeIsPlaying = currentPlaylistId === playlistId;

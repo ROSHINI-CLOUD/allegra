@@ -53,8 +53,9 @@ const send = async <T>(method: 'GET' | 'POST', path: string, token: string, body
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: controller.signal,
     });
-    // 4xx other than auth/rate limits: this request is wrong and always will be.
-    if (res.status >= 400 && res.status < 500 && res.status !== 401 && res.status !== 408 && res.status !== 429) return { outcome: 'refused' };
+    // 4xx other than auth, rate limits and 404: this request is wrong and always will be. A 404 is
+    // an API that doesn't have this route yet (an older deployment): keep the change and retry.
+    if (res.status >= 400 && res.status < 500 && ![401, 404, 408, 429].includes(res.status)) return { outcome: 'refused' };
     if (!res.ok) return { outcome: 'offline' };
     const json = (await res.json()) as Envelope<T>;
     return json.success && json.data !== undefined ? { outcome: 'sent', data: json.data } : { outcome: 'offline' };
