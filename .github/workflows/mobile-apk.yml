@@ -8,7 +8,7 @@ name: Mobile APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/connect-and-sync]
     paths:
       - 'apps/mobile/**'
       - 'packages/**'
