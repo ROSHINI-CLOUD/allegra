@@ -110,8 +110,16 @@ export const save = mutation({
       .withIndex('by_userId', (q) => q.eq('userId', user.userId))
       .unique();
     if (existing) {
+      // Once a listener's library lives in rows (convex/library.ts), this copy is rebuilt there
+      // and only there: a whole-profile save carrying an older copy (a taste update racing a
+      // like from the phone) must not undo that change.
+      const libraryOwned = await ctx.db
+        .query('libraryState')
+        .withIndex('by_userId', (q) => q.eq('userId', user.userId))
+        .unique();
+      const kept = libraryOwned ? { likedSongIds: existing.likedSongIds, libraries: existing.libraries } : {};
       // replace, not patch: a field the API dropped (a cleared display name) must actually go.
-      await ctx.db.replace(existing._id, user);
+      await ctx.db.replace(existing._id, { ...user, ...kept });
     } else {
       await ctx.db.insert('profiles', user);
     }

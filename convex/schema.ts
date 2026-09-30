@@ -41,6 +41,16 @@ export const playStat = v.object({
   lastPlayedAt: v.string()
 });
 
+/** packages/shared/songRef.ts SongSnapshot: enough to show a song on another device. Duration in seconds. */
+export const songSnapshot = v.object({
+  ref: v.string(),
+  title: v.string(),
+  artist: v.string(),
+  album: v.optional(v.string()),
+  artwork: v.string(),
+  duration: v.number()
+});
+
 /** A catalog row as stored inside a song relation: enough to rank and show it without a lookup. */
 export const relatedSong = v.object({
   id: v.string(),
@@ -104,6 +114,58 @@ export default defineSchema({
   })
     .index('by_code', ['code'])
     .index('by_owner_library', ['ownerId', 'libraryId']),
+
+  // ── Library sync (convex/library.ts, rules in packages/shared/library.ts) ──────────────
+  // A listener's likes and playlists as rows, so the website and the phone can each change
+  // one item without overwriting the other. The profile's likedSongIds/libraries stay as a
+  // copy rebuilt in the same transaction, for everything that already reads them.
+
+  libraryLikes: defineTable({
+    userId: v.string(),
+    ref: v.string(),
+    song: v.optional(songSnapshot),
+    liked: v.boolean(),
+    likedAt: v.number(),
+    updatedAt: v.number(),
+    rev: v.number()
+  })
+    .index('by_userId_and_ref', ['userId', 'ref'])
+    .index('by_userId_and_rev', ['userId', 'rev']),
+
+  libraryPlaylists: defineTable({
+    userId: v.string(),
+    playlistId: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    isPublic: v.boolean(),
+    coverKey: v.optional(v.string()),
+    coverUrl: v.optional(v.string()),
+    createdAt: v.number(),
+    deleted: v.boolean(),
+    updatedAt: v.number(),
+    rev: v.number()
+  })
+    .index('by_userId_and_playlistId', ['userId', 'playlistId'])
+    .index('by_userId_and_rev', ['userId', 'rev']),
+
+  libraryItems: defineTable({
+    userId: v.string(),
+    playlistId: v.string(),
+    ref: v.string(),
+    song: v.optional(songSnapshot),
+    addedAt: v.number(),
+    deleted: v.boolean(),
+    updatedAt: v.number(),
+    rev: v.number()
+  })
+    .index('by_userId_and_playlistId_and_ref', ['userId', 'playlistId', 'ref'])
+    .index('by_userId_and_rev', ['userId', 'rev']),
+
+  /** One per listener once their library moved to rows: the newest revision. Its presence means "rows are the truth". */
+  libraryState: defineTable({
+    userId: v.string(),
+    rev: v.number()
+  }).index('by_userId', ['userId']),
 
   /** Spent OAuth codes and refresh tokens (MCP connect), kept only until they expire. */
   oauthGrants: defineTable({

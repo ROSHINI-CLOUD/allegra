@@ -57,6 +57,17 @@ test('the mobile app is built by root workflows, not a nested .github', async ()
   }
 });
 
+test('the API copies of the shared sync rules match their source', async () => {
+  // The API cannot import packages/shared (rootDir + NodeNext), so it gets generated copies. Two
+  // diverging copies of the library rules would sync differently in tests than in Convex.
+  const { SHARED_COPIES, apiCopyOf } = await import('../../scripts/sync-shared.mjs');
+  const lf = (value) => value.replaceAll('\r\n', '\n');
+  for (const name of SHARED_COPIES) {
+    const expected = apiCopyOf(name, lf(await text(`packages/shared/${name}`)));
+    assert.equal(lf(await text(`apps/api/src/shared/${name}`)), expected, `apps/api/src/shared/${name} is stale: run npm run sync:shared`);
+  }
+});
+
 test('shared packages import no npm packages', async () => {
   // The phone bundles packages/ through Metro. A bare import there resolves from the root
   // node_modules (the web's React), not the app's — two Reacts in one bundle.

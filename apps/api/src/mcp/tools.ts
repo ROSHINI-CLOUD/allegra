@@ -11,6 +11,7 @@ import { newCode } from '../routes/shared.js';
 import type { AppServices } from '../services.js';
 import type { UnifiedSong } from '../types.js';
 import { SIGNAL_WEIGHT, playWeight } from '../user/taste.js';
+import { opsForPlaylistCopy, refForId } from '../user/libraryOps.js';
 import type { LibraryRecord } from '../user/store.js';
 import { loadCaller, type McpCaller } from './context.js';
 import { summarizeListening } from './stats.js';
@@ -170,7 +171,7 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
         songIds: [],
         createdAt: new Date().toISOString()
       };
-      await auth.update({ ...caller.user, libraries: [...caller.user.libraries, library] });
+      await auth.library.apply(caller.user.userId, opsForPlaylistCopy(library, Date.now()));
       return ok(librarySummary(library));
     })
   );
@@ -185,12 +186,13 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
       const index = caller.user.libraries.findIndex((library) => library.id === args.playlistId);
       const library = index >= 0 ? caller.user.libraries[index] : undefined;
       if (!library) return fail("Couldn't find that playlist.");
+      const ref = refForId(args.songId);
+      if (!ref) return fail("Couldn't find that song.");
       const adding = !library.songIds.includes(args.songId);
-      const updated: LibraryRecord = { ...library, songIds: adding ? [...library.songIds, args.songId] : library.songIds };
-      const libraries = [...caller.user.libraries];
-      libraries[index] = updated;
+      await auth.library.apply(caller.user.userId, [{ op: 'playlist_add', playlistId: library.id, ref, at: Date.now() }]);
       const taught = adding ? await learn(catalog, caller.user, args.songId, () => SIGNAL_WEIGHT.playlistAdd) : caller.user;
-      await auth.update({ ...taught, libraries });
+      if (taught !== caller.user) await auth.update(taught);
+      const updated: LibraryRecord = { ...library, songIds: adding ? [...library.songIds, args.songId] : library.songIds };
       return ok(librarySummary(updated));
     })
   );
@@ -206,7 +208,7 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
       const code = existing?.code ?? newCode();
       if (!existing) await store.saveShare({ code, ownerId: caller.userId, libraryId: library.id, createdAt: new Date().toISOString() });
       if (!library.isPublic) {
-        await auth.update({ ...caller.user, libraries: caller.user.libraries.map((item) => (item.id === library.id ? { ...item, isPublic: true } : item)) });
+        await auth.library.apply(caller.user.userId, [{ op: 'playlist_upsert', playlistId: library.id, isPublic: true, at: Date.now() }]);
       }
       return ok({ code, path: `#shared/${code}` });
     })
@@ -220,17 +222,15 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
     },
     bound(async (args, caller) => {
       const { user } = caller;
-      if (args.action === 'like') {
-        const isNew = !user.likedSongIds.includes(args.songId);
-        const taught = isNew ? await learn(catalog, user, args.songId, () => SIGNAL_WEIGHT.like) : user;
-        await auth.update({ ...taught, likedSongIds: isNew ? [...user.likedSongIds, args.songId] : user.likedSongIds });
-        return ok({ songId: args.songId, action: args.action, liked: true });
-      }
-      if (args.action === 'unlike') {
-        const wasLiked = user.likedSongIds.includes(args.songId);
-        const taught = wasLiked ? await learn(catalog, user, args.songId, () => SIGNAL_WEIGHT.unlike) : user;
-        await auth.update({ ...taught, likedSongIds: user.likedSongIds.filter((id) => id !== args.songId) });
-        return ok({ songId: args.songId, action: args.action, liked: false });
+      if (args.action === 'like' || args.action === 'unlike') {
+        const ref = refForId(args.songId);
+        if (!ref) return fail("Couldn't find that song.");
+        const liking = args.action === 'like';
+        const changes = liking !== user.likedSongIds.includes(args.songId);
+        await auth.library.apply(user.userId, [{ op: liking ? 'like' : 'unlike', ref, at: Date.now() }]);
+        const taught = changes ? await learn(catalog, user, args.songId, () => (liking ? SIGNAL_WEIGHT.like : SIGNAL_WEIGHT.unlike)) : user;
+        if (taught !== user) await auth.update(taught);
+        return ok({ songId: args.songId, action: args.action, liked: liking });
       }
       const taught = await learn(catalog, user, args.songId, () => SIGNAL_WEIGHT.skip);
       if (taught !== user) await auth.update(taught);

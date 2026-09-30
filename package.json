@@ -13,6 +13,7 @@
     "contract-test": "node tests/contract/contract-smoke.mjs",
     "infra:test": "node --test tests/infra/infra-files.test.mjs",
     "convex:test": "node --import tsx --test \"tests/convex/**/*.test.ts\"",
+    "sync:shared": "node scripts/sync-shared.mjs",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy",
     "typecheck": "npm run typecheck --workspaces --if-present",

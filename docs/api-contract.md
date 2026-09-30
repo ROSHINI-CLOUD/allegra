@@ -153,7 +153,7 @@ GET    /api/me/liked                   → ApiResponse<UnifiedSong[]>
 POST   /api/me/liked                   { songId }
 DELETE /api/me/liked/:songId
 GET    /api/me/recently-played     → newest first, at most 25 (older listens are dropped on write)
-POST   /api/me/recently-played         { songId, playDuration }
+POST   /api/me/recently-played         { songId, playDuration, playedAt? }  (ISO, last 7 days: an offline play)
 GET/PATCH /api/me/settings
 ```
 
@@ -184,6 +184,40 @@ this week and of all time, from the play tally that `POST /api/me/recently-playe
 invented model result. Excludes already-liked or
 recently played recordings. `404` means there is no listening context yet. The legacy
 `/api/ai/recommendations` path is an alias for compatibility.
+
+## Library sync — additive, 2026-09-30
+
+Likes and playlists are the same on Allegra web and LuvLyrics (`apps/mobile`). No existing shape changed:
+the library routes above behave as before, but every one of them (and sharing, MCP, the guest merge) now
+writes through library **operations** (`packages/shared/library.ts`), stored per item in Convex
+(`convex/library.ts`). The rules:
+
+- Per item, the **newest change wins**, by when the listener made it. A late, older change never
+  overwrites a newer one; a time from the future is clamped to now.
+- Deletes are remembered, so a stale add cannot bring an item back.
+- `likedSongIds` and `libraries[].songIds` stay Allegra (Saavn) ids in their order. A song only a phone
+  can name (a Gaana ref) syncs between devices but does not appear in those arrays.
+
+| Endpoint | Auth | Body → response |
+|---|---|---|
+| `POST /api/me/library/ops` | Bearer | `{ ops: LibraryOp[] }` (1–100) → `{ rev, rejected: { index, reason }[] }`. A malformed batch is refused whole (`400`). `reason` is `no_playlist`, `missing_name` or `bad_time`. An op older than the current state is not a rejection; it simply loses. |
+| `GET /api/me/library/changes?since=<rev>&limit=<n>` | Bearer | → `{ rev, changes: LibraryChange[], more }`. `limit` ≤ 500, default 200. Pass `rev` back as `since` and repeat while `more`. `since=0` returns the whole library, including everything made before sync existed. |
+
+```
+SongRef       'saavn:<id>' | 'gaana:<id>'
+SongSnapshot  { ref, title, artist, album?, artwork (https URL or ''), duration (seconds) }
+LibraryOp     { op: 'like', ref, song?, at }  |  { op: 'unlike', ref, at }
+            | { op: 'playlist_upsert', playlistId, name?, description? (null clears), isPublic?, at }  (name needed to create)
+            | { op: 'playlist_delete', playlistId, at }
+            | { op: 'playlist_add', playlistId, ref, song?, at }  |  { op: 'playlist_remove', playlistId, ref, at }
+              at: ms since epoch when the listener did it.  playlistId: [A-Za-z0-9_-]{1,100}
+LibraryChange { kind: 'like', rev, ref, song?, liked, likedAt }
+            | { kind: 'playlist', rev, playlistId, name, description?, isPublic, coverUrl?, deleted, createdAt }
+            | { kind: 'playlist_item', rev, playlistId, ref, song?, deleted, addedAt }
+```
+
+Covers are never set through `ops`: only the website's checked upload flow sets one. A signed-in client
+can subscribe to the Convex query `library:myRev` to learn that its library changed elsewhere, then refetch.
 
 ## Accounts, taste and sharing — additive, shipped 2026-09-21
 

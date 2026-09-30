@@ -67,12 +67,30 @@ export interface UserStore {
   deleteShare(code: string): Promise<void>;
 }
 
+/**
+ * Once a LibraryStore owns a listener's library (their first like or playlist change), `save`
+ * keeps the stored likedSongIds/libraries and ignores the ones passed in: those arrays are a
+ * copy the library store rebuilds, and a whole-profile save (a taste or settings update) must
+ * never undo a library change that happened in between. convex/profiles.ts `save` does the same.
+ */
 export class MemoryUserStore implements UserStore {
   private readonly users = new Map<string, UserData>();
   private readonly shares = new Map<string, ShareRecord>();
+  private readonly libraryOwned = new Set<string>();
 
   public async get(userId: string): Promise<UserData | null> {
     return this.users.get(userId) ?? null;
+  }
+
+  /** For MemoryLibraryStore: from now on this listener's library copy is written only through writeLibraryCopy. */
+  public ownLibrary(userId: string): void {
+    this.libraryOwned.add(userId);
+  }
+
+  /** For MemoryLibraryStore: replace the profile's library copy. */
+  public writeLibraryCopy(userId: string, copy: Pick<UserData, 'likedSongIds' | 'libraries'>): void {
+    const user = this.users.get(userId);
+    if (user) this.users.set(userId, { ...user, likedSongIds: copy.likedSongIds, libraries: copy.libraries });
   }
 
   public async findByEmail(email: string): Promise<UserData | null> {
@@ -83,7 +101,11 @@ export class MemoryUserStore implements UserStore {
   }
 
   public async save(user: UserData): Promise<void> {
-    this.users.set(user.userId, user);
+    const existing = this.users.get(user.userId);
+    this.users.set(
+      user.userId,
+      existing && this.libraryOwned.has(user.userId) ? { ...user, likedSongIds: existing.likedSongIds, libraries: existing.libraries } : user
+    );
   }
 
   public async getShare(code: string): Promise<ShareRecord | null> {

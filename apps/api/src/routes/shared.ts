@@ -3,6 +3,7 @@ import { Router } from 'express';
 
 import type { AuthService } from '../auth/auth.js';
 import type { CatalogService } from '../catalog/catalog.js';
+import { opsForPlaylistCopy } from '../user/libraryOps.js';
 import type { LibraryRecord, UserData } from '../user/store.js';
 import { getUserId, sendUnauthorized } from './auth.js';
 import { sendFailure, sendSuccess } from './common.js';
@@ -40,7 +41,7 @@ export function sharedRouter(auth: AuthService, catalog: CatalogService): Router
       const code = existing?.code ?? newCode();
       if (!existing) await store.saveShare({ code, ownerId: user.userId, libraryId: library.id, createdAt: new Date().toISOString() });
       if (!library.isPublic) {
-        await auth.update({ ...user, libraries: user.libraries.map((item) => (item.id === library.id ? { ...item, isPublic: true } : item)) });
+        await auth.library.apply(user.userId, [{ op: 'playlist_upsert', playlistId: library.id, isPublic: true, at: Date.now() }]);
       }
       sendSuccess(response, { code, path: `#shared/${code}` }, existing ? 200 : 201);
     } catch (error) {
@@ -62,7 +63,7 @@ export function sharedRouter(auth: AuthService, catalog: CatalogService): Router
     try {
       const existing = await store.findShare(user.userId, library.id);
       if (existing) await store.deleteShare(existing.code);
-      await auth.update({ ...user, libraries: user.libraries.map((item) => (item.id === library.id ? { ...item, isPublic: false } : item)) });
+      await auth.library.apply(user.userId, [{ op: 'playlist_upsert', playlistId: library.id, isPublic: false, at: Date.now() }]);
       response.status(204).end();
     } catch (error) {
       sendFailure(response, error);
@@ -125,8 +126,9 @@ export function sharedRouter(auth: AuthService, catalog: CatalogService): Router
         createdAt: new Date().toISOString(),
         ...(source.coverUrl ? { coverUrl: source.coverUrl } : {})
       };
-      await auth.update({ ...user, libraries: [...user.libraries, stored] });
-      sendSuccess(response, stored, 201);
+      await auth.library.apply(user.userId, opsForPlaylistCopy(stored, Date.now()));
+      const saved = (await auth.getUser(user.userId))?.libraries.find((item) => item.id === stored.id);
+      sendSuccess(response, saved ?? stored, 201);
     } catch (error) {
       sendFailure(response, error);
     }

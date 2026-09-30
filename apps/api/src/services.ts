@@ -22,6 +22,7 @@ import { YouLyPlusProvider } from './providers/youlyplus.js';
 import { MusicBrainzReleaseAuthority, type ReleaseAuthority } from './providers/musicbrainz.js';
 import { SaavnProvider } from './providers/saavn.js';
 import { MemoryUserStore, type UserStore } from './user/store.js';
+import { ConvexLibraryStore } from './db/convexLibrary.js';
 
 export interface ServiceOptions {
   readonly saavnApiUrl?: string;
@@ -127,7 +128,11 @@ export function createServices(options: ServiceOptions): AppServices {
       store: userStore,
       guest: guestVerifier,
       verifier: new FirstMatchVerifier(guestVerifier, convexVerifier),
-      ...(convexStore ? { directory: convexStore } : {})
+      ...(convexStore ? { directory: convexStore } : {}),
+      // Likes and playlists live in Convex rows beside the profile; in memory otherwise.
+      ...(convexStore && options.convexUrl && options.convexServerSecret
+        ? { library: new ConvexLibraryStore({ url: options.convexUrl, serverSecret: options.convexServerSecret }) }
+        : {})
     }),
     translation: new TranslationService(cache, {
       ...(options.translation?.baseUrl ? { baseUrl: options.translation.baseUrl } : {}),

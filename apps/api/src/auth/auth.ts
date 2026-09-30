@@ -1,7 +1,9 @@
 import crypto from 'node:crypto';
 
 import { PersistenceError } from '../lib/errors.js';
-import type { UserData, UserStore } from '../user/store.js';
+import { MemoryLibraryStore, type LibraryStore } from '../user/library.js';
+import { opsForGuestMerge } from '../user/libraryOps.js';
+import { MemoryUserStore, type UserData, type UserStore } from '../user/store.js';
 import { mergeTaste } from '../user/taste.js';
 import type { GuestTokenVerifier, TokenVerifier, VerifiedCaller } from './verifier.js';
 
@@ -32,6 +34,8 @@ export interface AuthServiceOptions {
   /** Guest tokens plus, when configured, Convex Auth sessions. */
   readonly verifier: TokenVerifier;
   readonly directory?: IdentityDirectory;
+  /** Where likes and playlists change. Defaults to an in-memory one beside a MemoryUserStore. */
+  readonly library?: LibraryStore;
 }
 
 /**
@@ -45,12 +49,14 @@ export class AuthService {
   private readonly guest: GuestTokenVerifier;
   private readonly verifier: TokenVerifier;
   private readonly directory: IdentityDirectory | undefined;
+  private readonly libraryStore: LibraryStore | undefined;
 
   public constructor(options: AuthServiceOptions) {
     this.store = options.store;
     this.guest = options.guest;
     this.verifier = options.verifier;
     this.directory = options.directory;
+    this.libraryStore = options.library ?? (options.store instanceof MemoryUserStore ? new MemoryLibraryStore(options.store) : undefined);
   }
 
   public async createGuest(): Promise<Session> {
@@ -89,6 +95,9 @@ export class AuthService {
     const [guest, account] = await Promise.all([this.getUser(guestUserId), this.getUser(accountUserId)]);
     if (!guest?.isGuest || !account || !hasContent(guest)) return;
     await this.persist(mergeGuestInto(account, guest));
+    // Likes and playlists move as library operations, like every other library change.
+    const ops = opsForGuestMerge(account, guest, Date.now());
+    if (ops.length > 0) await this.library.apply(accountUserId, ops);
   }
 
   public async getUser(userId: string): Promise<UserData | null> {
@@ -101,6 +110,12 @@ export class AuthService {
 
   public async update(user: UserData): Promise<void> {
     await this.persist(user);
+  }
+
+  /** The only way likes and playlists change (user/library.ts). */
+  public get library(): LibraryStore {
+    if (!this.libraryStore) throw new PersistenceError();
+    return this.libraryStore;
   }
 
   /** Storage seam for the routes that need it (sharing looks up other people's playlists). */
