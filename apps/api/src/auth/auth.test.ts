@@ -63,7 +63,7 @@ test('signing in again reuses the profile instead of resetting it', async () => 
   await auth.resolveCaller('convex:user_abc');
   const profile = await auth.getUser('user_abc');
   assert.ok(profile);
-  await auth.update({ ...profile, likedSongIds: ['song-1'] });
+  await auth.updateProfile('user_abc', (current) => ({ ...current, likedSongIds: ['song-1'] }));
 
   await auth.resolveCaller('convex:user_abc');
   assert.deepEqual((await auth.getUser('user_abc'))?.likedSongIds, ['song-1']);
@@ -84,7 +84,7 @@ test('signing in keeps what the browser did as a guest', async () => {
   const guest = await auth.createGuest();
   const asGuest = await auth.getUser(guest.userId);
   assert.ok(asGuest);
-  await auth.update({ ...asGuest, likedSongIds: ['song-1'], recentlyPlayed: [{ songId: 'song-1', playDuration: 30, playedAt: '2026-01-01T00:00:00.000Z' }] });
+  await auth.updateProfile(guest.userId, (current) => ({ ...current, likedSongIds: ['song-1'], recentlyPlayed: [{ songId: 'song-1', playDuration: 30, playedAt: '2026-01-01T00:00:00.000Z' }] }));
 
   await auth.resolveCaller('convex:user_abc');
   await auth.linkGuest(guest.userId, 'user_abc');
@@ -98,8 +98,7 @@ test('signing in keeps what the browser did as a guest', async () => {
 test('linking is idempotent and never merges an account into itself', async () => {
   const { auth } = build();
   const guest = await auth.createGuest();
-  const asGuest = await auth.getUser(guest.userId);
-  await auth.update({ ...asGuest!, likedSongIds: ['song-1'] });
+  await auth.updateProfile(guest.userId, (current) => ({ ...current, likedSongIds: ['song-1'] }));
   await auth.resolveCaller('convex:user_abc');
 
   await auth.linkGuest(guest.userId, 'user_abc');

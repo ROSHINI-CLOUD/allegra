@@ -1,7 +1,8 @@
-import { v } from 'convex/values';
+import { v, type Infer } from 'convex/values';
 
 import { internal } from './_generated/api';
-import { internalMutation, mutation, query } from './_generated/server';
+import type { Doc } from './_generated/dataModel';
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { playStat } from './schema';
 
 const library = v.object({
@@ -99,31 +100,57 @@ export const byEmail = query({
   }
 });
 
+type ProfileData = Infer<typeof profileData>;
+
+async function profileRow(ctx: QueryCtx, userId: string): Promise<Doc<'profiles'> | null> {
+  return ctx.db
+    .query('profiles')
+    .withIndex('by_userId', (q) => q.eq('userId', userId))
+    .unique();
+}
+
+/** Every profile write: recent listens capped, the library copy kept, and the version moved on. */
+async function writeProfile(ctx: MutationCtx, existing: Doc<'profiles'>, data: ProfileData): Promise<void> {
+  // The cap is enforced here too, so no caller can grow the array past it.
+  const user = { ...data, recentlyPlayed: data.recentlyPlayed.slice(0, RECENTLY_PLAYED_LIMIT) };
+  // Once a listener's library lives in rows (convex/library.ts), this copy is rebuilt there
+  // and only there: a profile write carrying an older copy (a taste update racing a like from
+  // the phone) must not undo that change.
+  const libraryOwned = await ctx.db
+    .query('libraryState')
+    .withIndex('by_userId', (q) => q.eq('userId', user.userId))
+    .unique();
+  const kept = libraryOwned ? { likedSongIds: existing.likedSongIds, libraries: existing.libraries } : {};
+  // replace, not patch: a field the API dropped (a cleared display name) must actually go.
+  await ctx.db.replace(existing._id, { ...user, ...kept, version: (existing.version ?? 0) + 1 });
+}
+
+/** Creates a profile (or, from an API that predates `update`, overwrites one). */
 export const save = mutation({
   args: { secret: v.string(), user: profileData },
   handler: async (ctx, args) => {
     requireSecret(args.secret);
-    // The cap is enforced here too, so no caller can grow the array past it.
-    const user = { ...args.user, recentlyPlayed: args.user.recentlyPlayed.slice(0, RECENTLY_PLAYED_LIMIT) };
-    const existing = await ctx.db
-      .query('profiles')
-      .withIndex('by_userId', (q) => q.eq('userId', user.userId))
-      .unique();
-    if (existing) {
-      // Once a listener's library lives in rows (convex/library.ts), this copy is rebuilt there
-      // and only there: a whole-profile save carrying an older copy (a taste update racing a
-      // like from the phone) must not undo that change.
-      const libraryOwned = await ctx.db
-        .query('libraryState')
-        .withIndex('by_userId', (q) => q.eq('userId', user.userId))
-        .unique();
-      const kept = libraryOwned ? { likedSongIds: existing.likedSongIds, libraries: existing.libraries } : {};
-      // replace, not patch: a field the API dropped (a cleared display name) must actually go.
-      await ctx.db.replace(existing._id, { ...user, ...kept });
-    } else {
-      await ctx.db.insert('profiles', user);
-    }
+    const existing = await profileRow(ctx, args.user.userId);
+    if (existing) await writeProfile(ctx, existing, args.user);
+    else await ctx.db.insert('profiles', { ...args.user, recentlyPlayed: args.user.recentlyPlayed.slice(0, RECENTLY_PLAYED_LIMIT) });
     return null;
+  }
+});
+
+/**
+ * Compare-and-set: writes the profile only if nobody wrote it since the caller read it at
+ * `expectedVersion`, and answers false otherwise so the caller re-reads and applies its change
+ * again (apps/api/src/db/convex.ts). Two devices changing taste, plays or settings at once
+ * therefore both land instead of the later write silently undoing the earlier one.
+ */
+export const update = mutation({
+  args: { secret: v.string(), user: profileData, expectedVersion: v.number() },
+  handler: async (ctx, args) => {
+    requireSecret(args.secret);
+    const existing = await profileRow(ctx, args.user.userId);
+    if (!existing || (existing.version ?? 0) !== args.expectedVersion) return false;
+    await writeProfile(ctx, existing, args.user);
+    return true;
   }
 });
 

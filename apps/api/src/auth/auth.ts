@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { PersistenceError } from '../lib/errors.js';
 import { MemoryLibraryStore, type LibraryStore } from '../user/library.js';
 import { opsForGuestMerge } from '../user/libraryOps.js';
-import { MemoryUserStore, type UserData, type UserStore } from '../user/store.js';
+import { MemoryUserStore, type ProfileChange, type UserData, type UserStore } from '../user/store.js';
 import { mergeTaste } from '../user/taste.js';
 import type { GuestTokenVerifier, TokenVerifier, VerifiedCaller } from './verifier.js';
 
@@ -94,7 +94,7 @@ export class AuthService {
     if (guestUserId === accountUserId) return;
     const [guest, account] = await Promise.all([this.getUser(guestUserId), this.getUser(accountUserId)]);
     if (!guest?.isGuest || !account || !hasContent(guest)) return;
-    await this.persist(mergeGuestInto(account, guest));
+    await this.updateProfile(accountUserId, (current) => mergeGuestInto(current, guest));
     // Likes and playlists move as library operations, like every other library change.
     const ops = opsForGuestMerge(account, guest, Date.now());
     if (ops.length > 0) await this.library.apply(accountUserId, ops);
@@ -108,8 +108,17 @@ export class AuthService {
     }
   }
 
-  public async update(user: UserData): Promise<void> {
-    await this.persist(user);
+  /**
+   * Changes a profile atomically (UserStore.update): `change` gets the newest copy and may run
+   * more than once, so look things up before calling this. Resolves to the saved profile, or
+   * null when there is none.
+   */
+  public async updateProfile(userId: string, change: ProfileChange): Promise<UserData | null> {
+    try {
+      return await this.store.update(userId, change);
+    } catch {
+      throw new PersistenceError();
+    }
   }
 
   /** The only way likes and playlists change (user/library.ts). */

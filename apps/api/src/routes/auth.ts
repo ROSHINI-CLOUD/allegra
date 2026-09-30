@@ -91,10 +91,16 @@ export function authRouter(auth: AuthService): Router {
       }
       const raw = asRecord(request.body).displayName;
       const displayName = typeof raw === 'string' ? raw.trim().slice(0, 60) : '';
-      const rest = { ...user };
-      delete rest.displayName;
-      const updated: UserData = { ...rest, ...(displayName ? { displayName } : {}) };
-      await auth.update(updated);
+      const updated = await auth.updateProfile(user.userId, (current) => {
+        const rest = { ...current };
+        delete rest.displayName;
+        const next: UserData = { ...rest, ...(displayName ? { displayName } : {}) };
+        return next;
+      });
+      if (!updated) {
+        sendUnauthorized(response);
+        return;
+      }
       sendSuccess(response, publicProfile(updated));
     } catch (error) {
       sendFailure(response, error);

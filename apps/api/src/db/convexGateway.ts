@@ -19,6 +19,7 @@ export const CONVEX_QUERIES = [
 ] as const;
 export const CONVEX_MUTATIONS = [
   'profiles:save',
+  'profiles:update',
   'shares:save',
   'shares:remove',
   'oauth:consume',

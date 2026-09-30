@@ -57,10 +57,25 @@ export interface ShareRecord {
   readonly createdAt: string;
 }
 
+/**
+ * A change to one profile, computed from its newest copy. Return the new profile, or null to
+ * leave it as it is. It may run more than once (see UserStore.update), so it must not have side
+ * effects: look anything up first, then describe the change.
+ */
+export type ProfileChange = (current: UserData) => UserData | null;
+
 export interface UserStore {
   get(userId: string): Promise<UserData | null>;
   findByEmail(email: string): Promise<UserData | null>;
+  /** Creates a profile. Changing one goes through `update`, so no write can undo another. */
   save(user: UserData): Promise<void>;
+  /**
+   * Applies `change` to the newest copy of the profile and saves it only if nobody else saved
+   * in between; otherwise re-reads and applies it again. Two devices changing taste, plays or
+   * settings at once therefore both land. Resolves to the saved profile (the unchanged one when
+   * `change` returns null), or null when there is no such profile.
+   */
+  update(userId: string, change: ProfileChange): Promise<UserData | null>;
   getShare(code: string): Promise<ShareRecord | null>;
   findShare(ownerId: string, libraryId: string): Promise<ShareRecord | null>;
   saveShare(share: ShareRecord): Promise<void>;
@@ -101,11 +116,25 @@ export class MemoryUserStore implements UserStore {
   }
 
   public async save(user: UserData): Promise<void> {
+    this.write(user);
+  }
+
+  private write(user: UserData): void {
     const existing = this.users.get(user.userId);
     this.users.set(
       user.userId,
       existing && this.libraryOwned.has(user.userId) ? { ...user, likedSongIds: existing.likedSongIds, libraries: existing.libraries } : user
     );
+  }
+
+  public async update(userId: string, change: ProfileChange): Promise<UserData | null> {
+    // No await between the read and the write, so nothing can land in between.
+    const current = this.users.get(userId);
+    if (!current) return null;
+    const next = change(current);
+    if (!next) return current;
+    this.write({ ...next, userId });
+    return this.users.get(userId) ?? null;
   }
 
   public async getShare(code: string): Promise<ShareRecord | null> {

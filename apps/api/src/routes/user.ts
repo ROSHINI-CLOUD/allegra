@@ -135,7 +135,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
     try {
       const song = await lookUp(catalog, id);
       await applyLibrary(auth, user.userId, [{ op: 'playlist_add', playlistId: library.id, ref, ...withSnapshot(song), at: Date.now() }], covers);
-      if (!library.songIds.includes(id) && song) await saveUser(auth, teach(user, song, SIGNAL_WEIGHT.playlistAdd));
+      if (!library.songIds.includes(id) && song) await learnFrom(auth, user.userId, song, SIGNAL_WEIGHT.playlistAdd);
       sendSuccess(response, await libraryAfter(auth, user.userId, library.id));
     } catch (error) {
       sendFailure(response, error);
@@ -181,7 +181,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
     try {
       const song = await lookUp(catalog, id);
       await applyLibrary(auth, user.userId, [{ op: 'like', ref, ...withSnapshot(song), at: Date.now() }], covers);
-      if (!user.likedSongIds.includes(id) && song) await saveUser(auth, teach(user, song, SIGNAL_WEIGHT.like));
+      if (!user.likedSongIds.includes(id) && song) await learnFrom(auth, user.userId, song, SIGNAL_WEIGHT.like);
       sendSuccess(response, { songId: id }, 201);
     } catch (error) {
       sendFailure(response, error);
@@ -197,7 +197,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
       if (ref) await applyLibrary(auth, user.userId, [{ op: 'unlike', ref, at: Date.now() }], covers);
       if (user.likedSongIds.includes(id)) {
         const song = await lookUp(catalog, id);
-        if (song) await saveUser(auth, teach(user, song, SIGNAL_WEIGHT.unlike));
+        if (song) await learnFrom(auth, user.userId, song, SIGNAL_WEIGHT.unlike);
       }
       response.status(204).end();
     } catch (error) {
@@ -218,14 +218,16 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
       const result = await applyLibrary(auth, user.userId, ops, covers);
       // What the device did teaches taste the same way the website's buttons do.
       const rejected = new Set(result.rejected.map((item) => item.index));
-      let taught = user;
+      const lessons: { song: SongSnapshot; weight: number }[] = [];
       ops.forEach((op, index) => {
         if (rejected.has(index) || !('song' in op) || !op.song) return;
         const alreadyLiked = user.likedSongIds.some((id) => refForId(id) === op.ref);
-        if (op.op === 'like' && !alreadyLiked) taught = teach(taught, op.song, SIGNAL_WEIGHT.like);
-        if (op.op === 'playlist_add') taught = teach(taught, op.song, SIGNAL_WEIGHT.playlistAdd);
+        if (op.op === 'like' && !alreadyLiked) lessons.push({ song: op.song, weight: SIGNAL_WEIGHT.like });
+        if (op.op === 'playlist_add') lessons.push({ song: op.song, weight: SIGNAL_WEIGHT.playlistAdd });
       });
-      if (taught !== user) await saveUser(auth, taught);
+      if (lessons.length > 0) {
+        await auth.updateProfile(user.userId, (current) => lessons.reduce((taught, lesson) => teach(taught, lesson.song, lesson.weight), current));
+      }
       sendSuccess(response, { rev: result.rev, rejected: result.rejected });
     } catch (error) {
       sendFailure(response, error);
@@ -266,15 +268,18 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
       return;
     }
     // A phone that played offline sends when it happened; anything else is "now".
-    const playedAt = playedAtFrom(body.playedAt) ?? new Date().toISOString();
-    const next = [{ songId: id, playDuration, playedAt }, ...user.recentlyPlayed.filter((item) => item.songId !== id)]
-      .sort((left, right) => right.playedAt.localeCompare(left.playedAt))
-      .slice(0, RECENTLY_PLAYED_LIMIT);
+    const entry = { songId: id, playDuration, playedAt: playedAtFrom(body.playedAt) ?? new Date().toISOString() };
     try {
       // Pressing play is a mild vote. How long they stayed arrives separately, as a listen signal.
-      const taught = await learn(catalog, user, id, (song) => (playDuration > 0 ? playWeight(playDuration, song.duration) : 0.3));
-      await saveUser(auth, { ...taught, recentlyPlayed: next });
-      sendSuccess(response, next.find((item) => item.songId === id) ?? next[0], 201);
+      const song = await lookUp(catalog, id);
+      await auth.updateProfile(user.userId, (current) => {
+        const recentlyPlayed = [entry, ...current.recentlyPlayed.filter((item) => item.songId !== id)]
+          .sort((left, right) => right.playedAt.localeCompare(left.playedAt))
+          .slice(0, RECENTLY_PLAYED_LIMIT);
+        const taught = song ? teach(current, song, playDuration > 0 ? playWeight(playDuration, song.duration) : 0.3) : current;
+        return { ...taught, recentlyPlayed };
+      });
+      sendSuccess(response, entry, 201);
     } catch (error) {
       sendFailure(response, error);
     }
@@ -290,13 +295,13 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
     const user = await authenticatedUser(auth, request, response);
     if (!user) return;
     const body = asRecord(request.body);
-    const settings: Record<string, string | number | boolean> = { ...sanitizeSettings(user.settings), ...sanitizeSettings(body) };
+    const changed: Record<string, string | number | boolean> = sanitizeSettings(body);
     // Languages arrive as ["hindi", "tamil"] or "hindi,tamil"; stored as a known, ordered list.
     // An empty list means every language.
-    if ('languages' in body) settings.languages = parseLanguages(body.languages).join(',');
+    if ('languages' in body) changed.languages = parseLanguages(body.languages).join(',');
     try {
-      await saveUser(auth, { ...user, settings });
-      sendSuccess(response, settings);
+      const saved = await auth.updateProfile(user.userId, (current) => ({ ...current, settings: { ...sanitizeSettings(current.settings), ...changed } }));
+      sendSuccess(response, sanitizeSettings(saved?.settings ?? {}));
     } catch (error) {
       sendFailure(response, error);
     }
@@ -315,13 +320,15 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
     const body = asRecord(request.body);
     const artists = stringList(body.artists, 30);
     const languages = stringList(body.languages, 8);
+    // Onboarding's language picks become the language setting; Settings changes it later.
+    const picked = parseLanguages(languages);
     try {
-      const taste = applySeeds(user.taste, artists, languages);
-      // Onboarding's language picks become the language setting; Settings changes it later.
-      const picked = parseLanguages(languages);
-      const settings = picked.length > 0 ? { ...user.settings, languages: picked.join(',') } : user.settings;
-      await saveUser(auth, { ...user, taste, settings });
-      sendSuccess(response, tasteSummary(taste));
+      const saved = await auth.updateProfile(user.userId, (current) => ({
+        ...current,
+        taste: applySeeds(current.taste, artists, languages),
+        settings: picked.length > 0 ? { ...current.settings, languages: picked.join(',') } : current.settings
+      }));
+      sendSuccess(response, tasteSummary(saved?.taste));
     } catch (error) {
       sendFailure(response, error);
     }
@@ -339,8 +346,7 @@ export function userRouter(auth: AuthService, catalog: CatalogService, covers?: 
       return;
     }
     try {
-      const taught = await learn(catalog, user, id, (song) => playWeight(seconds, song.duration));
-      if (taught !== user) await saveUser(auth, taught);
+      await learn(auth, catalog, user.userId, id, (song) => playWeight(seconds, song.duration));
       response.status(204).end();
     } catch (error) {
       sendFailure(response, error);
@@ -371,18 +377,18 @@ function stringList(value: unknown, max: number): string[] {
 }
 
 /**
- * Folds one behaviour on one song into the user's taste. Looking the song up can fail (provider down); that must
- * never fail the action the listener took, so on any trouble the user is returned untouched.
+ * Folds one behaviour on one song into the listener's taste and saves it. Looking the song up can
+ * fail (provider down); that must never fail the action the listener took, so then nothing is learned.
  */
-export async function learn(catalog: CatalogService, user: UserData, id: string, weightFor: (song: { duration: number }) => number): Promise<UserData> {
-  try {
-    const [song] = await catalog.getSongs([id]);
-    if (!song) return user;
-    const taste = applySignal(user.taste, { artist: song.artist, ...(song.language ? { language: song.language } : {}) }, weightFor(song));
-    return { ...user, taste };
-  } catch {
-    return user;
-  }
+export async function learn(auth: AuthService, catalog: CatalogService, userId: string, id: string, weightFor: (song: { duration: number }) => number): Promise<UserData | null> {
+  const song = await lookUp(catalog, id);
+  if (!song) return auth.getUser(userId);
+  return learnFrom(auth, userId, song, weightFor(song));
+}
+
+/** One behaviour on one known song, folded into taste atomically. */
+function learnFrom(auth: AuthService, userId: string, song: { readonly artist: string; readonly language?: string }, weight: number): Promise<UserData | null> {
+  return auth.updateProfile(userId, (current) => teach(current, song, weight));
 }
 
 async function authenticatedUser(auth: AuthService, request: Parameters<typeof getUserId>[1], response: Parameters<typeof sendUnauthorized>[0]): Promise<UserData | null> {
@@ -454,6 +460,3 @@ function playedAtFrom(value: unknown): string | null {
   return new Date(Math.min(time, now)).toISOString();
 }
 
-async function saveUser(auth: AuthService, user: UserData): Promise<void> {
-  await auth.update(user);
-}

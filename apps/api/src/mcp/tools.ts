@@ -190,8 +190,7 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
       if (!ref) return fail("Couldn't find that song.");
       const adding = !library.songIds.includes(args.songId);
       await auth.library.apply(caller.user.userId, [{ op: 'playlist_add', playlistId: library.id, ref, at: Date.now() }]);
-      const taught = adding ? await learn(catalog, caller.user, args.songId, () => SIGNAL_WEIGHT.playlistAdd) : caller.user;
-      if (taught !== caller.user) await auth.update(taught);
+      if (adding) await learn(auth, catalog, caller.userId, args.songId, () => SIGNAL_WEIGHT.playlistAdd);
       const updated: LibraryRecord = { ...library, songIds: adding ? [...library.songIds, args.songId] : library.songIds };
       return ok(librarySummary(updated));
     })
@@ -228,12 +227,10 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
         const liking = args.action === 'like';
         const changes = liking !== user.likedSongIds.includes(args.songId);
         await auth.library.apply(user.userId, [{ op: liking ? 'like' : 'unlike', ref, at: Date.now() }]);
-        const taught = changes ? await learn(catalog, user, args.songId, () => (liking ? SIGNAL_WEIGHT.like : SIGNAL_WEIGHT.unlike)) : user;
-        if (taught !== user) await auth.update(taught);
+        if (changes) await learn(auth, catalog, user.userId, args.songId, () => (liking ? SIGNAL_WEIGHT.like : SIGNAL_WEIGHT.unlike));
         return ok({ songId: args.songId, action: args.action, liked: liking });
       }
-      const taught = await learn(catalog, user, args.songId, () => SIGNAL_WEIGHT.skip);
-      if (taught !== user) await auth.update(taught);
+      await learn(auth, catalog, user.userId, args.songId, () => SIGNAL_WEIGHT.skip);
       return ok({ songId: args.songId, action: args.action });
     })
   );
@@ -245,9 +242,8 @@ export function registerTools(server: McpServer, services: AppServices, userId: 
       inputSchema: { songId: SONG_ID, playedSeconds: z.number().min(0).max(3600) }
     },
     bound(async (args, caller) => {
-      const taught = await learn(catalog, caller.user, args.songId, (song) => playWeight(args.playedSeconds, song.duration));
-      if (taught !== caller.user) await auth.update(taught);
-      return ok(tasteSummary(taught.taste));
+      const taught = await learn(auth, catalog, caller.userId, args.songId, (song) => playWeight(args.playedSeconds, song.duration));
+      return ok(tasteSummary(taught?.taste ?? caller.user.taste));
     })
   );
 }

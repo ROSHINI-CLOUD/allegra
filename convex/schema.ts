@@ -88,7 +88,9 @@ export default defineSchema({
     displayName: v.optional(v.string()),
     email: v.optional(v.string()),
     taste: v.optional(taste),
-    playStats: v.optional(v.array(playStat))
+    playStats: v.optional(v.array(playStat)),
+    /** Moves on with every profile write; profiles.update compares it so concurrent writes cannot undo each other. */
+    version: v.optional(v.number())
   })
     .index('by_userId', ['userId'])
     .index('by_email', ['email']),

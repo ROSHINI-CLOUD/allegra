@@ -194,6 +194,9 @@ test('invalid tokens are rejected and persistence failures stay in the envelope'
     async save() {
       throw new Error('dynamo down');
     },
+    async update() {
+      throw new Error('dynamo down');
+    },
     async getShare() {
       return null;
     },

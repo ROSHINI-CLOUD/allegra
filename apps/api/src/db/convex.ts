@@ -1,7 +1,18 @@
 import type { CoverStorage, StoredCover } from '../lib/covers.js';
+import { PersistenceError } from '../lib/errors.js';
 import type { GrantLedger } from '../oauth/ledger.js';
-import type { LibraryRecord, RecentRecord, ShareRecord, TasteEntry, TasteProfile, UserData, UserStore } from '../user/store.js';
+import type { LibraryRecord, ProfileChange, RecentRecord, ShareRecord, TasteEntry, TasteProfile, UserData, UserStore } from '../user/store.js';
 import type { ConvexGateway } from './convexGateway.js';
+
+/** Writes that lose the race this many times in a row give up rather than spin. */
+const UPDATE_ATTEMPTS = 5;
+
+/** The profile row's write counter (convex/profiles.ts); rows written before it existed count as 0. */
+function versionOf(raw: unknown): number {
+  return typeof raw === 'object' && raw !== null && typeof (raw as Record<string, unknown>).version === 'number'
+    ? ((raw as Record<string, unknown>).version as number)
+    : 0;
+}
 
 /** Profiles and shares in Convex (convex/profiles.ts, convex/shares.ts). */
 export class ConvexUserStore implements UserStore {
@@ -17,6 +28,20 @@ export class ConvexUserStore implements UserStore {
 
   public async save(user: UserData): Promise<void> {
     await this.convex.mutation('profiles:save', { user });
+  }
+
+  public async update(userId: string, change: ProfileChange): Promise<UserData | null> {
+    for (let attempt = 0; attempt < UPDATE_ATTEMPTS; attempt++) {
+      const raw = await this.convex.query('profiles:get', { userId });
+      const current = parseUserData(raw);
+      if (!current) return null;
+      const next = change(current);
+      if (!next) return current;
+      const user = { ...next, userId };
+      // False: someone wrote in between. Read their write and apply the change on top of it.
+      if ((await this.convex.mutation('profiles:update', { user, expectedVersion: versionOf(raw) })) === true) return user;
+    }
+    throw new PersistenceError();
   }
 
   public async getShare(code: string): Promise<ShareRecord | null> {
