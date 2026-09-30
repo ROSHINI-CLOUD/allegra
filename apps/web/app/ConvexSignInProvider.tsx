@@ -1,11 +1,15 @@
 'use client';
 
 import { ConvexAuthProvider, useAuthActions, useAuthToken } from '@convex-dev/auth/react';
-import { ConvexReactClient } from 'convex/react';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ConvexReactClient, useQuery } from 'convex/react';
+import { makeFunctionReference } from 'convex/server';
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { SignInContext, type SignInApi } from '../src/auth/SignInContext';
 import { linkGuestSession, setAccountToken } from '../src/lib/api';
+
+/** convex/library.ts myRev: the signed-in listener's newest library revision (null signed out). */
+const libraryRevision = makeFunctionReference<'query', Record<string, never>, number | null>('library:myRev');
 
 // One client per tab. Built at module scope so a re-render never reconnects.
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -65,5 +69,42 @@ function SignInBridge({ children }: { readonly children: ReactNode }) {
     [signedIn, loading, signInWithGoogle, handleSignOut]
   );
 
-  return <SignInContext.Provider value={value}>{children}</SignInContext.Provider>;
+  return (
+    <SignInContext.Provider value={value}>
+      {signedIn ? (
+        <QuietBoundary>
+          <LibraryRevisionWatcher />
+        </QuietBoundary>
+      ) : null}
+      {children}
+    </SignInContext.Provider>
+  );
+}
+
+/**
+ * Likes and playlists changed on another device (the phone): tell the app to reload them. The
+ * subscription costs nothing until the revision actually moves.
+ */
+function LibraryRevisionWatcher(): null {
+  const libraryRev = useQuery(libraryRevision, {});
+  const seenRev = useRef<number | null>(null);
+  useEffect(() => {
+    if (typeof libraryRev !== 'number') return;
+    if (seenRev.current !== null && seenRev.current !== libraryRev) window.dispatchEvent(new CustomEvent('allegra:library'));
+    seenRev.current = libraryRev;
+  }, [libraryRev]);
+  return null;
+}
+
+/** useQuery throws when the query fails (e.g. Convex not yet deployed): lose live refresh, never the page. */
+class QuietBoundary extends Component<{ readonly children: ReactNode }, { readonly failed: boolean }> {
+  public override state = { failed: false };
+
+  public static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  public override render(): ReactNode {
+    return this.state.failed ? null : this.props.children;
+  }
 }

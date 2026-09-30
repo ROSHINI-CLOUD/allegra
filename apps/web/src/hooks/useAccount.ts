@@ -57,8 +57,14 @@ export function useAccount(signedIn: boolean, onSessionChange: () => void): Acco
     const onAccount = (): void => {
       void refresh().then(() => changed.current());
     };
+    // The library changed on another device: only likes and playlists need reloading.
+    const onLibrary = (): void => changed.current();
     window.addEventListener('allegra:account', onAccount);
-    return () => window.removeEventListener('allegra:account', onAccount);
+    window.addEventListener('allegra:library', onLibrary);
+    return () => {
+      window.removeEventListener('allegra:account', onAccount);
+      window.removeEventListener('allegra:library', onLibrary);
+    };
   }, [refresh]);
 
   const wasSignedIn = useRef(signedIn);
