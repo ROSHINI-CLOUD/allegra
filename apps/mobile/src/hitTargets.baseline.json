@@ -1,1 +1,7 @@
-{}
+{
+  "components/allegra/home.tsx": 2,
+  "components/connect/ConnectRemotePlayer.tsx": 4,
+  "components/import/SpotifySyncPanel.tsx": 2,
+  "components/stream/AddListSheet.tsx": 4,
+  "screens/PlaylistDetailScreen.tsx": 1
+}
