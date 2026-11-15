@@ -31,6 +31,7 @@ import { useArtworkPalette } from '../components/allegra/useArtworkPalette';
 import AllegraAccountSettings from '../components/settings/AllegraAccountSettings';
 import DynamicIslandSettings from '../components/settings/DynamicIslandSettings';
 import LuvLinkSettings from '../components/settings/LuvLinkSettings';
+import ListenbrainzSettings from '../components/settings/ListenbrainzSettings';
 import DownloadsFolderRows from '../components/settings/DownloadsFolderRows';
 import SettingsGlow from '../components/settings/SettingsGlow';
 import * as Kit from '../components/settings/SettingsKit';
@@ -439,6 +440,8 @@ const SettingsScreen: React.FC<Props> = ({ route, navigation }) => {
         </Section>
 
         <LuvLinkSettings onLayout={at('together')} onNotice={setNotice} />
+
+        <ListenbrainzSettings onLayout={at('listenbrainz')} onNotice={setNotice} />
 
         <Section id="library" summary={summaries.library} icon="folder-open-outline" title="Library and data" lead="Your songs, backups and clean-up." onLayout={at('library')}>
           <DownloadsFolderRows onNotice={setNotice} />

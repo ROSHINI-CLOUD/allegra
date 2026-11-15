@@ -171,6 +171,9 @@ const App: React.FC = () => {
           runWhenIdle('lyrics scan queue', () =>
             import('./store/lyricsScanQueueStore').then(m => m.useLyricsScanQueueStore.getState().hydrateFromDb()), 150);
 
+          // Optional ListenBrainz copy of the history: loads the saved link and sends what is waiting.
+          runWhenIdle('listenbrainz', () => import('./services/listenbrainz/listenbrainzSync').then(m => m.startListenbrainzSync()), 900);
+
           // Build or verify the FTS5 search index (Android only; no-op on iOS).
           runWhenIdle('search index', () => ensureSearchIndex(), 600);
 
