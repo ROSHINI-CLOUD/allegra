@@ -81,10 +81,13 @@ describe('mini player and navigation controls', () => {
   });
 
   // The mini player sits in from the screen edge, with a soft rim above the black navigation bar.
-  it('gives the mini player rounded inset edges and a slightly inset play control', () => {
+  // Owner, 2026-11-15: the mini player fills the width and takes the player sheet's outline (navigation/miniShell), so
+  // closing the player ends on one shape; the play control keeps its place (miniShell.test).
+  it('gives the mini player the sheet’s full-width outline and keeps the play control inset', () => {
     const pill = code(read('PillPlayer.tsx'));
-    expect(pill).toMatch(/shell: \{ position: 'absolute', left: Space\.sm, right: Space\.sm, zIndex: 15, borderRadius: Radius\.sheet, overflow: 'hidden', borderWidth: StyleSheet\.hairlineWidth, borderColor: ShellFrost\.miniRim \}/);
-    expect(pill).toMatch(/playButtonOffset: \{ marginRight: Space\.xxs \}/);
+    expect(pill).toMatch(/shell: \{ position: 'absolute', \.\.\.miniShellOutline, zIndex: 15, overflow: 'hidden', borderTopWidth: StyleSheet\.hairlineWidth, borderColor: ShellFrost\.miniRim \}/);
+    expect(pill).toMatch(/paddingRight: MINI_ROW_PADDING_RIGHT \+ MINI_CONTENT_SIDE_INSET/);
+    expect(pill).toMatch(/playButtonOffset: \{ marginRight: MINI_PLAY_OFFSET \}/);
     const scrubber = code(read('MiniScrubber.tsx'));
     expect(scrubber).toMatch(/height: SCRUB_LINE, overflow: 'hidden', backgroundColor: Glass\.selected/);
     expect(scrubber).not.toMatch(/Surface\.control/);

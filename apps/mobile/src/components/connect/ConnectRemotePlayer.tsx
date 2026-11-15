@@ -26,6 +26,7 @@ import { Tactile, TactileRow } from '../../ui';
 import { beginSheetDrag, settleSheet, usePlayerSheetMotion } from '../../navigation/usePlayerSheetMotion';
 import { playerCoverFrom } from '../../navigation/sheetProgress';
 import { cardCoverRect, heroCoverRect, playerContentOpacity } from '../../navigation/playerTransition';
+import { SHEET_TOP_RADIUS } from '../../navigation/miniShell';
 import { MiniPlayerGlow } from '../MiniPlayerGlow';
 import CoverGhost from '../player/CoverGhost';
 import { heroHeight } from '../player/AppleBackdrop';
@@ -474,7 +475,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   sheetClip: { overflow: 'hidden' },
   backdrop: { backgroundColor: '#000' },
-  container: { flex: 1, backgroundColor: '#0b0b0f', overflow: 'hidden', borderTopLeftRadius: Radius.panel, borderTopRightRadius: Radius.panel },
+  container: { flex: 1, backgroundColor: '#0b0b0f', overflow: 'hidden', borderTopLeftRadius: SHEET_TOP_RADIUS, borderTopRightRadius: SHEET_TOP_RADIUS },
   playerLayer: { ...StyleSheet.absoluteFillObject },
   contentArea: { flex: 1 },
   modes: { flexDirection: 'row', gap: 8, paddingBottom: 12 },

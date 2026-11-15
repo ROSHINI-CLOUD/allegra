@@ -46,6 +46,7 @@ import { shouldExitLyricsFullscreen, shouldOpenLyricsFullscreen, startsInFooter 
 import { fullscreenClearance } from '../components/player/fullscreenFooter';
 import { beginSheetDrag, settleSheet, usePlayerSheetMotion } from '../navigation/usePlayerSheetMotion';
 import { cardCoverRect, heroCoverRect, playerContentOpacity } from '../navigation/playerTransition';
+import { SHEET_TOP_RADIUS } from '../navigation/miniShell';
 import { shouldCloseSheet } from '../navigation/sheetClose';
 import { playerCoverFrom } from '../navigation/sheetProgress';
 import { MiniPlayerGlow } from '../components/MiniPlayerGlow';
@@ -1123,8 +1124,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0b0b0f',
     overflow: 'hidden',
-    borderTopLeftRadius: Radius.panel,
-    borderTopRightRadius: Radius.panel,
+    // The mini player's outline (navigation/miniShell): the close lands on exactly the pill's shape.
+    borderTopLeftRadius: SHEET_TOP_RADIUS,
+    borderTopRightRadius: SHEET_TOP_RADIUS,
   },
   surfaceSheen: {
     position: 'absolute',

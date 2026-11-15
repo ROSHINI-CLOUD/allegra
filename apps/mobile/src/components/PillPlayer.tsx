@@ -17,6 +17,7 @@ import { playerCoverFrom, playerDrag, playerSheetProgress, createSheetProgress }
 import { miniContentOpacity } from '../navigation/playerTransition';
 import { useSettingsStore } from '../store/settingsStore';
 import { MINI_COVER_SIZE, SEEK_BAND_HEIGHT, miniRowHeight, shellNavHeight } from '../navigation/v6Shell';
+import { MINI_CONTENT_SIDE_INSET, MINI_PLAY_OFFSET, MINI_ROW_PADDING_RIGHT, miniShellOutline } from '../navigation/miniShell';
 import { miniPlayerLabel } from '../playback/miniPlayerLabel';
 import { miniSwipe, swipeFollow } from '../playback/miniSwipe';
 import { durationSV, positionSV } from '../playback/positionBus';
@@ -282,11 +283,13 @@ const ACTION_GLYPH = 26;
 const ACTION_SLOT = 48;
 const ACTION_SLOP = { left: 0, right: 0, top: 0, bottom: 0 } as const;
 const styles = StyleSheet.create({
-  // MiniPlayerGlow is the surface; the inset, rim and larger corners give it a clear edge above the black nav bar.
-  shell: { position: 'absolute', left: Space.sm, right: Space.sm, zIndex: 15, borderRadius: Radius.sheet, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: ShellFrost.miniRim },
-  row: { flexDirection: 'row', alignItems: 'center', paddingLeft: Space.xs, paddingRight: Space.xxs },
+  // MiniPlayerGlow is the surface. Full width with the player sheet's own top corners (navigation/miniShell): the
+  // sheet closes onto exactly this outline, so the close ends on one shape. The rim marks the top edge.
+  shell: { position: 'absolute', ...miniShellOutline, zIndex: 15, overflow: 'hidden', borderTopWidth: StyleSheet.hairlineWidth, borderColor: ShellFrost.miniRim },
+  // The inset the shell used to have sits inside it, so the cover and play button keep their places.
+  row: { flexDirection: 'row', alignItems: 'center', paddingLeft: Space.xs + MINI_CONTENT_SIDE_INSET, paddingRight: MINI_ROW_PADDING_RIGHT + MINI_CONTENT_SIDE_INSET },
   actions: { flexDirection: 'row', alignItems: 'center' },
-  playButtonOffset: { marginRight: Space.xxs },
+  playButtonOffset: { marginRight: MINI_PLAY_OFFSET },
   action: { width: ACTION_SLOT, height: Control.target, alignItems: 'center', justifyContent: 'center' },
   main: { flex: 1, minWidth: 0 }, info: { justifyContent: 'center' },
   follow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, paddingLeft: Space.xs },
