@@ -26,8 +26,9 @@ export const removeUntilStable = (value: string, pattern: RegExp): string => {
 export const stripTags = (value: string): string => removeUntilStable(value, /<[^>]+>/g);
 
 const NON_CONTENT_BLOCKS: readonly RegExp[] = [
-  /<script\b[\s\S]*?<\/script\s*>/gi,
-  /<style\b[\s\S]*?<\/style\s*>/gi,
+  // A browser ends the block at `</script` plus anything up to `>` (`</script >`, `</script\t\n bar>`), so match that.
+  /<script\b[\s\S]*?<\/script[^>]*>/gi,
+  /<style\b[\s\S]*?<\/style[^>]*>/gi,
   /<!--[\s\S]*?--!?>/g,
 ];
 

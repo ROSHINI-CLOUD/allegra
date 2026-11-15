@@ -23,6 +23,7 @@ describe('removeUntilStable', () => {
 describe('removeNonContentBlocks', () => {
   it('drops script and style blocks even when the closing tag has spaces', () => {
     expect(removeNonContentBlocks('a<script>x()</script >b')).toBe('ab');
+    expect(removeNonContentBlocks('a<script>x()</script\t\n bar>b<style>p{}</style junk>c')).toBe('abc');
     expect(removeNonContentBlocks('a<SCRIPT type="x">x()</SCRIPT\n>b<style>p{}</style  >c')).toBe('abc');
   });
 
