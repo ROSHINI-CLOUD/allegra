@@ -19,6 +19,8 @@ import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -34,6 +36,7 @@ import { LrcSearchModal } from '../components/LrcSearchModal';
 import { Choice, Row, Section } from '../components/settings/SettingsKit';
 import { Toast } from '../components/Toast';
 import { Control, Glass, Radius, Signal, Surface } from '../constants/allegraTheme';
+import { ConfirmSheet } from '../ui';
 import { GeniusService } from '../services/GeniusService';
 import { lyricaService } from '../services/LyricaService';
 import { SearchResult } from '../services/LyricsRepository';
@@ -44,7 +47,7 @@ import { RootStackScreenProps } from '../types/navigation';
 import { Song } from '../types/song';
 import { formatTime } from '../utils/formatters';
 import * as Haptics from '../utils/haptics';
-import { formatOffset, hasTimestamps, parseDurationInput, shiftTimestamps } from '../utils/lyricsEditing';
+import { type EditorDraft, formatOffset, hasTimestamps, hasUnsavedEdits, parseDurationInput, shiftTimestamps } from '../utils/lyricsEditing';
 import { safeGoBack } from '../utils/navigationService';
 import { calculateDuration, lyricsToRawText, parseTimestampedLyrics } from '../utils/timestampParser';
 
@@ -119,6 +122,17 @@ const LyricsEditorScreen: React.FC<Props> = ({ navigation, route }) => {
   const [notice, setNotice] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
 
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const loadedDraft = useMemo<EditorDraft | null>(() => original && ({
+    title: original.title,
+    artist: original.artist ?? '',
+    album: original.album ?? '',
+    lyrics: lyricsToRawText(original.lyrics),
+    transliteration: original.transliteratedLyrics ? lyricsToRawText(original.transliteratedLyrics) : '',
+    duration: original.duration > 0 ? formatTime(original.duration) : '',
+    align: original.lyricsAlign ?? 'left',
+  }), [original]);
+  const dirty = hasUnsavedEdits(loadedDraft, { title, artist, album, lyrics: lyricsText, transliteration: transliterated, duration: durationText, align });
   const synced = useMemo(() => hasTimestamps(lyricsText), [lyricsText]);
   const say = (text: string, type: 'success' | 'error' | 'info' = 'info') => setNotice({ text, type });
 
@@ -250,10 +264,31 @@ const LyricsEditorScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  const close = () => {
-    Haptics.selectionAsync().catch(() => {});
+  const leave = () => {
+    setDiscardOpen(false);
     safeGoBack(navigation);
   };
+
+  // Closing with edits asks first: a long paste of lyrics used to vanish on one stray tap or Back press.
+  const close = () => {
+    Haptics.selectionAsync().catch(() => {});
+    if (dirty && !saving) {
+      Keyboard.dismiss();
+      setDiscardOpen(true);
+      return;
+    }
+    leave();
+  };
+  const closeRef = React.useRef(close);
+  closeRef.current = close;
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (discardOpen) return false;
+      closeRef.current();
+      return true;
+    });
+    return () => sub.remove();
+  }, [discardOpen]);
 
   return (
     <AppScreen style={styles.root}>
@@ -269,6 +304,8 @@ const LyricsEditorScreen: React.FC<Props> = ({ navigation, route }) => {
             disabled={!original || saving}
             accessibilityRole="button"
             accessibilityLabel="Save"
+            accessibilityState={{ disabled: !original || saving, busy: saving }}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             style={[styles.save, (!original || saving) && styles.saveOff]}
           >
             {saving ? <ActivityIndicator size="small" color={Signal.waveInk} /> : <Text style={styles.saveText}>Save</Text>}
@@ -365,6 +402,16 @@ const LyricsEditorScreen: React.FC<Props> = ({ navigation, route }) => {
         onClose={() => setSourcesOpen(false)}
         onSelect={onSourcePicked}
         initialQuery={{ title, artist, duration: parseDurationInput(durationText) }}
+      />
+      <ConfirmSheet
+        visible={discardOpen}
+        title="Discard your changes?"
+        body="The lyrics and details you edited have not been saved."
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        destructive
+        onConfirm={leave}
+        onClose={() => setDiscardOpen(false)}
       />
       <Toast visible={notice !== null} message={notice?.text ?? ''} type={notice?.type ?? 'info'} onDismiss={() => setNotice(null)} />
     </AppScreen>

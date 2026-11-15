@@ -146,7 +146,7 @@ export const PlaylistsScreen: React.FC<{ embedded?: boolean; query?: string }> =
     <Frame style={embedded ? styles.embedded : styles.container}>
       <SafeAreaView style={styles.safeArea} edges={embedded ? [] : ['top']}>
         <View style={styles.header}>
-          {embedded ? <Text variant="meta" tone="secondary" style={styles.titleFlex}>{playlists.length} playlists</Text> : <>
+          {embedded ? <Text variant="meta" tone="secondary" style={styles.titleFlex}>{countOf(playlists.length, 'playlist')}</Text> : <>
           {navigation.canGoBack() ? (
             <IconButton icon="chevron-back" label="Back" variant="plain" onPress={() => navigation.goBack()} />
           ) : null}

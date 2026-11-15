@@ -51,6 +51,7 @@ import { useSongsStore } from '../store/songsStore';
 import { TabScreenProps } from '../types/navigation';
 import { Button, ConfirmSheet, IconButton, Sheet, SheetScrollView, TactileRow } from '../ui';
 import { exportAllSongs, importSongsFromJson, shareExportedFile } from '../utils/exportImport';
+import { countOf } from '../utils/formatters';
 import * as Haptics from '../utils/haptics';
 import { deviceTier } from '../utils/performanceTier';
 import { DISPLAY_SIZES, DisplaySize } from '../utils/displaySize';
@@ -460,7 +461,7 @@ const SettingsScreen: React.FC<Props> = ({ route, navigation }) => {
         </Section>
 
         <Section id="about" summary={summaries.about} icon="information-circle-outline" title="About" lead="Version, credits and a fresh start." onLayout={at('about')}>
-          <Row label="LuvLyrics" hint={`Version ${APP_VERSION}. ${songs.length} songs, ${likedCount} liked.`} />
+          <Row label="LuvLyrics" hint={`Version ${APP_VERSION}. ${countOf(songs.length, 'song')}, ${likedCount} liked.`} />
           <Row
             label="Credits"
             hint="Music data from YouTube Music, audio from Saavn and Gaana, lyrics from LRCLIB and community providers, canvases from Echo Canvas and Apple Music. Design after Allegra."

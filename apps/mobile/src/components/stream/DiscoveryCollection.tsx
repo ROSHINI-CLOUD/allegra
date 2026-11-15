@@ -9,6 +9,7 @@ import type { UnifiedSong } from '../../types/song';
 import { StreamService } from '../../services/stream/StreamService';
 import { CatalogDownloadButton } from './CatalogDownloadButton';
 import { useStreamSongActions } from './useStreamSongActions';
+import { countOf } from '../../utils/formatters';
 import { shuffled } from '../../utils/shuffle';
 interface Props { title: string; subtitle: string; artwork?: string; songs: UnifiedSong[]; loading: boolean; error?: string; onBack: () => void; onRefresh: () => void; saved?: boolean; onSave?: () => void;
   /** Only a catalog album sets this (CatalogAlbumScreen): the page gets the album Download button. Quick picks, which is the listener's own live playlist, does not. */
@@ -25,7 +26,7 @@ export function DiscoveryCollection({ title, subtitle, artwork, songs, loading, 
     <Animated.FlatList data={songs} keyExtractor={song => `${song.source}:${song.id}`} onScroll={scroll.onScroll} scrollEventThrottle={16}
       contentContainerStyle={{ paddingBottom: bottom }}
       ListHeaderComponent={<>
-        <ImmersiveHero uri={heroImageUrl(artwork || songs[0]?.highResArt)} title={title} lines={[subtitle, `${songs.length} songs`]} width={width} height={hero} scrollY={scroll.y}>
+        <ImmersiveHero uri={heroImageUrl(artwork || songs[0]?.highResArt)} title={title} lines={[subtitle, countOf(songs.length, 'song')]} width={width} height={hero} scrollY={scroll.y}>
           <View style={styles.actions}>
             <Button label="Shuffle" icon="shuffle" disabled={!songs.length} onPress={() => StreamService.play(shuffled([...songs]), 0)} />
             <Button label="Play" icon="play" variant="primary" disabled={!songs.length} onPress={() => StreamService.play([...songs], 0)} />

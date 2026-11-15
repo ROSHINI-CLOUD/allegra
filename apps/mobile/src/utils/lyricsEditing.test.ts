@@ -1,4 +1,4 @@
-import { formatOffset, hasTimestamps, parseDurationInput, shiftTimestamps } from './lyricsEditing';
+import { type EditorDraft, formatOffset, hasTimestamps, hasUnsavedEdits, parseDurationInput, shiftTimestamps } from './lyricsEditing';
 
 describe('shiftTimestamps', () => {
   it('moves every stamp and keeps the words', () => {
@@ -38,5 +38,20 @@ describe('formatOffset', () => {
     expect(formatOffset(0.6000001)).toBe('+0.6s');
     expect(formatOffset(-1.5)).toBe('−1.5s');
     expect(formatOffset(0)).toBe('0s');
+  });
+});
+
+describe('hasUnsavedEdits', () => {
+  const loaded: EditorDraft = { title: 'Tum Hi Ho', artist: 'Arijit Singh', album: '', lyrics: '[0:05.00]Hello', transliteration: '', duration: '4:22', align: 'left' };
+
+  it('is false before the song loads and while nothing changed', () => {
+    expect(hasUnsavedEdits(null, loaded)).toBe(false);
+    expect(hasUnsavedEdits(loaded, { ...loaded })).toBe(false);
+  });
+
+  it('is true for any edited field, including a lyric shift and the alignment', () => {
+    expect(hasUnsavedEdits(loaded, { ...loaded, title: 'Tum Hi Ho (Film)' })).toBe(true);
+    expect(hasUnsavedEdits(loaded, { ...loaded, lyrics: '[0:06.00]Hello' })).toBe(true);
+    expect(hasUnsavedEdits(loaded, { ...loaded, align: 'center' })).toBe(true);
   });
 });

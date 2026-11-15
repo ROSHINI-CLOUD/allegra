@@ -51,3 +51,18 @@ export const formatOffset = (seconds: number): string => {
   if (rounded === 0) return '0s';
   return `${rounded > 0 ? '+' : '−'}${Math.abs(rounded)}s`;
 };
+
+/** What the lyrics editor lets a listener change, as plain text, so "did anything change" is one comparison. */
+export interface EditorDraft {
+  title: string;
+  artist: string;
+  album: string;
+  lyrics: string;
+  transliteration: string;
+  duration: string;
+  align: 'left' | 'center' | 'right';
+}
+
+/** True when the draft differs from what was loaded. Closing then asks first; an untouched editor just closes. */
+export const hasUnsavedEdits = (loaded: EditorDraft | null, draft: EditorDraft): boolean =>
+  loaded !== null && (Object.keys(loaded) as (keyof EditorDraft)[]).some(key => loaded[key] !== draft[key]);

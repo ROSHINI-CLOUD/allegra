@@ -13,6 +13,7 @@ import { useStreamSongActions } from '../components/stream/useStreamSongActions'
 import { Surface } from '../constants/allegraTheme';
 import { StreamService } from '../services/stream/StreamService';
 import { Button, Space, SongRow, useBottomClearance } from '../ui';
+import { countOf } from '../utils/formatters';
 import { shuffled } from '../utils/shuffle';
 
 /**
@@ -36,7 +37,7 @@ export default function MixScreen({ route, navigation }: NativeStackScreenProps<
   const rows = mix.kind === 'stream' ? mix.songs.map((song, index) => ({ key: song.id, title: song.title, artist: song.artist, artwork: song.highResArt, onPress: () => play(index), onActions: () => streamActions.open(song) }))
     : mix.songs.map((song, index) => ({ key: song.id, title: song.title, artist: song.artist, artwork: song.coverImageUri, onPress: () => play(index), onActions: () => localActions.open(song) }));
   const header = (
-    <ImmersiveHero uri={heroImageUrl(rows[0]?.artwork)} title={mix.title} lines={[`${rows.length} songs · Made for you`]} width={width} height={hero} scrollY={scroll.y}>
+    <ImmersiveHero uri={heroImageUrl(rows[0]?.artwork)} title={mix.title} lines={[`${countOf(rows.length, 'song')} · Made for you`]} width={width} height={hero} scrollY={scroll.y}>
       <View style={styles.actions}>
         <Button label="Shuffle" icon="shuffle" size="compact" disabled={!rows.length} onPress={playShuffled} />
         <Button label="Play mix" icon="play" variant="primary" disabled={!rows.length} onPress={() => play(0)} />

@@ -4,6 +4,7 @@ import type { BrowseStackParamList } from '../types/navigation';
 import { catalogRequest, loadAlbum, searchAlbums } from '../services/search/catalogSearch';
 import { resolveSongAlbum } from '../services/search/songAlbum';
 import { DiscoveryCollection } from '../components/stream/DiscoveryCollection';
+import { plainErrorMessage } from '../utils/plainError';
 
 export default function CatalogAlbumScreen({ route, navigation }: NativeStackScreenProps<BrowseStackParamList, 'CatalogAlbum'>) {
   const [album, setAlbum] = useState<Awaited<ReturnType<typeof loadAlbum>> | null>(null);
@@ -23,7 +24,7 @@ export default function CatalogAlbumScreen({ route, navigation }: NativeStackScr
       const value = await loadAlbum(resolved, controller.signal);
       if (!controller.signal.aborted) setAlbum(value);
     })().catch(reason => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Could not load this album. Try again.');
+      if (!controller.signal.aborted) setError(plainErrorMessage(reason, 'Could not load this album. Try again.'));
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [id, songRef, albumName, artist, attempt]);

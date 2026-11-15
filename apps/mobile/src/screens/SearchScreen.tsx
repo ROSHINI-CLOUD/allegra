@@ -612,7 +612,7 @@ const SearchScreen: React.FC<Props> = ({ navigation }) => {
             accessibilityLabel="Search your phone and the catalog"
           />
           {query.length > 0 && !voice.busy ? (
-            <Tactile onPress={clearField} hitSlop={10} pressScale={0.9} accessibilityRole="button" accessibilityLabel="Clear search">
+            <Tactile onPress={clearField} pressScale={0.9} accessibilityRole="button" accessibilityLabel="Clear search" style={styles.clearTarget}>
               <Ionicons name="close-circle" size={18} color={Signal.inkMuted} />
             </Tactile>
           ) : null}
@@ -689,6 +689,8 @@ const styles = StyleSheet.create({
     paddingLeft: Space.sm + 2,
     paddingRight: Space.xxs,
   },
+  // The icon stays 18 and the target is the row's full 48dp, so a thumb that lands beside it still clears the field.
+  clearTarget: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   topMatch: { marginTop: Space.sm },
   dim: { opacity: 0.32 },
   searchInput: { flex: 1, color: Signal.ink, fontSize: TypeScale.body, paddingVertical: 0 },
