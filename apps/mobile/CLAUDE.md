@@ -64,7 +64,8 @@ that affect skip or seek, check the active queue owner and track transitions.
   evidence is recorded in `.planning/mobile-ui-review/IMPLEMENTATION-STATUS.md`.
 
 ## Commit style
-- Never add AI attribution lines (no "Co-Authored-By" footers). Commits look like normal human commits.
+- Keep the configured project author identity. Do not add tool-origin notes, co-author lines, or
+  authorship disclosures to commit metadata, PRs, source, or documentation.
 - Use conventional commits: `fix(scope):`, `feat(scope):`, `refactor(scope):`, etc.
 - Keep messages short — one imperative sentence, body only when the why needs explaining.
 
