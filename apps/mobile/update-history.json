@@ -1,7 +1,24 @@
 {
   "entries": [
     {
+      "version": "1.67.0",
+      "description": "Closing the player and reading messages is smoother and clearer",
+      "changelog": [
+        {
+          "title": "Improved",
+          "items": [
+            "Closing the player now lands on one full-width mini-player",
+            "Error messages are written in plain words and counts read correctly, such as 1 song",
+            "Library tabs stay steady when you switch between them",
+            "The lyrics editor asks before you drop unsaved changes"
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.66.0",
+      "sourceCommit": "2d3bf09105ec6d5d24c4b70e8c5cadd70c4ee019",
+      "rollbackAsset": "LuvLyrics-rollback-1.66.0.apk",
       "description": "Stream now shows recent updates, with clearer player controls and a darker navigation bar",
       "changelog": [
         {
@@ -48,22 +65,6 @@
       "rollbackAsset": "LuvLyrics-rollback-1.64.5.apk",
       "description": "This release included no visible changes in the Android app.",
       "changelog": []
-    },
-    {
-      "version": "1.64.3",
-      "sourceCommit": "1f58d23e9ad7a7da70bbbe817e5e001fc23b99f4",
-      "rollbackAsset": "LuvLyrics-rollback-1.64.3.apk",
-      "description": "Jump back in and fullscreen lyrics are easier to use, and removed downloads are easier to restore",
-      "changelog": [
-        {
-          "title": "Improved",
-          "items": [
-            "Jump back in shows song names more clearly",
-            "Fullscreen lyrics have more room and a slimmer control bar",
-            "Download a song again from its menu after removing it"
-          ]
-        }
-      ]
     }
   ]
 }
