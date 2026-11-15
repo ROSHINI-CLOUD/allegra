@@ -223,7 +223,7 @@ export const InfoTour: React.FC<{
     <>
       <View ref={buttonBox} collapsable={false}>
         <Animated.View style={buttonPop}>
-          <Tactile onPress={open} hitSlop={10} pressScale={0.88} haptic="select" accessibilityRole="button" accessibilityLabel={label} style={[styles.button, style]}>
+          <Tactile onPress={open} hitSlop={11} pressScale={0.88} haptic="select" accessibilityRole="button" accessibilityLabel={label} style={[styles.button, style]}>
             <Ionicons name="information" size={14} color={Signal.inkSoft} />
           </Tactile>
         </Animated.View>
@@ -258,7 +258,7 @@ export const InfoTour: React.FC<{
               </Tactile>
               <View style={styles.dots}>
                 {steps.map((item, at) => (
-                  <Pressable key={item.title} onPress={() => go(at)} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Step ${at + 1}: ${item.title}`} accessibilityState={{ selected: at === index }} style={styles.dotHit}>
+                  <Pressable key={item.title} onPress={() => go(at)} hitSlop={{ top: 10, bottom: 10, left: 0, right: 0 }} accessibilityRole="button" accessibilityLabel={`Step ${at + 1}: ${item.title}`} accessibilityState={{ selected: at === index }} style={styles.dotHit}>
                     <View style={[styles.dot, at === index && styles.dotOn]} />
                   </Pressable>
                 ))}
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   next: { backgroundColor: Signal.wave },
   dim: { opacity: 0.4 },
   dots: { flexDirection: 'row', alignItems: 'center' },
-  dotHit: { width: 22, height: 28, alignItems: 'center', justifyContent: 'center' },
+  dotHit: { width: 24, height: 28, alignItems: 'center', justifyContent: 'center' },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Glass.hairlineStrong },
   dotOn: { backgroundColor: Signal.wave, transform: [{ scale: 1.3 }] },
   done: { minWidth: 96, height: 44, paddingHorizontal: Space.md, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: Signal.wave },
