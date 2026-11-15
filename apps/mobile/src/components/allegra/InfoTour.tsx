@@ -253,7 +253,7 @@ export const InfoTour: React.FC<{
               </Animated.View>
             </Animated.View>
             <Animated.View style={[styles.nav, navLayer]}>
-              <Tactile onPress={() => go(index - 1)} disabled={index === 0} pressScale={0.9} accessibilityRole="button" accessibilityLabel="Previous" style={[styles.round, index === 0 && styles.dim]}>
+              <Tactile onPress={() => go(index - 1)} disabled={index === 0} pressScale={0.9} accessibilityRole="button" accessibilityLabel="Previous" hitSlop={2} style={[styles.round, index === 0 && styles.dim]}>
                 <Ionicons name="arrow-back" size={18} color={Signal.ink} />
               </Tactile>
               <View style={styles.dots}>
@@ -268,7 +268,7 @@ export const InfoTour: React.FC<{
                   <Text style={styles.doneText}>Got it</Text>
                 </Tactile>
               ) : (
-                <Tactile onPress={() => go(index + 1)} pressScale={0.9} accessibilityRole="button" accessibilityLabel="Next" style={[styles.round, styles.next]}>
+                <Tactile onPress={() => go(index + 1)} pressScale={0.9} accessibilityRole="button" accessibilityLabel="Next" hitSlop={2} style={[styles.round, styles.next]}>
                   <Ionicons name="arrow-forward" size={18} color={Signal.waveInk} />
                 </Tactile>
               )}
