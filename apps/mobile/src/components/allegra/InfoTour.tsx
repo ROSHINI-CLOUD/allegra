@@ -236,7 +236,7 @@ export const InfoTour: React.FC<{
         <View style={styles.center} pointerEvents="box-none">
           <Animated.View ref={cardBox} collapsable={false} style={[styles.card, card]} accessibilityViewIsModal>
             <Frosted radius={Radius.sheet} intensity={70} tint={0.62} />
-            <Tactile onPress={close} hitSlop={8} pressScale={0.88} accessibilityRole="button" accessibilityLabel="Close" style={styles.close}>
+            <Tactile onPress={close} hitSlop={8} pressScale={0.88} accessibilityRole="button" accessibilityLabel="Close" wrapperStyle={styles.closeWrap} style={styles.close}>
               <Ionicons name="close" size={18} color={Signal.inkSoft} />
             </Tactile>
             <View style={styles.stage}>
@@ -287,7 +287,9 @@ const styles = StyleSheet.create({
   catch: { position: 'absolute', top: -1, left: -1, right: -1, bottom: -1, borderRadius: 14, borderWidth: 2, borderColor: Signal.wave },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Space.md },
   card: { width: '100%', maxWidth: 400, padding: Space.md, paddingTop: Space.sm, borderRadius: Radius.sheet, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: Glass.hairlineStrong, backgroundColor: Glass.fillHeavy },
-  close: { position: 'absolute', top: 10, right: 10, zIndex: 5, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: Glass.fillLight },
+  // The corner placement belongs on the touch target (wrapperStyle): on the disc itself the target was 0 tall and could not be tapped.
+  closeWrap: { position: 'absolute', top: 10, right: 10, zIndex: 5 },
+  close: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: Glass.fillLight },
   stage: { height: STAGE_H, alignItems: 'center', justifyContent: 'center', marginHorizontal: -Space.md, overflow: 'hidden' },
   group: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   part: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
