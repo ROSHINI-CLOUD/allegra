@@ -48,7 +48,7 @@ import { Glass, Radius, Signal, Space, Surface } from '../constants/allegraTheme
 import { useVoiceField } from '../components/search/VoiceField';
 import { playVoicePick } from '../services/voicePlay';
 import { useVoiceSearchStore } from '../store/voiceSearchStore';
-import { Button, IconButton, Sheet, SheetOption, SongRow as SharedSongRow } from '../ui';
+import { Button, IconButton, Sheet, SheetOption, SongRow as SharedSongRow, TextButton } from '../ui';
 import { navigationRef } from '../utils/navigationService';
 import { useBottomClearance } from '../hooks/useBottomClearance';
 import { openPlayerSheet } from '../navigation/playerSheet';
@@ -68,6 +68,7 @@ import { TabScreenProps } from '../types/navigation';
 import { Playlist, Song, UnifiedSong } from '../types/song';
 import * as Haptics from '../utils/haptics';
 import { ProfileButton } from '../components/nav/ProfileButton';
+import { onlineStatus } from './searchStatus';
 
 type YTArtistResult = YTPageItem<'artist'>;
 
@@ -133,6 +134,8 @@ const SearchScreen: React.FC<Props> = ({ navigation }) => {
   const [online, setOnline] = useState<UnifiedSong[] | null>(null);
   const [artists, setArtists] = useState<YTArtistResult[]>([]);
   const [onlineBusy, setOnlineBusy] = useState(false);
+  const [onlineFailed, setOnlineFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const localSeq = useRef(0);
   const onlineSeq = useRef(0);
@@ -245,6 +248,7 @@ const SearchScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     const seq = ++onlineSeq.current;
     setOnlineBusy(false);
+    setOnlineFailed(false);
     if (!q) { setOnline(null); setArtists([]); return; }
     // Scoped to the phone: keep the last catalog answer, don't fetch.
     if (scope === 'On this phone') return;
@@ -272,6 +276,7 @@ const SearchScreen: React.FC<Props> = ({ navigation }) => {
         if (seq !== onlineSeq.current) return; // a newer query won
         if (found.length > 0) onlineAnswers.set(q, found);
         onlineSearchFailed.current = failed;
+        setOnlineFailed(failed);
         onlineResultsAttempt.current = attempt;
         setOnline(found);
         setOnlineBusy(false);
@@ -285,7 +290,7 @@ const SearchScreen: React.FC<Props> = ({ navigation }) => {
       clearTimeout(t);
       controller.abort();
     };
-  }, [q, scope]);
+  }, [q, scope, retry]);
 
   const matchingPlaylists = useMemo(() => {
     if (!q) return [];
@@ -541,9 +546,19 @@ const SearchScreen: React.FC<Props> = ({ navigation }) => {
             {onlineBusy && onlineFresh.length === 0 ? (
               <ActivityIndicator color={Signal.wave} style={styles.spinner} />
             ) : null}
-            {!onlineBusy && online && onlineFresh.length === 0 ? (
-              <Text style={styles.empty}>Nothing streamable for that. Try the artist name or another spelling — or check your connection.</Text>
-            ) : null}
+            {(() => {
+              const status = onlineStatus({ busy: onlineBusy, online, fresh: onlineFresh.length, failed: onlineFailed });
+              if (status === 'failed') return (
+                <View style={styles.failed}>
+                  <Text style={styles.empty}>Could not reach the catalog. Check your connection and try again.</Text>
+                  <View style={styles.retry}>
+                    <TextButton label="Try again" onPress={() => setRetry(n => n + 1)} />
+                  </View>
+                </View>
+              );
+              if (status === 'empty') return <Text style={styles.empty}>Nothing streamable for that. Try the artist name or another spelling.</Text>;
+              return null;
+            })()}
             <View style={styles.list}>
               {onlineSongs.map((s, i) => (
                 <SongRow
@@ -698,6 +713,9 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: GUTTER },
   spinner: { marginTop: Space.md },
   empty: { color: Signal.inkMuted, fontSize: TypeScale.body, paddingHorizontal: GUTTER, marginBottom: Space.xs },
+  failed: { alignItems: 'flex-start' },
+  // TextButton has no side padding of its own; this lines it up with the copy's gutter.
+  retry: { paddingHorizontal: GUTTER },
   recentRow: {
     flexDirection: 'row',
     alignItems: 'center',
