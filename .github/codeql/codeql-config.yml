@@ -1,0 +1,8 @@
+# Paths CodeQL skips: dependencies, generated code, build output and planning documents.
+paths-ignore:
+  - "**/node_modules/**"
+  - ".planning/**"
+  - "audit/**"
+  - "convex/_generated/**"
+  - "apps/mobile/android/app/build/**"
+  - ".claude/**"

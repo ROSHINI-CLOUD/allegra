@@ -61,7 +61,7 @@ npm run mock                    # fake API on :9090 (MOCK_PORT), no upstream pro
 - **Test browser behaviour (media, video, audio) on :5173, never on an :8080 URL.** The API sends a
   strict CSP (`default-src 'self'`), so a `<video>` from another origin fails there with `MEDIA_ERR 4`
   even though it works in the real app.
-- **Single test file:** `cd apps/api && node --import tsx --test src/providers/animatedArtwork.test.ts`.
+- **Single test file:** `cd apps/api && node --import tsx --test src/providers/lastfm.test.ts`.
 - More: [`docs/workflows.md`](docs/workflows.md) covers proving the Range rule, `vercel build`, and shipping.
 
 ## Hard rules
