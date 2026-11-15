@@ -218,3 +218,17 @@ login redirect rather than your app. Verify against the production alias.
 
 Anything that ships a control which does nothing is out. Allegra is free and has no payments. Karaoke is real: it separates locally in a browser worker, with a mid-side fallback
 when the model cannot run on the current device.
+
+## Code scanning
+
+`.github/workflows/codeql.yml` runs CodeQL on every pull request, on pushes to `main` and every Monday at 02:17 UTC. It
+scans three languages without a build: TypeScript/JavaScript, the workflow files (`actions`) and the Rust desktop shell.
+The job has `contents: read` and `security-events: write` only. `.github/codeql/codeql-config.yml` skips dependencies,
+generated Convex code, build output and the planning folders.
+
+- **Reading alerts.** Open the repository's Security tab, then Code scanning. A pull request that adds an alert shows it
+  as a check annotation. Fix it, or dismiss it with a written reason, before merging.
+- **Kotlin.** The Android code is not scanned. CodeQL needs a Gradle build for Kotlin, which takes minutes. Add a weekly
+  manual-build job only if a Kotlin review needs it.
+- **Pins.** The workflow's actions are pinned to full commit SHAs like every other workflow, so
+  `tests/infra/workflow-pins.test.mjs` covers it. Dependabot updates the pins.
