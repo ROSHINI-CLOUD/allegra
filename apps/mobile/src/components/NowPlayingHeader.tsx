@@ -51,13 +51,13 @@ const NowPlayingHeader: React.FC<NowPlayingHeaderProps> = ({
             <View style={styles.grabber} />
           </Tactile>
           {together !== null ? (
-            <Tactile onPress={onTogetherPress} wrapperStyle={styles.chipWrap} style={styles.chip} pressScale={0.96} accessibilityRole="button" accessibilityLabel={`Listening together, ${together} in the room`}>
+            <Tactile onPress={onTogetherPress} hitSlop={{ top: 9, bottom: 9, left: 0, right: 0 }} wrapperStyle={styles.chipWrap} style={styles.chip} pressScale={0.96} accessibilityRole="button" accessibilityLabel={`Listening together, ${together} in the room`}>
               <MaterialCommunityIcons name="account-multiple" size={15} color="#fff" />
               <Text style={styles.chipText}>{`Listening together · ${together}`}</Text>
             </Tactile>
           ) : null}
           {playingOn ? (
-            <Tactile onPress={onPlayingOnPress} wrapperStyle={styles.chipWrap} style={styles.chip} pressScale={0.96} accessibilityRole="button" accessibilityLabel={`Playing on ${playingOn.name}. Choose a device`}>
+            <Tactile onPress={onPlayingOnPress} hitSlop={{ top: 9, bottom: 9, left: 0, right: 0 }} wrapperStyle={styles.chipWrap} style={styles.chip} pressScale={0.96} accessibilityRole="button" accessibilityLabel={`Playing on ${playingOn.name}. Choose a device`}>
               <MaterialCommunityIcons name={playingOn.kind === 'web' ? 'laptop' : 'cellphone'} size={15} color={Signal.wave} />
               <Text style={styles.chipText} numberOfLines={1}>{`Playing on ${playingOn.name}`}</Text>
             </Tactile>
@@ -71,7 +71,7 @@ const NowPlayingHeader: React.FC<NowPlayingHeaderProps> = ({
 const styles = StyleSheet.create({
   container: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', zIndex: 20 },
   grabber: { width: 38, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.55)', marginVertical: 6 },
-  chipWrap: { marginTop: 6, maxWidth: '80%' },
+  chipWrap: { marginTop: 18, maxWidth: '80%' },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 30, paddingHorizontal: 12, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.35)' },
   chipText: { flexShrink: 1, color: '#fff', fontSize: 13, fontWeight: '600' },
 });
