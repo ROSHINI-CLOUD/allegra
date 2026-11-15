@@ -34,6 +34,8 @@ function isSource(value: string): value is SongSource {
 
 /** `('Saavn', 'abc')` -> `'saavn:abc'`; null for a source other devices cannot play. */
 export function songRef(source: string, id: string): SongRef | null {
+  // Callers pass request parameters, which Express may hand over as an array or object (`?id=a&id=b`).
+  if (typeof source !== 'string' || typeof id !== 'string') return null;
   const lower = source.toLowerCase();
   const trimmed = id.trim();
   if (!isSource(lower) || !trimmed || trimmed.includes(':')) return null;
@@ -41,6 +43,8 @@ export function songRef(source: string, id: string): SongRef | null {
 }
 
 export function parseSongRef(value: string): { readonly source: SongSource; readonly id: string } | null {
+  // A repeated query parameter arrives as an array; `['a:b'].indexOf(':')` is -1 today, but only by accident.
+  if (typeof value !== 'string') return null;
   const sep = value.indexOf(':');
   if (sep <= 0) return null;
   const ref = songRef(value.slice(0, sep), value.slice(sep + 1));

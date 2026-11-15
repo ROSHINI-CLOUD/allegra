@@ -1,6 +1,18 @@
 {
   "entries": [
     {
+      "version": "1.68.2",
+      "description": "Lyrics with special characters now show the way they were written",
+      "changelog": [
+        {
+          "title": "Fixed",
+          "items": [
+            "Lyrics from some sources no longer show odd symbols where an ampersand, quote or angle bracket belongs"
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.68.1",
       "description": "Search can retry when the catalog cannot be reached, and small buttons are easier to tap",
       "changelog": [
@@ -39,28 +51,6 @@
             "Error messages are written in plain words and counts read correctly, such as 1 song",
             "Library tabs stay steady when you switch between them",
             "The lyrics editor asks before you drop unsaved changes"
-          ]
-        }
-      ]
-    },
-    {
-      "version": "1.66.0",
-      "sourceCommit": "2d3bf09105ec6d5d24c4b70e8c5cadd70c4ee019",
-      "rollbackAsset": "LuvLyrics-rollback-1.66.0.apk",
-      "description": "Stream now shows recent updates, with clearer player controls and a darker navigation bar",
-      "changelog": [
-        {
-          "title": "New",
-          "items": [
-            "Open the LuvLyrics logo in Stream to see the latest four versions and what changed"
-          ]
-        },
-        {
-          "title": "Improved",
-          "items": [
-            "Player animations follow your phone’s reduced-motion setting",
-            "Connect devices from one easy-to-find panel",
-            "The mini-player has softer corners and sits more clearly above the darker navigation bar"
           ]
         }
       ]

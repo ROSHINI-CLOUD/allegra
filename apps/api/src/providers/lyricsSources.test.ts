@@ -13,7 +13,7 @@ test('LyricsPlus: a dead instance does not sink the race, and its lines become L
   const provider = new YouLyPlusProvider({
     servers: ['https://dead.test', 'https://live.test'],
     fetchImpl: async (input) => {
-      if (String(input).startsWith('https://dead.test')) return new Response('error code: 1033', { status: 530 });
+      if (new URL(String(input)).origin === 'https://dead.test') return new Response('error code: 1033', { status: 530 });
       return json({
         type: 'Word',
         metadata: { source: 'qApple', title: 'Night Drive', artist: 'Driver' },

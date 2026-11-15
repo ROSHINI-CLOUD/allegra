@@ -1,4 +1,5 @@
 import { decodeHtml } from '../lib/decodeHtml.js';
+import { stripTags } from '../lib/htmlText.js';
 import { fetchBodyWithTimeout } from '../lib/fetchWithTimeout.js';
 import type { LyricsCandidate } from './lyricsCandidate.js';
 
@@ -63,7 +64,7 @@ export class SaavnLyricsProvider {
 
 /** JioSaavn's `line<br>line` as plain text: one lyric per line, entities decoded, tags dropped. */
 export function saavnLyricsText(raw: string): string {
-  return decodeHtml(raw.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ''))
+  return decodeHtml(stripTags(raw.replace(/<br\s*\/?>/gi, '\n')))
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, ' ').trim())
     .join('\n')

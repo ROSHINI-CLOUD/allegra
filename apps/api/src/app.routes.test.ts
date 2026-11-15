@@ -17,6 +17,15 @@ const rawSong = {
   downloadUrl: [{ quality: '320kbps', url: 'https://cdn.example/song.mp4' }]
 };
 
+/** The host of a request URL, so a stand-in answers for the host itself and not for any URL that mentions it. */
+function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+}
+
 function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = String(input);
   if (url.includes('/search/songs')) {
@@ -28,7 +37,7 @@ function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
   if (url.includes('/songs/')) {
     return Promise.resolve(jsonResponse({ success: true, data: rawSong }));
   }
-  if (url.includes('itunes.apple.com')) {
+  if (hostnameOf(url) === 'itunes.apple.com') {
     return Promise.resolve(jsonResponse({
       results: [{ artworkUrl100: 'https://is1-ssl.mzstatic.com/image/thumb/100x100bb.jpg' }]
     }));

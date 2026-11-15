@@ -1,6 +1,7 @@
 import { parse, type HTMLElement } from 'node-html-parser';
 import { CACHE_MISS, isCacheMiss, type CacheMiss, type CacheStore } from '../../lib/cache.js';
 import { decodeHtml } from '../../lib/decodeHtml.js';
+import { stripTags } from '../../lib/htmlText.js';
 import { cleanLyricStanzas, foldLatin, lyricStanzasText, type LyricStanzas } from '../../shared/lyricsText.js';
 import { creditedNames, type LyricSite, type PoliteFetcher, type SiteLyrics, type SiteQuery, type SiteVersion } from './lyricSites.js';
 
@@ -95,7 +96,7 @@ function slugify(title: string): string {
 
 /** A paragraph's lines: `<br>` breaks, tags dropped, entities decoded. */
 function paragraphLines(paragraph: HTMLElement): string[] {
-  return decodeHtml(paragraph.innerHTML.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')).split('\n');
+  return decodeHtml(stripTags(paragraph.innerHTML.replace(/<br\s*\/?>/gi, '\n'))).split('\n');
 }
 
 /** A lyrics panel's stanzas. Newer pages mark each verse; older ones are plain paragraphs. */

@@ -1,4 +1,5 @@
 import { UnifiedSong } from '../types/song';
+import { decodeHtmlEntities } from '../utils/htmlText';
 import { titleCaseShouting } from '../utils/sentenceCase';
 import {
   ProviderDownloadResponse,
@@ -54,15 +55,7 @@ const parsePlays = (val: string | number | undefined): number => {
   return 0;
 };
 
-const decodeHtml = (str: string): string =>
-  str
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;|&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+const decodeHtml = decodeHtmlEntities;
 
 const mapProviderSong = (song: SaavnGaanaSongResponse, source: ProviderSource): UnifiedSong => {
   const highResImage = getBestImage(song.image);

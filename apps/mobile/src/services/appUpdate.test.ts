@@ -271,7 +271,7 @@ describe('fetchLatestBuild', () => {
     const build = await fetchLatestBuild();
     expect(build).toMatchObject({ version: '1.60.0', commit: COMMIT, sizeBytes: 64_831_215 });
     expect(build?.publishedAt.toISOString()).toBe('2026-11-13T07:07:50.000Z');
-    expect(calls.some(url => url.includes('api.github.com'))).toBe(false);
+    expect(calls.some(url => new URL(url).hostname === 'api.github.com')).toBe(false);
   });
 
   it('still answers when the API is rate limited (403), which used to read as no connection', async () => {

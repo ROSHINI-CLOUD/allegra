@@ -7,6 +7,7 @@
  * light up letter by letter. `stripWordTags` gives the plain line back.
  */
 import { alignSyllables, enhancedLine, LyricWord, stripWordTags } from '@shared/wordSync';
+import { decodeHtmlEntities, stripTags } from '../../utils/htmlText';
 
 const pad = (n: number, width = 2): string => String(n).padStart(width, '0');
 
@@ -36,14 +37,7 @@ export const parseClock = (value: string | undefined): number | null => {
   return Math.round(seconds * 1000);
 };
 
-const decodeEntities = (s: string): string =>
-  s
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;|&#39;|&#x27;/g, "'")
-    .replace(/&#(\d+);/g, (_, d: string) => String.fromCharCode(Number(d)));
+const decodeEntities = decodeHtmlEntities;
 
 /** Removes every `<span … ttm:role="x-bg">…</span>`, honouring nested spans. */
 const stripBackgroundSpans = (body: string): string => {
@@ -107,7 +101,7 @@ export const ttmlToLrc = (ttml: string): string => {
     const body = stripBackgroundSpans(match[2]).replace(/<br\s*\/?>/g, ' ');
     // Word spans are often written back-to-back with the space inside or
     // outside the tag — collapse tags to nothing, then normalise whitespace.
-    const text = decodeEntities(body.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
+    const text = decodeEntities(stripTags(body)).replace(/\s+/g, ' ').trim();
     if (!text) continue;
     const syllables = alignSyllables(timedSpans(body), text);
     out.push(syllables.length > 0 ? enhancedLine(begin / 1000, syllables) : `${formatLrcTime(begin)}${text}`);

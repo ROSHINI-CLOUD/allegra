@@ -4,6 +4,7 @@
  */
 
 import { LyricLine } from '../types/song';
+import { decodeHtmlEntities, removeNonContentBlocks, stripTags } from '../utils/htmlText';
 
 export const GeniusService = {
   /**
@@ -50,24 +51,18 @@ export const GeniusService = {
       }
 
       // Remove non-lyric blocks before stripping tags.
-      const sanitizedHtml = lyricsHtml
-        .replace(/<script[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[\s\S]*?<\/style>/gi, '')
-        .replace(/<!--([\s\S]*?)-->/g, '');
+      const sanitizedHtml = removeNonContentBlocks(lyricsHtml);
 
-      // Convert HTML to text while preserving line breaks.
-      const plainText = sanitizedHtml
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/p>/gi, '\n')
-        .replace(/<\/div>/gi, '\n')
-        .replace(/<[^>]+>/g, '')
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"')
-        .replace(/&#x27;|&#39;/g, "'")
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/\r\n?/g, '\n');
+      // Convert HTML to text while preserving line breaks. Entities are decoded last and in one pass, so a page
+      // that wrote "&amp;lt;" gets "&lt;" and not "<".
+      const plainText = decodeHtmlEntities(
+        stripTags(
+          sanitizedHtml
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/p>/gi, '\n')
+            .replace(/<\/div>/gi, '\n'),
+        ),
+      ).replace(/\r\n?/g, '\n');
 
       // Remove metadata/pollution lines that are often injected around lyrics.
       const cleanedLines = plainText

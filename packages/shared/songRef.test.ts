@@ -58,3 +58,13 @@ test('leadArtist drops featured artists and the placeholder', () => {
   assert.equal(leadArtist('Unknown Artist'), '');
   assert.equal(leadArtist(undefined), '');
 });
+
+test('a value that is not a string (a repeated query parameter, an object) is no ref', () => {
+  const tampered: unknown[] = [['saavn:abc'], ['saavn:abc', 'gaana:1'], { toString: () => 'saavn:abc' }, 42, null, undefined];
+  for (const value of tampered) {
+    assert.equal(parseSongRef(value as string), null);
+    assert.equal(songRef(value as string, 'abc'), null);
+    assert.equal(songRef('saavn', value as string), null);
+  }
+  assert.deepEqual(parseSongRef('saavn:abc'), { source: 'saavn', id: 'abc' });
+});

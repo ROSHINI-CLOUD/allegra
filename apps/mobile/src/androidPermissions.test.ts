@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { removeNonContentBlocks } from './utils/htmlText';
+
 /**
  * Least-privilege guard for the Android build (security audit,
  * .planning/mobile-security/ANDROID-PERMISSIONS-AUDIT-2026-11-13.md).
@@ -13,8 +15,7 @@ import * as path from 'path';
  */
 const mobile = path.join(__dirname, '..');
 const main = path.join(mobile, 'android', 'app', 'src', 'main');
-const manifest = fs.readFileSync(path.join(main, 'AndroidManifest.xml'), 'utf8')
-  .replace(/<!--[\s\S]*?-->/g, '');
+const manifest = removeNonContentBlocks(fs.readFileSync(path.join(main, 'AndroidManifest.xml'), 'utf8'));
 const appJson = JSON.parse(fs.readFileSync(path.join(mobile, 'app.json'), 'utf8')) as {
   expo: { android: { permissions: string[]; blockedPermissions?: string[] } };
 };

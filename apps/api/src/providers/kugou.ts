@@ -1,4 +1,5 @@
 import { fetchBodyWithTimeout } from '../lib/fetchWithTimeout.js';
+import { removeUntilStable } from '../lib/htmlText.js';
 import { isRecord, looksLikeHtml, type LyricsCandidate } from './lyricsCandidate.js';
 
 const DEFAULT_BASE_URL = 'https://lyrics.kugou.com';
@@ -100,8 +101,11 @@ function toSeconds(value: number): number {
   return value > 10_000 ? value / 1000 : value;
 }
 
+/** A bracketed note in a title: "(feat. X)", "「…」", "<…>". Not HTML; repeated so nested notes go too. */
+const BRACKETED_NOTE = /[(（「『<《〈＜][^)）」』>》〉＞]*[)）」』>》〉＞]/g;
+
 function normalizeTitle(title: string): string {
-  return title.replace(/[(（「『<《〈＜][^)）」』>》〉＞]*[)）」』>》〉＞]/g, '').trim();
+  return removeUntilStable(title, BRACKETED_NOTE).trim();
 }
 
 function normalizeArtist(artist: string): string {

@@ -10,6 +10,7 @@ import { buildUrl, fetchJson, type RequestOptions } from '../net/fetchWithTimeou
 import { ALLEGRA_API_URL } from '../account/config';
 import { leadArtist, parseSongRef } from '@shared/songRef';
 import { alignSyllables, enhancedLine, LyricWord } from '@shared/wordSync';
+import { decodeHtmlEntities, removeUntilStable, stripTags } from '../../utils/htmlText';
 import { formatLrcTime, hasLrcTimestamps, toTimedLrc, ttmlToLrc } from './lrc';
 
 export interface LyricsQuery {
@@ -354,7 +355,9 @@ interface KuGouSongs { data?: { info?: { duration: number; hash: string }[] } }
 interface KuGouCandidates { candidates?: { id: number | string; accesskey: string }[] }
 interface KuGouDownload { content?: string }
 
-const kugouTitle = (t: string) => t.replace(/\(.*\)|（.*）|「.*」|『.*』|<.*>|《.*》|〈.*〉|＜.*＞/g, '').trim();
+/** A bracketed note in a title: "(feat. X)", "「…」", "<…>". Not HTML; repeated so nested notes go too. */
+const KUGOU_TITLE_NOTE = /\(.*\)|（.*）|「.*」|『.*』|<.*>|《.*》|〈.*〉|＜.*＞/g;
+const kugouTitle = (t: string) => removeUntilStable(t, KUGOU_TITLE_NOTE).trim();
 const kugouArtist = (a: string) =>
   a.replace(/, /g, '、').replace(/ & /g, '、').replace(/\./g, '').replace(/和/g, '、').replace(/\(.*\)|（.*）/g, '').trim();
 
@@ -452,21 +455,11 @@ export const allegra: LyricsProvider = async q => (await allegraVersions(q))[0] 
 
 interface SaavnLyricsResponse { lyrics?: string }
 
-const NAMED_ENTITIES: Record<string, string> = { amp: '&', apos: "'", gt: '>', lt: '<', nbsp: ' ', quot: '"' };
-
-const decodeEntities = (value: string): string =>
-  value.replace(/&(#x[\da-f]+|#\d+|[a-z][a-z\d]+);/gi, (entity, body: string) => {
-    const lower = body.toLowerCase();
-    if (lower.startsWith('#')) {
-      const code = lower.startsWith('#x') ? Number.parseInt(lower.slice(2), 16) : Number.parseInt(lower.slice(1), 10);
-      return Number.isNaN(code) ? entity : String.fromCodePoint(code);
-    }
-    return NAMED_ENTITIES[lower] ?? entity;
-  });
+const decodeEntities = decodeHtmlEntities;
 
 /** JioSaavn's `line<br>line` as plain text: one lyric per line, entities decoded, tags dropped. */
 export const saavnLyricsText = (raw: string): string =>
-  decodeEntities(raw.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ''))
+  decodeEntities(stripTags(raw.replace(/<br\s*\/?>/gi, '\n')))
     .split(/\r?\n/)
     .map(line => line.replace(/\s+/g, ' ').trim())
     .join('\n')

@@ -1,4 +1,5 @@
 import { decodeHtml } from '../lib/decodeHtml.js';
+import { stripTags } from '../lib/htmlText.js';
 import { fetchBodyWithTimeout } from '../lib/fetchWithTimeout.js';
 import { alignSyllables, enhancedLine, type LyricWord } from '../shared/wordSync.js';
 
@@ -93,7 +94,7 @@ export function ttmlToLrc(ttml: string): string | null {
       continue;
     }
     const withoutExtras = inner.replace(/<span\b[^>]*\bttm:role="x-(?:translation|roman)"[^>]*>[\s\S]*?<\/span>/gi, '');
-    const text = decodeHtml(withoutExtras.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
+    const text = decodeHtml(stripTags(withoutExtras)).replace(/\s+/g, ' ').trim();
     if (!text) {
       continue;
     }
