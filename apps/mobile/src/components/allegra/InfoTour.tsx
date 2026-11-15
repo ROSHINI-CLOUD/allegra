@@ -223,7 +223,7 @@ export const InfoTour: React.FC<{
     <>
       <View ref={buttonBox} collapsable={false}>
         <Animated.View style={buttonPop}>
-          <Tactile onPress={open} hitSlop={10} pressScale={0.88} haptic="select" accessibilityRole="button" accessibilityLabel={label} style={[styles.button, style]}>
+          <Tactile onPress={open} hitSlop={11} pressScale={0.88} haptic="select" accessibilityRole="button" accessibilityLabel={label} style={[styles.button, style]}>
             <Ionicons name="information" size={14} color={Signal.inkSoft} />
           </Tactile>
         </Animated.View>
@@ -236,7 +236,7 @@ export const InfoTour: React.FC<{
         <View style={styles.center} pointerEvents="box-none">
           <Animated.View ref={cardBox} collapsable={false} style={[styles.card, card]} accessibilityViewIsModal>
             <Frosted radius={Radius.sheet} intensity={70} tint={0.62} />
-            <Tactile onPress={close} hitSlop={8} pressScale={0.88} accessibilityRole="button" accessibilityLabel="Close" style={styles.close}>
+            <Tactile onPress={close} hitSlop={8} pressScale={0.88} accessibilityRole="button" accessibilityLabel="Close" wrapperStyle={styles.closeWrap} style={styles.close}>
               <Ionicons name="close" size={18} color={Signal.inkSoft} />
             </Tactile>
             <View style={styles.stage}>
@@ -253,12 +253,12 @@ export const InfoTour: React.FC<{
               </Animated.View>
             </Animated.View>
             <Animated.View style={[styles.nav, navLayer]}>
-              <Tactile onPress={() => go(index - 1)} disabled={index === 0} pressScale={0.9} accessibilityRole="button" accessibilityLabel="Previous" style={[styles.round, index === 0 && styles.dim]}>
+              <Tactile onPress={() => go(index - 1)} disabled={index === 0} pressScale={0.9} accessibilityRole="button" accessibilityLabel="Previous" hitSlop={2} style={[styles.round, index === 0 && styles.dim]}>
                 <Ionicons name="arrow-back" size={18} color={Signal.ink} />
               </Tactile>
               <View style={styles.dots}>
                 {steps.map((item, at) => (
-                  <Pressable key={item.title} onPress={() => go(at)} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Step ${at + 1}: ${item.title}`} accessibilityState={{ selected: at === index }} style={styles.dotHit}>
+                  <Pressable key={item.title} onPress={() => go(at)} hitSlop={{ top: 10, bottom: 10, left: 0, right: 0 }} accessibilityRole="button" accessibilityLabel={`Step ${at + 1}: ${item.title}`} accessibilityState={{ selected: at === index }} style={styles.dotHit}>
                     <View style={[styles.dot, at === index && styles.dotOn]} />
                   </Pressable>
                 ))}
@@ -268,7 +268,7 @@ export const InfoTour: React.FC<{
                   <Text style={styles.doneText}>Got it</Text>
                 </Tactile>
               ) : (
-                <Tactile onPress={() => go(index + 1)} pressScale={0.9} accessibilityRole="button" accessibilityLabel="Next" style={[styles.round, styles.next]}>
+                <Tactile onPress={() => go(index + 1)} pressScale={0.9} accessibilityRole="button" accessibilityLabel="Next" hitSlop={2} style={[styles.round, styles.next]}>
                   <Ionicons name="arrow-forward" size={18} color={Signal.waveInk} />
                 </Tactile>
               )}
@@ -287,7 +287,9 @@ const styles = StyleSheet.create({
   catch: { position: 'absolute', top: -1, left: -1, right: -1, bottom: -1, borderRadius: 14, borderWidth: 2, borderColor: Signal.wave },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Space.md },
   card: { width: '100%', maxWidth: 400, padding: Space.md, paddingTop: Space.sm, borderRadius: Radius.sheet, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: Glass.hairlineStrong, backgroundColor: Glass.fillHeavy },
-  close: { position: 'absolute', top: 10, right: 10, zIndex: 5, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: Glass.fillLight },
+  // The corner placement belongs on the touch target (wrapperStyle): on the disc itself the target was 0 tall and could not be tapped.
+  closeWrap: { position: 'absolute', top: 10, right: 10, zIndex: 5 },
+  close: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: Glass.fillLight },
   stage: { height: STAGE_H, alignItems: 'center', justifyContent: 'center', marginHorizontal: -Space.md, overflow: 'hidden' },
   group: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   part: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
@@ -300,7 +302,7 @@ const styles = StyleSheet.create({
   next: { backgroundColor: Signal.wave },
   dim: { opacity: 0.4 },
   dots: { flexDirection: 'row', alignItems: 'center' },
-  dotHit: { width: 22, height: 28, alignItems: 'center', justifyContent: 'center' },
+  dotHit: { width: 24, height: 28, alignItems: 'center', justifyContent: 'center' },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Glass.hairlineStrong },
   dotOn: { backgroundColor: Signal.wave, transform: [{ scale: 1.3 }] },
   done: { minWidth: 96, height: 44, paddingHorizontal: Space.md, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: Signal.wave },

@@ -234,7 +234,7 @@ export const BlendScreen: React.FC = () => {
                 {[{ userId: null, label: 'Everyone' }, ...detail.members.map((member) => ({ userId: member.userId, label: member.isYou ? 'You' : member.displayName }))].map((chip) => {
                   const on = filter === chip.userId;
                   return (
-                    <Tactile key={chip.userId ?? 'all'} onPress={() => setFilter(chip.userId)} pressScale={0.96} haptic="select" accessibilityRole="radio" accessibilityState={{ checked: on }} style={[styles.chip, on && styles.chipOn]}>
+                    <Tactile key={chip.userId ?? 'all'} onPress={() => setFilter(chip.userId)} hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }} pressScale={0.96} haptic="select" accessibilityRole="radio" accessibilityState={{ checked: on }} style={[styles.chip, on && styles.chipOn]}>
                       {chip.userId ? <View style={[styles.chipDot, { backgroundColor: discColour(chip.userId) }]} /> : null}
                       <Text style={[styles.chipText, on && styles.chipTextOn]} numberOfLines={1}>{chip.label}</Text>
                     </Tactile>
@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
   storyThumb: { width: 40, height: 40, borderRadius: 8, borderWidth: 1.5, borderColor: Signal.bg },
   storyTitle: { color: Signal.ink, fontSize: TypeScale.body, fontWeight: '700' },
   storySub: { color: Signal.inkMuted, fontSize: TypeScale.caption, marginTop: 2 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: Space.xs, paddingHorizontal: Space.md, marginTop: Space.md, marginBottom: Space.xs },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: Space.xs, rowGap: Space.sm, paddingHorizontal: Space.md, marginTop: Space.md, marginBottom: Space.xs },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 14, borderRadius: Radius.pill, backgroundColor: Glass.fillLight, borderWidth: StyleSheet.hairlineWidth, borderColor: Glass.hairline, maxWidth: 180 },
   chipOn: { backgroundColor: Signal.ink, borderColor: Signal.ink },
   chipDot: { width: 8, height: 8, borderRadius: 4 },

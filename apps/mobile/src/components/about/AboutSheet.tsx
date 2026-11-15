@@ -19,6 +19,7 @@ import { Radius, Signal, Space, Surface } from '../../constants/allegraTheme';
 import { FEEDBACK_MAX, feedbackProblem, sendFeedback } from '../../services/feedback';
 import { Button, Sheet, SheetScrollView, TactileRow } from '../../ui';
 import * as Haptics from '../../utils/haptics';
+import { plainErrorMessage } from '../../utils/plainError';
 import UpdatePanel from './UpdatePanel';
 
 const WEBSITE = 'https://prathick.vercel.app';
@@ -85,7 +86,7 @@ const AboutSheet: React.FC<{ visible: boolean; onClose: () => void }> = ({ visib
       setMessage('');
       setContact('');
     } catch (e) {
-      setSend({ kind: 'error', message: e instanceof Error ? e.message : 'Could not send it. Try again in a bit.' });
+      setSend({ kind: 'error', message: plainErrorMessage(e, 'Could not send it. Try again in a bit.') });
     }
   }, [message, contact]);
 
