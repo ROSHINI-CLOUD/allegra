@@ -245,6 +245,19 @@ const initializeTables = async (database: SQLite.SQLiteDatabase): Promise<void> 
     );
     CREATE INDEX IF NOT EXISTS idx_listen_log_started ON listen_log(started_at);
 
+    -- Optional ListenBrainz copy of the history: listens waiting to be sent with the listener's own token.
+    CREATE TABLE IF NOT EXISTS listenbrainz_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      listened_at INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      artist TEXT NOT NULL,
+      album TEXT,
+      duration_sec REAL NOT NULL DEFAULT 0,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_listenbrainz_queue_listen ON listenbrainz_queue(listened_at, title, artist);
+
     -- A song's tempo, found once (Deezer's catalogue or measured on the phone) and kept.
     CREATE TABLE IF NOT EXISTS song_tempo (
       song_key TEXT PRIMARY KEY,

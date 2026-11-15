@@ -8,6 +8,7 @@ import { insertListen, type ListenEntry, type ListenExitKind } from '../../datab
 import type { HeardSong, ListenEnding } from '../sync/listenTracker';
 import { songRefOf } from '../share/shareService';
 import { useSettingsStore } from '../../store/settingsStore';
+import { listenQualifies } from '../listenbrainz/listenbrainzApi';
 
 /** Shorter than this is a tap-through, not a listen: kept out of the log. */
 export const MIN_LOGGED_SECONDS = 1;
@@ -40,8 +41,29 @@ export function setOnListenLogged(listener: (() => void) | null): void {
 }
 
 export function logListen(song: HeardSong, ending: ListenEnding, startedAtIso: string): void {
+  // The optional ListenBrainz copy is its own switch, so it does not depend on Listening stats being on.
+  copyToListenbrainz(song, ending, startedAtIso);
   if (!useSettingsStore.getState().listeningStats) return;
   const entry = listenEntryFor(song, ending, startedAtIso);
   if (!entry) return;
   insertListen(entry).then(() => onLogged?.()).catch(() => undefined);
+}
+
+/**
+ * Queues a finished listen for the optional ListenBrainz copy. The sync module (keystore, app state) loads on first use,
+ * and only for a listen that counts, so listeners who never connect pay nothing.
+ */
+function copyToListenbrainz(song: HeardSong, ending: ListenEnding, startedAtIso: string): void {
+  const startedAt = Date.parse(startedAtIso);
+  if (!Number.isFinite(startedAt) || !song.title) return;
+  const input = {
+    title: song.title,
+    artist: song.artist ?? '',
+    album: song.album ?? null,
+    durationSec: Math.max(0, song.duration ?? 0),
+    startedAt,
+    heardSec: ending.heardSeconds,
+  };
+  if (!listenQualifies(input)) return;
+  import('../listenbrainz/listenbrainzSync').then(m => m.queueListenbrainzListen(input)).catch(() => undefined);
 }
