@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
   fieldLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '600' },
   fieldValue: { color: '#fff', fontSize: 16, marginTop: 2 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 12, marginBottom: 4 },
-  action: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.1)' },
+  action: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.1)' },
   actionText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 6 },
   stepLabel: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '600' },

@@ -670,8 +670,8 @@ const styles = StyleSheet.create({
   footerNative: { marginTop: 26 - NATIVE_FOOTER_SLOP },
   footerBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   footerBtnOn: { backgroundColor: 'rgba(255,255,255,0.9)' },
-  segment: { flexDirection: 'row', alignItems: 'center', height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.14)', overflow: 'hidden' },
-  segmentHalf: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minWidth: 64, height: 44, paddingHorizontal: 16, gap: 6 },
+  segment: { flexDirection: 'row', alignItems: 'center', minHeight: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.14)', overflow: 'hidden' },
+  segmentHalf: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minWidth: 64, minHeight: 44, paddingHorizontal: 16, gap: 6 },
   segmentDivider: { width: StyleSheet.hairlineWidth, height: 22, backgroundColor: 'rgba(255,255,255,0.3)' },
   sleepText: { color: INK, fontSize: 13, fontWeight: '600' },
 });

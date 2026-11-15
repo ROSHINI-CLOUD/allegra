@@ -681,7 +681,7 @@ const MOOD_TONES: readonly [string, string][] = [
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Signal.bg },
-  header: { height: 52, justifyContent: 'center', paddingHorizontal: GUTTER },
+  header: { minHeight: 52, justifyContent: 'center', paddingHorizontal: GUTTER },
   // The picture's 48dp target starts at the gutter's edge, as on Stream and Library.
   headerLead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: Space.xs, paddingLeft: GUTTER - Space.sm, paddingRight: GUTTER - Space.sm },
   headerSpacer: { flex: 1 },

@@ -37,3 +37,41 @@ it('the Library tabs keep their underline space, so picking a tab moves nothing'
   expect(library).toMatch(/\btab:\s*\{[^}]*borderBottomWidth: 2[^}]*borderColor: 'transparent'/);
   expect(library).toMatch(/\bselected:\s*\{\s*borderColor: Signal\.wave\s*\}/);
 });
+
+// Text-scale audit (TEXT-SCALE-FINDINGS.md): these boxes grow with their text. `minHeight` keeps the number they had,
+// so nothing moves at 100% text, and a larger system text opens the box instead of clipping the words.
+it('the Search header grows with its title at larger text', () => {
+  const search = fs.readFileSync(path.join(SRC, 'screens', 'SearchScreen.tsx'), 'utf8');
+  expect(search).toMatch(/\bheader:\s*\{[^}]*minHeight: 52\b/);
+  expect(search).not.toMatch(/\bheader:\s*\{[^}]*\bheight: 52\b/);
+});
+
+it('the Now Playing chips grow with their label at larger text', () => {
+  const header = fs.readFileSync(path.join(SRC, 'components', 'NowPlayingHeader.tsx'), 'utf8');
+  expect(header).toMatch(/\bchip:\s*\{[^}]*minHeight: 30\b/);
+  expect(header).not.toMatch(/\bchip:\s*\{[^}]*\bheight: 30\b/);
+});
+
+it('the lyrics match badge grows with its label at larger text', () => {
+  const picker = fs.readFileSync(path.join(SRC, 'components', 'player', 'LyricsPicker.tsx'), 'utf8');
+  expect(picker).toMatch(/\bbadge:\s*\{[^}]*minHeight: 22\b/);
+  expect(picker).not.toMatch(/\bbadge:\s*\{[^}]*\bheight: 22\b/);
+});
+
+it('the Now Playing control strip grows with its timer label at larger text', () => {
+  const controls = fs.readFileSync(path.join(SRC, 'components', 'NowPlayingControls.tsx'), 'utf8');
+  expect(controls).toMatch(/\bsegment:\s*\{[^}]*minHeight: 44\b/);
+  expect(controls).not.toMatch(/\bsegment:\s*\{[^}]*\bheight: 44\b/);
+});
+
+it('the Now Playing timer cell grows with its label at larger text', () => {
+  const controls = fs.readFileSync(path.join(SRC, 'components', 'NowPlayingControls.tsx'), 'utf8');
+  expect(controls).toMatch(/\bsegmentHalf:\s*\{[^}]*minHeight: 44\b/);
+  expect(controls).not.toMatch(/\bsegmentHalf:\s*\{[^}]*\bheight: 44\b/);
+});
+
+it('the player action buttons grow with their label at larger text', () => {
+  const extras = fs.readFileSync(path.join(SRC, 'components', 'player', 'PlayerExtras.tsx'), 'utf8');
+  expect(extras).toMatch(/\baction:\s*\{[^}]*minHeight: 48\b/);
+  expect(extras).not.toMatch(/\baction:\s*\{[^}]*\bheight: 48\b/);
+});

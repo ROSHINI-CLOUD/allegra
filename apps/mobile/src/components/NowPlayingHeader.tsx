@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
   container: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', zIndex: 20 },
   grabber: { width: 38, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.55)', marginVertical: 6 },
   chipWrap: { marginTop: 18, maxWidth: '80%' },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 30, paddingHorizontal: 12, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.35)' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 30, paddingHorizontal: 12, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.35)' },
   chipText: { flexShrink: 1, color: '#fff', fontSize: 13, fontWeight: '600' },
 });
 

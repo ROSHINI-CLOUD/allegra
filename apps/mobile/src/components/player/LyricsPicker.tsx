@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
   best: { borderColor: 'rgba(255,255,255,0.5)' },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   provider: { color: '#fff', fontSize: 16, fontWeight: '700', flexShrink: 1 },
-  badge: { paddingHorizontal: 8, height: 22, borderRadius: 11, justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
+  badge: { paddingHorizontal: 8, minHeight: 22, borderRadius: 11, justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
   badgeWords: { backgroundColor: 'rgba(255,255,255,0.92)' },
   badgeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   badgeTextWords: { color: '#0B0B0F' },
