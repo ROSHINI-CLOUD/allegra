@@ -72,12 +72,14 @@ describe('items 3 and 8: the bottom surface and navigation', () => {
     expect(read('components/V6TabBar.tsx')).not.toMatch(/styles\.selected/);
   });
 
-  it('gives the mini player a floating rim and rests the bottom navigation on black', () => {
+  // 2026-11-15 (owner): full width with the player sheet's outline and a top rim, so closing the player ends on one
+  // shape (navigation/miniShell); the play control keeps its inset.
+  it('gives the mini player a top rim on the sheet’s outline and rests the bottom navigation on black', () => {
     const player = read('components/PillPlayer.tsx');
     expect(player).toMatch(/<MiniPlayerGlow uri=\{coverImageUri\} active=\{!sheetUp && !createOpen\} \/>/);
-    expect(player).toMatch(/left: Space\.sm, right: Space\.sm/);
-    expect(player).toMatch(/borderRadius: Radius\.sheet/);
-    expect(player).toMatch(/playButtonOffset: \{ marginRight: Space\.xxs \}/);
+    expect(player).toMatch(/\.\.\.miniShellOutline/);
+    expect(player).toMatch(/borderTopWidth: StyleSheet\.hairlineWidth, borderColor: ShellFrost\.miniRim/);
+    expect(player).toMatch(/playButtonOffset: \{ marginRight: MINI_PLAY_OFFSET \}/);
     const bar = read('components/V6TabBar.tsx');
     expect(bar).toMatch(/colors=\{ShellFrost\.navSurfaceColors\}/);
     expect(bar).toMatch(/colors=\{ShellFrost\.navFadeColors\}/);

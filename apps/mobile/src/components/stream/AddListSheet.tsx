@@ -20,6 +20,7 @@ import { useSongsStore } from '../../store/songsStore';
 import type { UnifiedSong } from '../../types/song';
 import { IconButton, Sheet, SheetScrollView } from '../../ui';
 import { libraryKeys, matchKey } from '../../utils/downloadState';
+import { countOf } from '../../utils/formatters';
 import * as Haptics from '../../utils/haptics';
 import { Artwork } from '../allegra/Artwork';
 import { Tactile } from '../allegra/motion';
@@ -183,7 +184,7 @@ const AddListSheet: React.FC<{ visible: boolean; onClose: () => void; onSaved: (
                     <Ionicons name="albums-outline" size={16} color={Signal.ink} />
                     <Text style={styles.secondaryText}>Playlist</Text>
                   </Tactile>
-                  <Tactile onPress={() => save()} disabled={toSave.length === 0 || searching} pressScale={0.96} accessibilityRole="button" accessibilityLabel={`Save ${toSave.length} songs`} style={[styles.primary, (toSave.length === 0 || searching) && styles.dim]}>
+                  <Tactile onPress={() => save()} disabled={toSave.length === 0 || searching} pressScale={0.96} accessibilityRole="button" accessibilityLabel={`Save ${countOf(toSave.length, 'song')}`} style={[styles.primary, (toSave.length === 0 || searching) && styles.dim]}>
                     {searching ? <ActivityIndicator size="small" color={Signal.waveInk} /> : <Ionicons name="arrow-down" size={16} color={Signal.waveInk} />}
                     <Text style={styles.primaryText}>{searching ? 'Finding' : `Save ${toSave.length}`}</Text>
                   </Tactile>

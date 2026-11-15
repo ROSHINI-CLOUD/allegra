@@ -21,6 +21,7 @@ import type { BlendDetail } from '@shared/blendView';
 import type { SongSnapshot } from '@shared/songRef';
 
 import { Motion, Radius, Signal, Space } from '../../constants/allegraTheme';
+import { countOf } from '../../utils/formatters';
 import * as Haptics from '../../utils/haptics';
 import { IconButton, Tactile } from '../../ui';
 import { Artwork } from '../allegra/Artwork';
@@ -175,7 +176,7 @@ export const BlendStoryPlayer: React.FC<{
             <Meeting detail={detail} reduced={reduced} />
             <Animated.Text entering={rise(3)} style={styles.eyebrow}>Your Blend</Animated.Text>
             <Animated.Text entering={rise(4)} style={styles.headline} numberOfLines={3}>{detail.name}</Animated.Text>
-            <Animated.Text entering={rise(5)} style={styles.detail}>{detail.tracks.length} songs, made from {detail.members.length > 2 ? 'all of you' : 'both of you'} today.</Animated.Text>
+            <Animated.Text entering={rise(5)} style={styles.detail}>{countOf(detail.tracks.length, 'song')}, made from {detail.members.length > 2 ? 'all of you' : 'both of you'} today.</Animated.Text>
           </View>
         );
       case 'match':

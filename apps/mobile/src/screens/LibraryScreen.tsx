@@ -16,6 +16,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useSongsStore } from '../store/songsStore';
 import { LibraryStackParamList, RootStackParamList, TabParamList } from '../types/navigation';
 import type { Song } from '../types/song';
+import { countOf } from '../utils/formatters';
 import { filterLibraryCollections, indexLibraryCollections } from './libraryCollections';
 import { CollectionCard, Control, EmptyState, HeaderGlow, IconButton, ListRow, PageHeader, Radius, Sheet, SheetOption, Signal, SongRow, Space, Surface, Tactile, Text, TextButton, Typography, useBottomClearance } from '../ui';
 import { ProfileButton } from '../components/nav/ProfileButton';
@@ -82,12 +83,12 @@ export default function LibraryScreen() {
         actions={<><IconButton icon="download-outline" label="Downloads" onPress={() => setDownloads(true)} /><IconButton icon="ellipsis-vertical" label="Library options" onPress={() => setMenuOpen(true)} /></>} />
       {searching ? <View style={styles.search}><IconButton icon="arrow-back" label="Close library search" onPress={() => { setSearching(false); setQuery(''); }} />
         <TextInput autoFocus value={query} onChangeText={setQuery} style={styles.input} placeholder={`Search ${tab.toLowerCase()}`} placeholderTextColor={Signal.inkMuted} accessibilityLabel={`Search in ${tab}`} />
-        <IconButton icon="close" label="Clear search" onPress={() => setQuery('')} /></View>
+        {query ? <IconButton icon="close" label="Clear search" onPress={() => setQuery('')} /> : null}</View>
         : <View style={styles.tabs}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
           {TABS.map(value => <Tactile key={value} onPress={() => selectTab(value)} haptic="select" accessibilityRole="tab" accessibilityState={{ selected: tab === value }} style={[styles.tab, tab === value && styles.selected]}>
-            <Text tone={tab === value ? 'primary' : 'secondary'} style={tab === value && styles.selectedText}>{value}</Text></Tactile>)}
+            <Text tone={tab === value ? 'primary' : 'secondary'}>{value}</Text></Tactile>)}
         </ScrollView><IconButton icon="search" label={`Search in ${tab}`} onPress={() => setSearching(true)} /></View>}
-      {showSongs ? <><View style={styles.tools}><TextButton label={LABELS[sort]} icon="chevron-down" onPress={() => setSortOpen(true)} /><Text variant="meta" tone="secondary">{list.length} songs{searching ? ' · Songs only' : ''}</Text></View>
+      {showSongs ? <><View style={styles.tools}><TextButton label={LABELS[sort]} icon="chevron-down" onPress={() => setSortOpen(true)} /><Text variant="meta" tone="secondary">{countOf(list.length, 'song')}{searching ? ' · Songs only' : ''}</Text></View>
         <FlashList ref={listRef} data={list} keyExtractor={song => song.id} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: bottom }}
           onScroll={glowScroll} scrollEventThrottle={16}
           renderItem={({ item, index }) => <SongRow title={item.title} artist={item.artist} artwork={item.coverImageUri} downloaded={!!item.audioUri && !item.audioUri.startsWith('http')} playing={item.id === current}
@@ -105,11 +106,11 @@ export default function LibraryScreen() {
         scrollEventThrottle={16}
         renderItem={({ item: group }) => tab === 'Albums' ? (
           <View style={styles.albumCell}>
-            <CollectionCard title={group.name} meta={`${group.songs[0]?.artist ?? 'Unknown artist'} · ${group.songs.length} songs`}
+            <CollectionCard title={group.name} meta={`${group.songs[0]?.artist ?? 'Unknown artist'} · ${countOf(group.songs.length, 'song')}`}
               uri={group.songs[0]?.coverImageUri} size={cardSize} onPress={() => setCollection({ type: 'Albums', name: group.name })} />
           </View>
         ) : (
-          <ListRow title={group.name} subtitle={`${group.songs.length} songs`}
+          <ListRow title={group.name} subtitle={countOf(group.songs.length, 'song')}
             artwork={{ uri: group.songs[0]?.coverImageUri, title: group.name, round: true }} chevron
             onPress={() => setCollection({ type: 'Artists', name: group.name })} />
         )}
@@ -131,9 +132,9 @@ const styles = StyleSheet.create({
   albumCell: { flex: 1, alignItems: 'center', marginBottom: Space.sm },
   tabs: { flexDirection: 'row', alignItems: 'center', paddingLeft: Control.gutter, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: Surface.divider },
   tabContent: { gap: Space.md },
-  tab: { minHeight: Control.target, minWidth: Control.target, justifyContent: 'center', paddingVertical: Space.sm },
-  selected: { borderBottomWidth: 2, borderColor: Signal.wave },
-  selectedText: { fontWeight: '600' },
+  // The underline's space is always reserved and the weight never changes, so picking a tab moves nothing.
+  tab: { minHeight: Control.target, minWidth: Control.target, justifyContent: 'center', paddingVertical: Space.sm, borderBottomWidth: 2, borderColor: 'transparent' },
+  selected: { borderColor: Signal.wave },
   search: { marginHorizontal: Control.gutter, flexDirection: 'row', alignItems: 'center', borderRadius: Radius.control, backgroundColor: Surface.control },
   input: { flex: 1, ...Typography.body, color: Signal.ink, paddingVertical: Space.sm },
   tools: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Control.gutter },

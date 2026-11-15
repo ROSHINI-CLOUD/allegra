@@ -18,6 +18,7 @@ import { useDownloadQueueStore } from '../store/downloadQueueStore';
 import { useLuvsFeedStore } from '../store/luvsFeedStore';
 import { UnifiedSong } from '../types/song';
 import { Button, ConfirmSheet, Sheet, SheetScrollable, Tactile } from '../ui';
+import { countOf } from '../utils/formatters';
 import Artwork from './allegra/Artwork';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -119,7 +120,7 @@ export const LuvsVaultModal: React.FC<LuvsVaultModalProps> = ({
       <ConfirmSheet
         visible={downloadAlertVisible}
         title="Download all"
-        body={`Download all ${vault.length} songs to your library?`}
+        body={vault.length === 1 ? 'Download this song to your library?' : `Download all ${vault.length} songs to your library?`}
         confirmLabel="Download all"
         onConfirm={confirmDownload}
         onClose={() => setDownloadAlertVisible(false)}
@@ -128,7 +129,7 @@ export const LuvsVaultModal: React.FC<LuvsVaultModalProps> = ({
       <ConfirmSheet
         visible={startedAlertVisible}
         title="Downloading"
-        body={`${vault.length} songs are on their way. Clear them from your Luvs?`}
+        body={vault.length === 1 ? 'The song is on its way. Clear it from your Luvs?' : `${countOf(vault.length, 'song')} are on their way. Clear them from your Luvs?`}
         confirmLabel="Clear them"
         cancelLabel="Keep them"
         destructive

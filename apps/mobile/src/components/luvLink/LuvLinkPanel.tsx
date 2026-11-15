@@ -23,6 +23,7 @@ import {
   type OwnedLuvLinkGroupPicks
 } from '../../services/luvLink/client';
 import { handleOwnedLuvLinkToggle, playOwnedLuvLinkQueueEntry } from '../../services/luvLink/sync';
+import { plainErrorMessage } from '../../utils/plainError';
 import { useLuvLinkStore } from '../../store/luvLinkStore';
 import { usePlayerStore } from '../../store/playerStore';
 import { Tactile, TactileRow, Text as UIText } from '../../ui';
@@ -56,11 +57,11 @@ const LuvLinkPanel: React.FC<{ visible?: boolean }> = ({ visible = true }) => {
   useEffect(() => {
     if (!visible || !room || legacySession) { setGroupPicks(null); return; }
     try { return watchOwnedLuvLinkGroupPicks(setGroupPicks); }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Room picks are unavailable.'); return; }
+    catch (error) { setMessage(plainErrorMessage(error, 'Room picks are unavailable.')); return; }
   }, [visible, room?.roomId, legacySession]);
 
   const inviteUrl = useMemo(() => code ? `${ALLEGRA_API_URL}/luvlink/join/${encodeURIComponent(code)}` : '', [code]);
-  const showError = (error: unknown) => setMessage(error instanceof Error ? error.message : 'That didn’t work. Try again.');
+  const showError = (error: unknown) => setMessage(plainErrorMessage(error, 'That didn’t work. Try again.'));
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true); setMessage('');
     try { await action(); } catch (error) { showError(error); }

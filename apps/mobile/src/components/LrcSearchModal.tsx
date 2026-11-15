@@ -118,7 +118,7 @@ export const LrcSearchModal: React.FC<LrcSearchModalProps> = ({
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Choose a source</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
+          <TouchableOpacity onPress={onClose} hitSlop={5} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
             <Ionicons name="close" size={20} color={Signal.ink} />
           </TouchableOpacity>
         </View>

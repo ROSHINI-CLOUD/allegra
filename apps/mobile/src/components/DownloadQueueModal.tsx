@@ -4,6 +4,7 @@ import { FlatList, StyleSheet, View } from 'react-native';
 import { Glass, Signal } from '../constants/allegraTheme';
 import { useDownloadItem, useQueueShape } from '../store/downloadQueueSelectors';
 import { QueueItem, useDownloadQueueStore, visibleDownloads } from '../store/downloadQueueStore';
+import { plainErrorMessage } from '../utils/plainError';
 import { Button, IconButton, Sheet, SheetScrollable, Text } from '../ui';
 import { Artwork } from './allegra/Artwork';
 import { DownloadButton } from './stream/DownloadButton';
@@ -23,7 +24,11 @@ const statusLine = (item: QueueItem): string => {
       return item.stageStatus ? `${item.stageStatus.replace(/\.+$/, '')} · ${pct}` : `Downloading · ${pct}`;
     }
     case 'staging': return item.stageStatus?.replace(/\.+$/, '') || 'Getting ready';
-    case 'failed': return item.error ? `Didn't download: ${item.error}` : "Didn't download";
+    case 'failed': {
+      // The stored error is whatever the downloader threw; only a plain sentence or a connection hint reaches the row.
+      const reason = item.error ? plainErrorMessage(item.error, '').replace(/\.$/, '') : '';
+      return reason ? `Didn't download · ${reason}` : "Didn't download";
+    }
     default: return 'Waiting for a slot';
   }
 };

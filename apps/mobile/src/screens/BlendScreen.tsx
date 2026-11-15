@@ -37,6 +37,7 @@ import { watchStaleBlend } from '../services/blend/staleRefresh';
 import { StreamService } from '../services/stream/StreamService';
 import type { LibraryStackParamList } from '../types/navigation';
 import { Button, ConfirmSheet, Tactile } from '../ui';
+import { countOf } from '../utils/formatters';
 import { shuffled } from '../utils/shuffle';
 
 const revealKey = (detail: BlendDetail): string => `blend-revealed:${detail.members.find(member => member.isYou)?.userId ?? 'guest'}:${detail.id}:${detail.builtFor}:${detail.buildVersion ?? 0}`;
@@ -159,7 +160,7 @@ export const BlendScreen: React.FC = () => {
   const meta = [
     match === undefined || detail.members.length < 2 ? 'Waiting for your friend' : null,
     !group && pair?.confidence === 'low' ? BLEND_TEXT.lowconfidence : null,
-    ready ? `${detail.tracks.length} songs` : null,
+    ready ? countOf(detail.tracks.length, 'song') : null,
     !detail.stale && detail.builtFor === utcDay(Date.now()) ? 'Updated today' : null,
   ].filter(Boolean).join(' · ');
 
