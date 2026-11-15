@@ -173,7 +173,8 @@ publishes this copy with `apk-latest`; it does not put commit subjects in the ph
 ## Commits
 
 Conventional commits: `feat(api):`, `fix(web):`, `chore(infra):`. Short imperative subject; body only
-when the *why* needs explaining. **No AI attribution footers.**
+when the *why* needs explaining. Keep the configured project author identity. Do not add tool-origin
+notes, co-author lines, or authorship disclosures to commit metadata, PRs, source, or documentation.
 
 **New phone build = new version number.** Anything reaching `main` that rebuilds the APK
 (see the paths in [mobile-apk.yml](.github/workflows/mobile-apk.yml)) bumps `expo.version` in
@@ -188,7 +189,8 @@ higher version, so without a bump the new build never reaches them.
 ## Branching
 
 `main` is always deployable and always green. Work on `feat/`, `fix/`, `chore/`, `docs/` branches.
-Small PRs, squash-merge, reviewed by a non-author.
+Keep PRs small. Merge only after all required CI checks pass, using a regular merge commit; do not
+squash-merge. Passing required CI is the project merge gate; a separate review is not required.
 
 ## What is real vs demo
 

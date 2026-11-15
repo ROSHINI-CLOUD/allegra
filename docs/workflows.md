@@ -183,7 +183,8 @@ entry per manifest: the root `package-lock.json`, `apps/mobile/package-lock.json
 ## Branching and commits
 
 `main` is always deployable and always green. Work on `feat/`, `fix/`, `chore/`, `docs/` branches.
-Small PRs, squash-merge, reviewed by a non-author.
+Keep PRs small. Merge only after all required CI checks pass, using a regular merge commit; do not
+squash-merge. Passing required CI is the project merge gate; a separate review is not required.
 
 Conventional commits: `feat(api):`, `fix(web):`, `chore(infra):`. Short imperative subject; a body
 only when the *why* needs explaining.
