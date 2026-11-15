@@ -1,0 +1,148 @@
+version: 2.1
+
+# LuvLyrics (apps/mobile) preview build + emulator smoke test on CircleCI Free.
+#
+# Manual only. A push creates a pipeline whose single workflow is switched off by the
+# `run-android-preview` parameter (default false), so a push runs no job and spends no credits.
+# Start it from the dashboard: Pipelines -> Trigger Pipeline -> Add parameter
+#   run-android-preview = true        (see docs/circleci-android-preview.md)
+#
+# Two jobs on the Android machine image (the x86 `medium` Linux VM, 10 credits/min on Free):
+#   build-preview-apk  universal APK (arm64-v8a + x86_64), signed with the public Expo debug key,
+#                      JS bundled (no Metro). Uploaded to Artifacts before any test runs.
+#   emulator-smoke     boots an API 34 x86_64 emulator with KVM, installs that APK, runs the repo's
+#                      launch check and the mini-player -> Now Playing -> dismiss flow.
+# They are separate jobs so a red test never loses the APK, and "Rerun workflow from failed" retests
+# without rebuilding.
+#
+# Nothing here uses a production signing key, Sentry token or any project secret.
+
+parameters:
+  run-android-preview:
+    description: Build the preview APK and smoke-test it on an emulator. Leave false on pushes.
+    type: boolean
+    default: false
+  android-resource-class:
+    description: "medium = 2 vCPU / 7.5 GB, 10 credits/min. large = 4 vCPU / 15 GB, 20 credits/min (the docs recommend it for Android). Both are on Free."
+    type: enum
+    enum: [medium, large]
+    default: medium
+
+executors:
+  android-x86:
+    machine:
+      # Pinned dated tag. Never `default`, `current` or `edge`: they move.
+      image: android:2026.10.1
+    resource_class: << pipeline.parameters.android-resource-class >>
+
+jobs:
+  build-preview-apk:
+    executor: android-x86
+    steps:
+      - checkout
+
+      - run:
+          name: Node, JDK 17 and swap
+          command: bash .circleci/scripts/prepare-node-jdk.sh
+
+      - restore_cache:
+          keys:
+            - npm-v1-{{ arch }}-node20.20.2-{{ checksum "apps/mobile/package-lock.json" }}
+            - npm-v1-{{ arch }}-node20.20.2-
+      - run:
+          name: npm ci (apps/mobile)
+          command: bash .circleci/scripts/npm-install.sh
+      - save_cache:
+          key: npm-v1-{{ arch }}-node20.20.2-{{ checksum "apps/mobile/package-lock.json" }}
+          paths:
+            - ~/.npm
+
+      - run:
+          name: Android SDK packages the app needs
+          no_output_timeout: 20m
+          command: bash .circleci/scripts/sdk-packages.sh
+
+      - restore_cache:
+          keys:
+            - gradle-v1-{{ arch }}-android2026.10.1-jdk17-ndk27.1.12297006-{{ checksum "apps/mobile/package-lock.json" }}-{{ checksum "apps/mobile/android/gradle/wrapper/gradle-wrapper.properties" }}
+            - gradle-v1-{{ arch }}-android2026.10.1-jdk17-ndk27.1.12297006-
+
+      - run:
+          name: CI-only signing key (public Expo debug key, as mobile-apk.yml does)
+          command: bash .circleci/scripts/install-signing-key.sh
+
+      - run:
+          name: Build universal preview APK
+          # Hard ceiling so a hung build cannot burn the month: the script wraps Gradle in `timeout 90m`.
+          no_output_timeout: 40m
+          command: bash .circleci/scripts/build-preview-apk.sh
+
+      - save_cache:
+          when: always
+          key: gradle-v1-{{ arch }}-android2026.10.1-jdk17-ndk27.1.12297006-{{ checksum "apps/mobile/package-lock.json" }}-{{ checksum "apps/mobile/android/gradle/wrapper/gradle-wrapper.properties" }}
+          paths:
+            - ~/.gradle/caches/modules-2
+            - ~/.gradle/wrapper/dists
+
+      - run:
+          name: Build summary
+          when: always
+          command: cat /home/circleci/ci-out/build-report.txt /home/circleci/ci-out/timings.txt 2>/dev/null || true
+
+      - store_artifacts:
+          path: /home/circleci/artifacts
+          destination: preview
+      - store_artifacts:
+          when: always
+          path: /home/circleci/ci-out
+          destination: build-logs
+      - persist_to_workspace:
+          root: /home/circleci
+          paths:
+            - artifacts
+
+  emulator-smoke:
+    executor: android-x86
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /home/circleci
+
+      - run:
+          name: KVM, system image and AVD
+          no_output_timeout: 15m
+          command: timeout 900 bash .circleci/scripts/emulator-prepare.sh
+      - run:
+          name: Start emulator
+          background: true
+          command: bash .circleci/scripts/emulator-start.sh
+      - run:
+          name: Wait for boot (7 minute limit)
+          no_output_timeout: 9m
+          command: bash .circleci/scripts/emulator-wait-boot.sh
+
+      - run:
+          name: Smoke tests (25 minute limit)
+          no_output_timeout: 25m
+          command: timeout 1500 bash .circleci/scripts/android-emulator-smoke.sh
+
+      # Everything below runs even when a test failed, and never changes the job's status.
+      - run:
+          name: Collect logcat, screenshots, device state and JUnit
+          when: always
+          command: bash .circleci/scripts/collect-results.sh
+      - store_test_results:
+          path: /home/circleci/ci-out/junit
+      - store_artifacts:
+          when: always
+          path: /home/circleci/ci-out
+          destination: emulator-smoke
+
+workflows:
+  android-preview:
+    when: << pipeline.parameters.run-android-preview >>
+    jobs:
+      - build-preview-apk
+      - emulator-smoke:
+          requires:
+            - build-preview-apk

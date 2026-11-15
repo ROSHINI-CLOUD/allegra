@@ -1,0 +1,4 @@
+# CircleCI runs these on Linux. A CRLF checkout on Windows breaks bash ("\r: command not found").
+*.sh text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
